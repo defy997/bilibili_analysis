@@ -1,0 +1,83 @@
+# ===================
+# 操作系统文件
+# ===================
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# ===================
+# Python
+# ===================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+.env
+*.egg-info/
+dist/
+build/
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ===================
+# Electron / Node.js
+# ===================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+build/
+*.local
+
+# ===================
+# 数据库
+# ===================
+*.sqlite3
+*.db
+*.sql
+
+# ===================
+# 媒体文件 (大文件)
+# ===================
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.svg
+*.ico
+*.mp4
+*.mp3
+*.avi
+*.mkv
+*.mov
+*.zip
+*.rar
+*.7z
+*.tar.gz
+
+# ===================
+# IDE 和编辑器
+# ===================
+.vscode/
+.idea/
+*.sublime-*
+*.swp
+*.swo
+
+# ===================
+# 其他
+# ===================
+*.log
+temp/
+tmp/
+.cache/

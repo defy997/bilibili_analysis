@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mini</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+    }
+    .icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 28px;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+    }
+  </style>
+</head>
+<body>
+  <div id="dragRegion" style="-webkit-app-region: drag; width: 64px; height: 64px; display:flex; align-items:center; justify-content:center;">
+    <div class="icon" id="restoreBtn" title="点击还原悬浮窗" style="-webkit-app-region: no-drag;">🔍</div>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+
+    const btn = document.getElementById('restoreBtn');
+    btn.addEventListener('click', () => {
+      ipcRenderer.send('restore-window');
+    });
+
+    // 双击也还原
+    btn.addEventListener('dblclick', () => {
+      ipcRenderer.send('restore-window');
+    });
+
+    // 右键显示菜单：还原 / 关闭
+    window.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      ipcRenderer.send('show-mini-context-menu');
+    });
+
+    // 实现手动拖拽（在某些平台下 -webkit-app-region 有时行为不稳定）
+    (async () => {
+      const dragRegion = document.getElementById('dragRegion');
+      let dragging = false;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      dragRegion.addEventListener('mousedown', async (ev) => {
+        // 如果点击的是实际按钮，不触发拖拽
+        if (ev.target && ev.target.id === 'restoreBtn') return;
+        dragging = true;
+        const startScreenX = ev.screenX;
+        const startScreenY = ev.screenY;
+        // 请求当前窗口 bounds
+        const bounds = await ipcRenderer.invoke('mini-begin-drag', { screenX: startScreenX, screenY: startScreenY });
+        offsetX = startScreenX - bounds.x;
+        offsetY = startScreenY - bounds.y;
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp, { once: true });
+      });
+
+      function onMouseMove(ev) {
+        if (!dragging) return;
+        ipcRenderer.send('mini-update-drag', { screenX: ev.screenX, screenY: ev.screenY, offsetX, offsetY });
+      }
+
+      function onMouseUp() {
+        dragging = false;
+        document.removeEventListener('mousemove', onMouseMove);
+      }
+    })();
+  </script>
+</body>
+</html>
+
+

@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotional Analysis</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: transparent; 
+        }
+        .glass-panel {
+            background: rgba(20, 20, 30, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .stat-card {
+            transition: all 0.3s ease;
+        }
+        .stat-card:hover {
+            transform: translateY(-2px);
+            background: rgba(255, 255, 255, 0.15);
+        }
+        /* 拖拽区域样式 */
+        .drag-area {
+            -webkit-app-region: drag;
+            cursor: grab;
+        }
+        .drag-area:active {
+            cursor: grabbing;
+        }
+        /* 防止按钮被拖拽 */
+        .no-drag {
+            -webkit-app-region: no-drag;
+        }
+    </style>
+</head>
+<body class="h-full w-full text-white overflow-hidden">
+
+    <!-- 情感分析主容器 -->
+    <div class="h-full w-full flex flex-col">
+        
+        <!-- 顶部标题栏 (拖拽区域) -->
+        <div class="h-12 flex items-center justify-between px-4 border-b border-white/10 bg-white/5 flex-shrink-0 drag-area select-none">
+            <!-- 左侧：返回按钮 + 标题 -->
+            <div class="flex items-center gap-3">
+                <button onclick="goBack()" class="text-white/60 hover:text-white transition-colors no-drag">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </button>
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-full bg-pink-500/20 flex items-center justify-center text-pink-400">
+                        <i class="fa-solid fa-heart-crack"></i>
+                    </div>
+                    <span class="font-bold tracking-wide">Emotional Analysis</span>
+                </div>
+            </div>
+            
+            <!-- 右侧：操作按钮 -->
+            <div class="flex items-center gap-3 no-drag text-xs">
+                <button onclick="refreshData()" class="text-white/60 hover:text-white transition-colors">
+                    <i class="fa-solid fa-rotate-right"></i>
+                </button>
+                <button onclick="closeModule()" class="text-white/60 hover:text-pink-400 transition-colors">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- 主内容区域 -->
+        <div class="flex-1 w-full p-6 overflow-y-auto">
+            
+            <!-- 视频信息卡片 -->
+            <div class="glass-panel rounded-2xl p-4 mb-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 id="video-title" class="font-bold text-lg">Waiting for video...</h3>
+                        <p id="video-bvid" class="text-white/40 text-xs font-mono mt-1">--</p>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-2xl font-bold text-pink-400" id="total-comments">0</div>
+                        <div class="text-xs text-white/40">Total Comments</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 情感分布饼图 -->
+            <div class="glass-panel rounded-2xl p-6 mb-6">
+                <h4 class="text-sm font-bold uppercase tracking-wider text-white/60 mb-4">Sentiment Distribution</h4>
+                <div id="pie-chart" class="w-full h-64"></div>
+            </div>
+
+            <!-- 统计卡片网格 -->
+            <div class="grid grid-cols-3 gap-4 mb-6">
+                <!-- 正面 -->
+                <div class="stat-card glass-panel rounded-2xl p-4 border-l-4 border-green-500">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center text-green-400">
+                            <i class="fa-solid fa-thumbs-up"></i>
+                        </div>
+                        <span class="text-xs text-white/60 uppercase">Positive</span>
+                    </div>
+                    <div class="text-3xl font-bold text-green-400" id="positive-count">0</div>
+                    <div class="text-xs text-white/40 mt-1" id="positive-percent">0%</div>
+                </div>
+
+                <!-- 中性 -->
+                <div class="stat-card glass-panel rounded-2xl p-4 border-l-4 border-gray-500">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-8 h-8 rounded-full bg-gray-500/20 flex items-center justify-center text-gray-400">
+                            <i class="fa-solid fa-minus"></i>
+                        </div>
+                        <span class="text-xs text-white/60 uppercase">Neutral</span>
+                    </div>
+                    <div class="text-3xl font-bold text-gray-400" id="neutral-count">0</div>
+                    <div class="text-xs text-white/40 mt-1" id="neutral-percent">0%</div>
+                </div>
+
+                <!-- 负面 -->
+                <div class="stat-card glass-panel rounded-2xl p-4 border-l-4 border-pink-500">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-8 h-8 rounded-full bg-pink-500/20 flex items-center justify-center text-pink-400">
+                            <i class="fa-solid fa-heart-crack"></i>
+                        </div>
+                        <span class="text-xs text-white/60 uppercase">Negative</span>
+                    </div>
+                    <div class="text-3xl font-bold text-pink-400" id="negative-count">0</div>
+                    <div class="text-xs text-white/40 mt-1" id="negative-percent">0%</div>
+                </div>
+            </div>
+
+            <!-- 情感趋势图 -->
+            <div class="glass-panel rounded-2xl p-6">
+                <h4 class="text-sm font-bold uppercase tracking-wider text-white/60 mb-4">Sentiment Trend</h4>
+                <div id="trend-chart" class="w-full h-48"></div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+
+        let pieChart = null;
+        let trendChart = null;
+        let currentBvId = null;
+
+        // === 初始化 ===
+        document.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            listenForVideoChange();
+        });
+
+        // === 初始化图表 ===
+        function initCharts() {
+            // 饼图
+            const pieDom = document.getElementById('pie-chart');
+            pieChart = echarts.init(pieDom);
+            pieChart.setOption({
+                backgroundColor: 'transparent',
+                tooltip: { trigger: 'item' },
+                legend: { bottom: '0%', textStyle: { color: '#fff' } },
+                series: [{
+                    type: 'pie',
+                    radius: ['40%', '70%'],
+                    itemStyle: { borderRadius: 8, borderColor: 'rgba(20,20,30,0.8)', borderWidth: 2 },
+                    label: { show: false },
+                    data: [
+                        { value: 0, name: 'Positive', itemStyle: { color: '#4ade80' } },
+                        { value: 0, name: 'Neutral', itemStyle: { color: '#94a3b8' } },
+                        { value: 0, name: 'Negative', itemStyle: { color: '#f472b6' } }
+                    ]
+                }]
+            });
+
+            // 趋势图
+            const trendDom = document.getElementById('trend-chart');
+            trendChart = echarts.init(trendDom);
+            trendChart.setOption({
+                backgroundColor: 'transparent',
+                tooltip: { trigger: 'axis' },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'category', data: ['1h', '2h', '3h', '4h', '5h', '6h'], axisLine: { lineStyle: { color: '#444' } }, axisLabel: { color: '#888' } },
+                yAxis: { type: 'value', axisLine: { show: false }, splitLine: { lineStyle: { color: '#333' } }, axisLabel: { color: '#888' } },
+                series: [{
+                    data: [30, 45, 38, 52, 48, 55],
+                    type: 'line',
+                    smooth: true,
+                    lineStyle: { color: '#f472b6' },
+                    areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(244, 114, 182, 0.3)' }, { offset: 1, color: 'rgba(244, 114, 182, 0)' }] } },
+                    itemStyle: { color: '#f472b6' }
+                }]
+            });
+        }
+
+        // === 监听视频切换信号 ===
+        function listenForVideoChange() {
+            ipcRenderer.on('video-change', (event, bvId) => {
+                console.log('收到视频信号:', bvId);
+                currentBvId = bvId;
+                loadData(bvId);
+            });
+        }
+
+        // === 加载数据 ===
+        async function loadData(bvId) {
+            try {
+                const response = await fetch('http://127.0.0.1:8000/api/analyze/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ videoBvid: bvId })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateUI(data);
+                }
+            } catch (error) {
+                console.error('加载数据失败:', error);
+            }
+        }
+
+        // === 更新界面 ===
+        function updateUI(data) {
+            // 更新标题
+            document.getElementById('video-title').innerText = data.video_info?.title || 'Unknown';
+            document.getElementById('video-bvid').innerText = currentBvId || '';
+
+            // 更新统计
+            const pos = data.data.positive_count;
+            const neu = data.data.neutral_count;
+            const neg = data.data.negative_count;
+            const total = pos + neu + neg;
+
+            document.getElementById('total-comments').innerText = total;
+            document.getElementById('positive-count').innerText = pos;
+            document.getElementById('neutral-count').innerText = neu;
+            document.getElementById('negative-count').innerText = neg;
+
+            document.getElementById('positive-percent').innerText = total ? Math.round(pos/total*100) + '%' : '0%';
+            document.getElementById('neutral-percent').innerText = total ? Math.round(neu/total*100) + '%' : '0%';
+            document.getElementById('negative-percent').innerText = total ? Math.round(neg/total*100) + '%' : '0%';
+
+            // 更新饼图
+            pieChart.setOption({
+                series: [{ data: [
+                    { value: pos, name: 'Positive' },
+                    { value: neu, name: 'Neutral' },
+                    { value: neg, name: 'Negative' }
+                ]}]
+            });
+        }
+
+        // === 返回导航页 ===
+        function goBack() {
+            // 隐藏当前窗口
+            ipcRenderer.send('close-analysis-window');
+        }
+
+        // === 关闭模块 ===
+        function closeModule() {
+            // 隐藏当前窗口
+            ipcRenderer.send('close-analysis-window');
+        }
+
+        // === 刷新数据 ===
+        function refreshData() {
+            if (currentBvId) {
+                loadData(currentBvId);
+            }
+        }
+
+        // 窗口大小变化时重绘图表
+        window.addEventListener('resize', () => {
+            pieChart?.resize();
+            trendChart?.resize();
+        });
+    </script>
+</body>
+</html>

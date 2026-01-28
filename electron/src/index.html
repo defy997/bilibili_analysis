@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BiliMood Dashboard</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: transparent; 
+        }
+
+        /* 核心毛玻璃效果 */
+        .glass-panel {
+            background: rgba(20, 20, 30, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 拖拽区域样式 */
+        .drag-area {
+            -webkit-app-region: drag;
+            cursor: grab;
+        }
+        .drag-area:active {
+            cursor: grabbing;
+        }
+
+        /* 防止按钮被拖拽 */
+        .no-drag {
+            -webkit-app-region: no-drag;
+        }
+
+        /* 卡片交互样式 */
+        .nav-card {
+            transition: all 0.3s ease;
+            cursor: pointer;
+            background-color: transparent;
+        }
+        .nav-card:hover {
+            background-color: rgba(255, 255, 255, 0.15);
+            transform: scale(1.02);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+        .nav-card.active {
+            background-color: rgba(255, 255, 255, 0.25);
+            border-color: rgba(255, 255, 255, 0.5);
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+        }
+        /* 内切圆遮罩 - 只负责切割形状 */
+        .mask-tr-2 {
+            -webkit-mask: radial-gradient(circle 150px at calc(100% + 2px) -2px, #0000 98%, #000);
+            mask: radial-gradient(circle 150px at calc(100% + 2px) -2px, #0000 98%, #000);
+        }
+        .mask-tl-2 {
+            -webkit-mask: radial-gradient(circle 150px at -2px -2px, #0000 98%, #000);
+            mask: radial-gradient(circle 150px at -2px -2px, #0000 98%, #000);
+        }
+        .mask-br-2 {
+            -webkit-mask: radial-gradient(circle 150px at calc(100% + 2px) calc(100% + 2px), #0000 98%, #000);
+            mask: radial-gradient(circle 150px at calc(100% + 2px) calc(100% + 2px), #0000 98%, #000);
+        }
+        .mask-bl-2 {
+            -webkit-mask: radial-gradient(circle 150px at -2px calc(100% + 2px), #0000 98%, #000);
+            mask: radial-gradient(circle 150px at -2px calc(100% + 2px), #0000 98%, #000);
+        }
+
+        /* 使用伪元素绘制内切圆弧的白色边框 */
+        .mask-tr-2::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            right: -2px;
+            width: 154px;
+            height: 154px;
+            background: radial-gradient(circle 150px at calc(100% + 2px) -2px, transparent 148px, rgba(255, 255, 255, 0.4) 148px, rgba(255, 255, 255, 0.4) 150px, transparent 150px);
+            pointer-events: none;
+        }
+        .mask-tl-2::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            width: 154px;
+            height: 154px;
+            background: radial-gradient(circle 150px at -2px -2px, transparent 148px, rgba(255, 255, 255, 0.4) 148px, rgba(255, 255, 255, 0.4) 150px, transparent 150px);
+            pointer-events: none;
+        }
+        .mask-br-2::before {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
+            width: 154px;
+            height: 154px;
+            background: radial-gradient(circle 150px at calc(100% + 2px) calc(100% + 2px), transparent 148px, rgba(255, 255, 255, 0.4) 148px, rgba(255, 255, 255, 0.4) 150px, transparent 150px);
+            pointer-events: none;
+        }
+        .mask-bl-2::before {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: -2px;
+            width: 154px;
+            height: 154px;
+            background: radial-gradient(circle 150px at -2px calc(100% + 2px), transparent 148px, rgba(255, 255, 255, 0.4) 148px, rgba(255, 255, 255, 0.4) 150px, transparent 150px);
+            pointer-events: none;
+        }
+
+        /* 优化内切后的边框显示，防止边框在切口处显得太生硬 */
+        .nav-card {
+            -webkit-mask-composite: source-in;
+            mask-composite: intersect;
+        }
+            /* 自定义滚动条 */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(236, 72, 153, 0.5); /* pink-500 */
+        }
+
+        /* 简单的进入动画 */
+        @keyframes zoomIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .animate-in {
+            animation: zoomIn 0.2s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col text-white overflow-hidden">
+
+    <!-- 悬浮窗主体容器 -->
+    <div class="w-full h-full flex flex-col relative">
+        
+        <!-- 顶部导航栏 -->
+        <div class="h-12 w-full drag-area flex justify-between items-center px-4 select-none z-20 border-b border-white/10 bg-white/5 flex-shrink-0">
+            <!-- 左侧：应用标识 -->
+            <div class="flex items-center gap-2 opacity-90">
+                <i class="fa-brands fa-bilibili text-pink-500 text-lg"></i>
+                <span class="font-bold text-sm tracking-wider">BiliMood</span>
+            </div>
+            
+            <!-- 右侧：功能导航 -->
+            <div class="flex items-center gap-4 no-drag text-xs font-medium">
+                <button onclick="toggleMinimize()" class="hover:text-pink-400 transition-colors flex items-center gap-1">
+                    <i class="fa-solid fa-minus"></i>
+                    <span>Minimize</span>
+                </button>
+                <button onclick="closeWindow()" class="hover:text-pink-400 transition-colors flex items-center gap-1">
+                    <i class="fa-solid fa-xmark"></i>
+                    <span>Close</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 中间内容区域：2x2 网格布局 -->
+        <!-- flex-1 占据剩余空间 -->
+        <div class="flex-1 w-full p-4 grid grid-cols-2 grid-rows-2 gap-0 overflow-hidden">
+            
+            <!-- 卡片 1: User Profile (切右下角) -->
+            <div onclick="toggleCard('user', this)" class="nav-card relative rounded-tr-3xl rounded-tl-3xl rounded-bl-3xl mask-br-2 border-2 border-white/40 p-4 flex flex-col items-center justify-center text-center group">
+                <span class="text-lg font-bold tracking-wide">User Analysis</span>
+                <span class="text-xs text-white/40 mt-2">Manage your account</span>
+                <div class="w-16 h-16 rounded-full bg-blue-500/20 flex items-center justify-center mb-4 text-blue-400 group-hover:scale-110 transition-transform duration-300">
+                    <i class="fa-solid fa-user text-2xl"></i>
+                </div>
+            </div>
+
+            <!-- 卡片 2: Emotional Analysis (切左下角) -->
+            <div onclick="toggleCard('emotional', this)" class="nav-card relative rounded-tl-3xl rounded-br-3xl rounded-tr-3xl mask-bl-2 border-2 border-white/40 p-4 flex flex-col items-center justify-center text-center group">
+                <span class="text-lg font-bold tracking-wide">Emotional Analysis</span>
+                <span class="text-xs text-white/40 mt-2">Sentiment trends</span>
+                <div class="w-16 h-16 rounded-full bg-pink-500/20 flex items-center justify-center mb-4 text-pink-400 group-hover:scale-110 transition-transform duration-300">
+                    <i class="fa-solid fa-heart-crack text-2xl"></i>
+                </div>
+            </div>
+
+            <!-- 卡片 3: Video Analysis (切右上角) -->
+            <div onclick="toggleCard('video', this)" class="nav-card relative rounded-br-3xl rounded-tl-3xl rounded-bl-3xl mask-tr-2 border-2 border-white/40 p-4 flex flex-col items-center justify-center text-center group">
+                <div class="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center mb-4 text-purple-400 group-hover:scale-110 transition-transform duration-300">
+                    <i class="fa-solid fa-video text-2xl"></i>
+                </div>
+                <span class="text-lg font-bold tracking-wide">Video Analysis</span>
+                <span class="text-xs text-white/40 mt-2">Video insights</span>
+            </div>
+
+            <!-- 卡片 4: Comparative Analysis (切左上角) -->
+            <div onclick="toggleCard('compare', this)" class="nav-card relative rounded-bl-3xl rounded-tr-3xl rounded-br-3xl mask-tl-2 border-2 border-white/40 p-4 flex flex-col items-center justify-center text-center group">
+                <div class="w-16 h-16 rounded-full bg-yellow-500/20 flex items-center justify-center mb-4 text-yellow-400 group-hover:scale-110 transition-transform duration-300">
+                    <i class="fa-solid fa-chart-simple text-2xl"></i>
+                </div>
+                <span class="text-lg font-bold tracking-wide">Comparative Analysis</span>
+                <span class="text-xs text-white/40 mt-2">Compare results</span>
+            </div>
+
+        </div>
+
+        <!-- 设置面板覆盖层 -->
+        <div id="settingsPanel" class="absolute inset-0 z-50 flex items-center justify-center p-4 hidden">
+            <div class="absolute inset-0 bg-black/60 backdrop-blur-md" onclick="toggleSettings(false)"></div>
+            
+            <div class="glass-panel w-full max-w-[320px] h-[85%] rounded-[2rem] border border-white/20 flex flex-col overflow-hidden relative z-10 shadow-2xl animate-in zoom-in-95 duration-200">
+                
+                <div class="p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
+                    <h3 class="text-sm font-black uppercase tracking-[0.2em] text-pink-500">Preference</h3>
+                    <button onclick="toggleSettings(false)" class="no-drag hover:rotate-90 transition-transform duration-300">
+                        <i class="fa-solid fa-xmark text-white/40 hover:text-white"></i>
+                    </button>
+                </div>
+        
+                <div class="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar">
+                    
+                    <div class="space-y-3">
+                        <label class="text-[10px] font-bold text-white/30 uppercase tracking-widest">Connection</label>
+                        <div class="space-y-2">
+                            <div class="group">
+                                <span class="text-[11px] text-white/60 mb-1 block ml-1">Bilibili SESSDATA</span>
+                                <input type="password" placeholder="Paste your cookie here..." 
+                                       class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-pink-500/50 transition-all placeholder:text-white/20">
+                            </div>
+        </div>
+    </div>
+
+                    <div class="space-y-3">
+                        <label class="text-[10px] font-bold text-white/30 uppercase tracking-widest">Interface</label>
+                        <div class="flex items-center justify-between bg-white/5 p-3 rounded-2xl border border-white/5">
+                            <span class="text-xs text-white/80">Always on Top</span>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" class="sr-only peer" checked>
+                                <div class="w-8 h-4 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-pink-500"></div>
+                            </label>
+                        </div>
+                        <div class="bg-white/5 p-3 rounded-2xl border border-white/5">
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="text-xs text-white/80">Theme Color</span>
+                                <span class="text-[10px] text-pink-400">Cyber Pink</span>
+                            </div>
+                            <select class="w-full bg-black/20 border-none text-[11px] rounded-lg py-1 focus:outline-none appearance-none cursor-pointer">
+                                <option>Cyber Pink</option>
+                                <option>Bili Blue</option>
+                                <option>Dark Mode</option>
+                            </select>
+                </div>
+        </div>
+
+                    <div class="pt-2">
+                        <div class="bg-gradient-to-br from-pink-500/10 to-purple-500/10 p-4 rounded-2xl border border-pink-500/10">
+                            <p class="text-[10px] text-white/40 leading-relaxed text-center">
+                                BiliMood v1.2.0<br>
+                                Powered by Gemini AI & Electron
+                            </p>
+                        </div>
+                </div>
+            </div>
+
+                <div class="p-5">
+                    <button onclick="saveSettings()" class="w-full bg-white text-black text-xs font-bold py-3 rounded-2xl hover:bg-pink-500 hover:text-white transition-all duration-300 active:scale-95 shadow-lg shadow-white/5">
+                        APPLY CHANGES
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+
+        // === 窗口控制 ===
+        function minimizeWindow() {
+            ipcRenderer.send('minimize-window');
+        }
+        function toggleMinimize() {
+            ipcRenderer.send('minimize-window');
+        }
+        function closeWindow() {
+            ipcRenderer.send('close-window');
+        }
+        window.addEventListener('beforeunload', (e) => {
+            e.returnValue = false;
+        });
+
+        // === 卡片开关逻辑 ===
+        function toggleCard(moduleName, element) {
+            // 切换当前卡片的active状态
+            const isActive = element.classList.contains('active');
+
+            if (isActive) {
+                // 如果已激活，则关闭模块
+                element.classList.remove('active');
+
+                // 如果是emotional模块，关闭独立窗口
+                if (moduleName === 'emotional') {
+                    ipcRenderer.send('close-analysis-window');
+                }
+            } else {
+                // 如果未激活，则开启模块
+                element.classList.add('active');
+
+                // 如果是emotional模块，打开独立窗口
+                if (moduleName === 'emotional') {
+                    ipcRenderer.send('toggle-analysis-window');
+                }
+            }
+        }
+
+        function settings(){
+            toggleSettings(true);
+        }
+        function toggleSettings(show) {
+            const panel = document.getElementById('settingsPanel');
+             if (show) {
+                panel.classList.remove('hidden');
+                // 可选：添加一点进入动画
+                panel.classList.add('animate-in', 'fade-in', 'zoom-in', 'duration-300');
+                        } else {
+            panel.classList.add('hidden');
+        }
+        }
+
+        // === 打开独立模块窗口 ===
+        function openModule(moduleName) {
+            ipcRenderer.send('toggle-analysis-window');
+        }
+
+        // === 关闭模块 ===
+        function closeModule() {
+            ipcRenderer.send('close-analysis-window');
+        }
+
+        function expandWindow() {
+            // 展开功能
+            alert('Expand feature');
+        }
+    </script>
+</body>
+</html>
