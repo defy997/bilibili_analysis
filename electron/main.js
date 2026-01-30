@@ -1,4 +1,5 @@
-const { app, BrowserWindow, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage } = require('electron');
+app.isQuitting = false;
 const path = require('path');
 const WebSocket = require('ws');
 
@@ -6,7 +7,7 @@ const WebSocket = require('ws');
 let mainWindow;
 let analysisWindow; // 情感分析窗口
 let wss; // WebSocket服务器，用于与Chrome插件通信
-let miniWindow; // 最小化后的小图标窗口
+let tray = null; // 系统托盘
 let lastWindowPosition = null; // 记录上次主窗口位置以便还原
 
 function createWindow() {
@@ -79,16 +80,14 @@ function createWindow() {
     }
   });
 
-  // 当窗口最小化时，隐藏主窗口并显示小图标窗口
-  mainWindow.on('minimize', (event) => {
-    try {
+  // 窗口关闭事件（点击X按钮时隐藏到托盘）
+  mainWindow.on('close', (event) => {
+    if (!app.isQuitting) {
       event.preventDefault();
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.hide();
-        showMiniWindow();
-      }
-    } catch (err) {
-      console.error('minimize handler error:', err);
+      mainWindow.hide();
+      console.log('窗口已隐藏到托盘');
+    } else {
+      console.log('应用正在退出');
     }
   });
 
@@ -163,15 +162,106 @@ function createWebSocketServer() {
     console.log('WebSocket服务器启动在端口 3000');
 }
 
+// 创建系统托盘
+function createTray() {
+  // 尝试加载本地图标，如果失败则使用内置图标
+  let icon;
+  try {
+    const iconPath = path.join(__dirname, 'assets', 'tray-icon.png');
+    icon = nativeImage.createFromPath(iconPath);
+
+    // 如果图标加载失败或为空，使用默认图标
+    if (icon.isEmpty()) {
+      throw new Error('Icon file not found');
+    }
+  } catch (error) {
+    // 使用粉色渐变图标（BiliMood 风格 - 粉色渐变圆形 + B站图标）
+    icon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAKoSURBVFiF7ZY9TsNAEIW/SYAgAQQ0NDQ0NDQQNNAgKD9AQ0FDQ0FDQ6A/gJpHg6D8AAWF4NdYdpyb1DYPdZzEsq1zf3d2d7GQAObk5H0GdwFwBKC1NscY4wag1lr7OedUKecccs5RliXquqau68g5R1VVEUIIuq4j55w552RZRlVVEUIInHPEGEPOORljUEphjEEphTEGIYSEeZ4nF8cYQ0opcs5RliXquiamaxqGgTEGl8uFtm1RliXquiYlRVmWFEVBt9tF13W0bYuyLBFCoJTCGENKqWQMw8A5R0qJsiwJIRBS4nkeWuvIOUdKipQS5xw550gpxTlHSqniZ4xBa01KqRjGGLTWxJSIKWNd13HO0dQ1KSW01qSUIuccxpjiN8YQ55wYY8g5R1mWhBDIOTN9fX0l5xxt25JSom1bYkq0bUtKibZtSSlRliUhBLTWhBACxhhyzpFzjpxz5Jw755xz8TyPMQZjzPN9X/Hz86uqqoqc87g55yCEgDGGnHPknCORcyalRM45cs6Rc46cc+ScI+ccOefIOUfOOXLOkXOOnHPknCPnHDnnyDlHzjlyzpFzDkIIGGNQSqGUQimFUgqlFEoplFIopVBKoZRCKYVSCqUUSimUUiilUEqhlEIphVIKpRRKKZRSKKVQSn0DfwNXYwF7bC6sTAAAAABJRU5ErkJggg==');
+  }
+
+  tray = new Tray(icon);
+
+  console.log('系统托盘创建成功');
+
+  // 托盘菜单
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: '显示 BiliMood',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      }
+    },
+    {
+      label: '隐藏',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.hide();
+        }
+      }
+    },
+    { type: 'separator' },
+    {
+      label: '退出',
+      click: () => {
+        app.isQuitting = true;
+
+        // 关闭所有窗口
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.destroy();
+        }
+        if (analysisWindow && !analysisWindow.isDestroyed()) {
+          analysisWindow.destroy();
+        }
+
+        // 关闭WebSocket服务器
+        if (wss) {
+          wss.close();
+        }
+
+        // 销毁托盘
+        if (tray) {
+          tray.destroy();
+        }
+
+        // 退出应用
+        app.quit();
+      }
+    }
+  ]);
+
+  tray.setToolTip('BiliMood - B站情感分析');
+  tray.setContextMenu(contextMenu);
+
+  // 点击托盘图标显示/隐藏窗口
+  tray.on('click', () => {
+    if (mainWindow) {
+      if (mainWindow.isVisible()) {
+        mainWindow.hide();
+      } else {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    }
+  });
+}
+
 // Electron 会在初始化后并准备创建浏览器窗口时，调用这个函数
 app.whenReady().then(() => {
   createWindow();
+  createTray();
   createWebSocketServer();
 
   app.on('activate', () => {
     // 在macOS上，当单击dock图标并且没有其他窗口打开时，
     // 通常在应用中重新创建一个窗口
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    } else if (mainWindow) {
+      mainWindow.show();
+    }
   });
 });
 
@@ -191,15 +281,37 @@ app.on('window-all-closed', () => {
 
 // 监听渲染进程的消息
 ipcMain.on('minimize-window', () => {
-  // 隐藏主窗口并显示小图标窗口（保持置顶）
+  // 最小化到托盘
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.hide();
-    showMiniWindow();
   }
 });
 
 ipcMain.on('close-window', () => {
-  if (mainWindow) mainWindow.close();
+  // 直接退出应用
+  console.log('收到关闭窗口请求');
+  app.isQuitting = true;
+
+  // 关闭所有窗口
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.destroy();
+  }
+  if (analysisWindow && !analysisWindow.isDestroyed()) {
+    analysisWindow.destroy();
+  }
+
+  // 关闭WebSocket服务器
+  if (wss) {
+    wss.close();
+  }
+
+  // 销毁托盘
+  if (tray) {
+    tray.destroy();
+  }
+
+  // 退出应用
+  app.quit();
 });
 
 ipcMain.on('toggle-window', () => {
@@ -212,14 +324,6 @@ ipcMain.on('toggle-window', () => {
   }
 });
 
-// 还原主窗口（从小图标窗口点击触发）
-ipcMain.on('restore-window', () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.show();
-        mainWindow.focus();
-    }
-    destroyMiniWindow();
-});
 
 // ==========================================
 // 分析窗口控制
@@ -242,6 +346,10 @@ ipcMain.on('toggle-analysis-window', () => {
 // 关闭分析窗口
 ipcMain.on('close-analysis-window', () => {
     closeAnalysisWindow();
+    // 通知主窗口取消激活状态
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('analysis-window-closed');
+    }
 });
 
 // 打开分析窗口
@@ -249,126 +357,6 @@ ipcMain.on('open-analysis-window', () => {
     createAnalysisWindow();
 });
 
-// 小图标右键菜单（还原/退出）
-ipcMain.on('show-mini-context-menu', () => {
-  try {
-    const { Menu } = require('electron');
-    const template = [
-      { label: '还原悬浮窗', click: () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); destroyMiniWindow(); } } },
-      { type: 'separator' },
-      { label: '退出悬浮窗', click: () => { app.quit(); } }
-    ];
-    const menu = Menu.buildFromTemplate(template);
-    menu.popup();
-  } catch (err) {
-    console.error('show-mini-context-menu error:', err);
-  }
-});
-
-// 拖拽支持：渲染进程调用以获取当前 miniWindow bounds，然后发送更新位置
-ipcMain.handle('mini-begin-drag', (event, pos) => {
-  try {
-    if (miniWindow && !miniWindow.isDestroyed()) {
-      return miniWindow.getBounds();
-    }
-  } catch (err) {
-    console.error('mini-begin-drag handler error:', err);
-  }
-  // fallback
-  return { x: 0, y: 0, width: 64, height: 64 };
-});
-
-ipcMain.on('mini-update-drag', (event, data) => {
-  try {
-    if (!miniWindow || miniWindow.isDestroyed()) return;
-    const { screenX, screenY, offsetX, offsetY } = data;
-    const workArea = screen.getDisplayNearestPoint({ x: screenX, y: screenY }).workArea;
-    const newX = Math.max(workArea.x, Math.min(screenX - offsetX, workArea.x + workArea.width - (miniWindow.getBounds().width || 64)));
-    const newY = Math.max(workArea.y, Math.min(screenY - offsetY, workArea.y + workArea.height - (miniWindow.getBounds().height || 64)));
-    miniWindow.setBounds({ x: Math.round(newX), y: Math.round(newY) });
-  } catch (err) {
-    console.error('mini-update-drag error:', err);
-  }
-});
-
-// 创建并显示小图标窗口
-function showMiniWindow() {
-  try {
-    if (miniWindow && !miniWindow.isDestroyed()) {
-      miniWindow.show();
-      miniWindow.focus();
-      return;
-    }
-
-    // 小图标窗口尺寸与样式，位置优先使用 lastWindowPosition，否则使用光标位置
-    const miniSize = { w: 64, h: 64 };
-    let miniX, miniY;
-    try {
-      if (lastWindowPosition && lastWindowPosition.x !== undefined) {
-        // 放在主窗口右下角附近
-        miniX = lastWindowPosition.x + (lastWindowPosition.width || 0) - Math.floor(miniSize.w * 0.7);
-        miniY = lastWindowPosition.y + (lastWindowPosition.height || 0) - Math.floor(miniSize.h * 0.7);
-      } else {
-        const cursor = screen.getCursorScreenPoint();
-        miniX = cursor.x - Math.floor(miniSize.w / 2);
-        miniY = cursor.y - Math.floor(miniSize.h / 2);
-      }
-
-      // 限制在工作区范围内
-      const workArea = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
-      miniX = Math.max(workArea.x, Math.min(miniX, workArea.x + workArea.width - miniSize.w));
-      miniY = Math.max(workArea.y, Math.min(miniY, workArea.y + workArea.height - miniSize.h));
-    } catch (err) {
-      miniX = undefined;
-      miniY = undefined;
-    }
-
-    miniWindow = new BrowserWindow({
-      width: miniSize.w,
-      height: miniSize.h,
-      x: miniX,
-      y: miniY,
-      frame: false,
-      alwaysOnTop: true,
-      transparent: true,
-      resizable: false,
-      skipTaskbar: true,
-      movable: true,
-      focusable: true,
-      webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false
-      }
-    });
-
-    miniWindow.loadFile(path.join(__dirname, 'src', 'mini.html'));
-
-    miniWindow.on('closed', () => {
-      miniWindow = null;
-    });
-
-    // 点击小图标时还原主窗口（由mini.html发送ipc消息）
-    // 另：如果主窗口被关闭，也要关闭miniWindow
-    if (mainWindow) {
-      mainWindow.on('closed', () => {
-        destroyMiniWindow();
-      });
-    }
-  } catch (err) {
-    console.error('showMiniWindow error:', err);
-  }
-}
-
-function destroyMiniWindow() {
-  try {
-    if (miniWindow && !miniWindow.isDestroyed()) {
-      miniWindow.close();
-      miniWindow = null;
-    }
-  } catch (err) {
-    console.error('destroyMiniWindow error:', err);
-  }
-}
 
 // 开发环境下的热重载 (尝试加载)
 try {
@@ -423,6 +411,10 @@ function createAnalysisWindow() {
 
     analysisWindow.on('closed', () => {
         analysisWindow = null;
+        // 通知主窗口取消激活状态
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('analysis-window-closed');
+        }
     });
 
     // 失去焦点时重申置顶

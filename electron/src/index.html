@@ -146,7 +146,7 @@
 <body class="h-screen flex flex-col text-white overflow-hidden">
 
     <!-- 悬浮窗主体容器 -->
-    <div class="w-full h-full flex flex-col relative">
+    <div id="main-container" class="w-full h-full flex flex-col relative">
         
         <!-- 顶部导航栏 -->
         <div class="h-12 w-full drag-area flex justify-between items-center px-4 select-none z-20 border-b border-white/10 bg-white/5 flex-shrink-0">
@@ -211,8 +211,24 @@
 
         </div>
 
+        <!-- 底部导航栏 -->
+        <div class="h-12 w-full flex justify-around items-center border-t border-white/10 bg-white/5 flex-shrink-0 no-drag text-[13px] font-medium">
+            <button onclick="expandWindow()" class="hover:text-pink-400 transition-colors flex items-center gap-1">
+                <i class="fa-solid fa-expand"></i>
+                <span>Expand</span>
+            </button>
+            <button onclick="login()" class="hover:text-pink-400 transition-colors flex items-center gap-1">
+                <i class="fa-solid fa-user"></i>
+                <span>Login</span>
+            </button>
+            <button onclick="settings()" class="hover:text-pink-400 transition-colors flex items-center gap-1">
+                <i class="fa-solid fa-gear"></i>
+                <span>Settings</span>
+            </button>
+        </div>
+
         <!-- 设置面板覆盖层 -->
-        <div id="settingsPanel" class="absolute inset-0 z-50 flex items-center justify-center p-4 hidden">
+        <div id="settingsPanel" class="absolute inset-0 z-50 items-center justify-center p-4 hidden">
             <div class="absolute inset-0 bg-black/60 backdrop-blur-md" onclick="toggleSettings(false)"></div>
             
             <div class="glass-panel w-full max-w-[320px] h-[85%] rounded-[2rem] border border-white/20 flex flex-col overflow-hidden relative z-10 shadow-2xl animate-in zoom-in-95 duration-200">
@@ -225,54 +241,239 @@
                 </div>
         
                 <div class="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar">
-                    
-                    <div class="space-y-3">
-                        <label class="text-[10px] font-bold text-white/30 uppercase tracking-widest">Connection</label>
-                        <div class="space-y-2">
-                            <div class="group">
-                                <span class="text-[11px] text-white/60 mb-1 block ml-1">Bilibili SESSDATA</span>
-                                <input type="password" placeholder="Paste your cookie here..." 
-                                       class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-pink-500/50 transition-all placeholder:text-white/20">
-                            </div>
-        </div>
-    </div>
 
+                    <!-- 白名单配置 -->
                     <div class="space-y-3">
-                        <label class="text-[10px] font-bold text-white/30 uppercase tracking-widest">Interface</label>
-                        <div class="flex items-center justify-between bg-white/5 p-3 rounded-2xl border border-white/5">
-                            <span class="text-xs text-white/80">Always on Top</span>
-                            <label class="relative inline-flex items-center cursor-pointer">
-                                <input type="checkbox" class="sr-only peer" checked>
-                                <div class="w-8 h-4 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-pink-500"></div>
-                            </label>
-                        </div>
-                        <div class="bg-white/5 p-3 rounded-2xl border border-white/5">
-                            <div class="flex justify-between items-center mb-2">
-                                <span class="text-xs text-white/80">Theme Color</span>
-                                <span class="text-[10px] text-pink-400">Cyber Pink</span>
+                        <label class="text-[10px] font-bold text-white/30 uppercase tracking-widest">Whitelist (保留热门评论)</label>
+
+                        <div class="bg-white/5 p-3 rounded-2xl border border-white/10 space-y-3">
+                            <div>
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-[11px] text-white/60">高赞阈值</span>
+                                    <span id="high-like-value" class="text-[11px] text-pink-400">50</span>
+                                </div>
+                                <input type="range" id="high-like" min="10" max="200" value="50"
+                                       class="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500"
+                                       oninput="document.getElementById('high-like-value').innerText = this.value">
                             </div>
-                            <select class="w-full bg-black/20 border-none text-[11px] rounded-lg py-1 focus:outline-none appearance-none cursor-pointer">
-                                <option>Cyber Pink</option>
-                                <option>Bili Blue</option>
-                                <option>Dark Mode</option>
+
+                            <div>
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-[11px] text-white/60">热门讨论阈值</span>
+                                    <span id="high-reply-value" class="text-[11px] text-pink-400">10</span>
+                                </div>
+                                <input type="range" id="high-reply" min="3" max="50" value="10"
+                                       class="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500"
+                                       oninput="document.getElementById('high-reply-value').innerText = this.value">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 过滤配置 -->
+                    <div class="space-y-3">
+                        <label class="text-[10px] font-bold text-white/30 uppercase tracking-widest">Filter (过滤设置)</label>
+
+                        <div class="bg-white/5 p-3 rounded-2xl border border-white/10 space-y-3">
+                            <div>
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-[11px] text-white/60">最小中文占比</span>
+                                    <span id="chinese-ratio-value" class="text-[11px] text-pink-400">15%</span>
+                                </div>
+                                <input type="range" id="chinese-ratio" min="0" max="50" value="15"
+                                       class="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500"
+                                       oninput="document.getElementById('chinese-ratio-value').innerText = this.value + '%'">
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-[11px] text-white/60">最小质量评分</span>
+                                    <span id="quality-score-value" class="text-[11px] text-pink-400">0.20</span>
+                                </div>
+                                <input type="range" id="quality-score" min="0" max="50" value="20"
+                                       class="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500"
+                                       oninput="document.getElementById('quality-score-value').innerText = (this.value/100).toFixed(2)">
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-[11px] text-white/60">最大重复字符</span>
+                                    <span id="char-repeat-value" class="text-[11px] text-pink-400">10</span>
+                                </div>
+                                <input type="range" id="char-repeat" min="5" max="30" value="10"
+                                       class="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500"
+                                       oninput="document.getElementById('char-repeat-value').innerText = this.value">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 去重配置 -->
+                    <div class="space-y-3">
+                        <label class="text-[10px] font-bold text-white/30 uppercase tracking-widest">Deduplication</label>
+                        <div class="bg-white/5 p-3 rounded-2xl border border-white/10">
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="text-xs text-white/80">去重方法</span>
+                            </div>
+                            <select id="dedup-method" class="w-full bg-black/20 border-none text-[11px] rounded-lg py-2 focus:outline-none appearance-none cursor-pointer text-white/80">
+                                <option value="exact">精确去重 (推荐)</option>
+                                <option value="fuzzy">模糊去重</option>
+                                <option value="embedding">语义去重 (慢)</option>
+                                <option value="all">全部去重 (最慢)</option>
                             </select>
-                </div>
-        </div>
+                        </div>
+                    </div>
+
+                    <!-- UI配置 -->
+                    <div class="space-y-3">
+                        <label class="text-[10px] font-bold text-white/30 uppercase tracking-widest">Appearance (外观)</label>
+
+                        <div class="bg-white/5 p-3 rounded-2xl border border-white/10 space-y-3">
+                            <div>
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-[11px] text-white/60">背景颜色</span>
+                                    <span id="bg-color-value" class="text-[11px] text-pink-400">#1a1a2e</span>
+                                </div>
+                                <input type="color" id="bg-color" value="#1a1a2e"
+                                       class="w-full h-10 bg-transparent border border-white/10 rounded-lg cursor-pointer"
+                                       oninput="document.getElementById('bg-color-value').innerText = this.value; applyUISettings()">
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-[11px] text-white/60">透明度</span>
+                                    <span id="opacity-value" class="text-[11px] text-pink-400">95%</span>
+                                </div>
+                                <input type="range" id="opacity" min="50" max="100" value="95"
+                                       class="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500"
+                                       oninput="document.getElementById('opacity-value').innerText = this.value + '%'; applyUISettings()">
+                            </div>
+                        </div>
+                    </div>
 
                     <div class="pt-2">
                         <div class="bg-gradient-to-br from-pink-500/10 to-purple-500/10 p-4 rounded-2xl border border-pink-500/10">
                             <p class="text-[10px] text-white/40 leading-relaxed text-center">
                                 BiliMood v1.2.0<br>
-                                Powered by Gemini AI & Electron
+                                数据过滤引擎 v2.0
                             </p>
                         </div>
+                    </div>
                 </div>
-            </div>
 
                 <div class="p-5">
                     <button onclick="saveSettings()" class="w-full bg-white text-black text-xs font-bold py-3 rounded-2xl hover:bg-pink-500 hover:text-white transition-all duration-300 active:scale-95 shadow-lg shadow-white/5">
                         APPLY CHANGES
                     </button>
+                </div>
+            </div>
+        </div>
+        <div id="loginPanel" class="absolute inset-0 z-50 items-center justify-center p-4 hidden">
+            <div class="absolute inset-0 bg-black/60 backdrop-blur-md" onclick="toggleLogin(false)"></div>
+            
+            <div class="glass-panel w-full max-w-[380px] rounded-[2.5rem] border border-white/20 flex flex-col overflow-hidden relative z-10 shadow-2xl animate-in zoom-in-95 duration-300 p-8">
+                
+                <!-- Logo -->
+                <div class="flex justify-center mb-6">
+                    <div class="w-20 h-20 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center shadow-lg shadow-pink-500/30">
+                        <i class="fa-brands fa-bilibili text-4xl text-white"></i>
+                    </div>
+                </div>
+                
+                <!-- Title -->
+                <h2 class="text-2xl font-bold text-white text-center mb-8 tracking-wide">BiliMood</h2>
+                
+                <!-- Inputs -->
+                <div class="space-y-4">
+                    <div class="space-y-1.5">
+                        <label class="text-[11px] text-white/50 uppercase tracking-wider ml-1">Account</label>
+                        <input id="login-account" type="text" placeholder="Username or Email"
+                               class="w-full bg-white/10 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-pink-500/50 focus:bg-white/15 transition-all">
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label class="text-[11px] text-white/50 uppercase tracking-wider ml-1">Password</label>
+                        <input id="login-password" type="password" placeholder="Password"
+                               class="w-full bg-white/10 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-pink-500/50 focus:bg-white/15 transition-all">
+                    </div>
+                </div>
+
+                <!-- Login Button -->
+                <button onclick="handleLogin()" class="w-full bg-gradient-to-r from-pink-500 to-purple-600 text-white font-bold py-3.5 rounded-2xl mt-8 hover:shadow-lg hover:shadow-pink-500/30 hover:scale-[1.02] active:scale-95 transition-all duration-300">
+                    Login
+                </button>
+                
+                <!-- Footer Links -->
+                <div class="flex justify-center gap-4 mt-6">
+                    <a href="#" class="text-xs text-white/40 hover:text-pink-400 transition-colors">Forgot Password?</a>
+                    <span class="text-white/20">|</span>
+                    <a href="#" onclick="switchToRegister(); return false;" class="text-xs text-pink-400 hover:text-pink-300 transition-colors">Register</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Register Panel -->
+        <div id="registerPanel" class="absolute inset-0 z-50 items-center justify-center p-4 hidden">
+            <div class="absolute inset-0 bg-black/60 backdrop-blur-md" onclick="toggleRegister(false)"></div>
+            
+            <div class="glass-panel w-full max-w-[380px] rounded-[2.5rem] border border-white/20 flex flex-col overflow-hidden relative z-10 shadow-2xl animate-in zoom-in-95 duration-300 p-8">
+                
+                <!-- Logo -->
+                <div class="flex justify-center mb-6">
+                    <div class="w-20 h-20 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center shadow-lg shadow-pink-500/30">
+                        <i class="fa-brands fa-bilibili text-4xl text-white"></i>
+                    </div>
+                </div>
+                
+                <!-- Title -->
+                <h2 class="text-2xl font-bold text-white text-center mb-8 tracking-wide">Create Account</h2>
+                
+                <!-- Inputs -->
+                <div class="space-y-4">
+                    <div class="space-y-1.5">
+                        <label class="text-[11px] text-white/50 uppercase tracking-wider ml-1">Username</label>
+                        <input id="register-username" type="text" placeholder="Choose a username"
+                               class="w-full bg-white/10 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-pink-500/50 focus:bg-white/15 transition-all">
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label class="text-[11px] text-white/50 uppercase tracking-wider ml-1">Email</label>
+                        <input id="register-email" type="email" placeholder="your@email.com"
+                               class="w-full bg-white/10 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-pink-500/50 focus:bg-white/15 transition-all">
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label class="text-[11px] text-white/50 uppercase tracking-wider ml-1">Verification Code</label>
+                        <div class="flex gap-2">
+                            <input id="register-code" type="text" placeholder="Enter code" maxlength="6"
+                                   class="flex-1 bg-white/10 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-pink-500/50 focus:bg-white/15 transition-all">
+                            <button id="send-code-btn" onclick="sendVerificationCode()" type="button"
+                                    class="px-4 py-3 bg-white/10 border border-white/10 rounded-2xl text-xs text-white hover:bg-white/20 transition-all whitespace-nowrap">
+                                Send Code
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label class="text-[11px] text-white/50 uppercase tracking-wider ml-1">Password (8+ chars with letters)</label>
+                        <input id="register-password" type="password" placeholder="Create a password"
+                               class="w-full bg-white/10 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-pink-500/50 focus:bg-white/15 transition-all">
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label class="text-[11px] text-white/50 uppercase tracking-wider ml-1">Confirm Password</label>
+                        <input id="register-confirm-password" type="password" placeholder="Confirm your password"
+                               class="w-full bg-white/10 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-pink-500/50 focus:bg-white/15 transition-all">
+                    </div>
+                </div>
+
+                <!-- Register Button -->
+                <button onclick="handleRegister()" class="w-full bg-gradient-to-r from-pink-500 to-purple-600 text-white font-bold py-3.5 rounded-2xl mt-8 hover:shadow-lg hover:shadow-pink-500/30 hover:scale-[1.02] active:scale-95 transition-all duration-300">
+                    Register
+                </button>
+                
+                <!-- Footer Links -->
+                <div class="flex justify-center gap-4 mt-6">
+                    <span class="text-xs text-white/40">Already have an account?</span>
+                    <a href="#" onclick="switchToLogin(); return false;" class="text-xs text-pink-400 hover:text-pink-300 transition-colors">Login</a>
                 </div>
             </div>
         </div>
@@ -303,7 +504,6 @@
             if (isActive) {
                 // 如果已激活，则关闭模块
                 element.classList.remove('active');
-
                 // 如果是emotional模块，关闭独立窗口
                 if (moduleName === 'emotional') {
                     ipcRenderer.send('close-analysis-window');
@@ -326,12 +526,52 @@
             const panel = document.getElementById('settingsPanel');
              if (show) {
                 panel.classList.remove('hidden');
+                panel.classList.add('flex');
                 // 可选：添加一点进入动画
                 panel.classList.add('animate-in', 'fade-in', 'zoom-in', 'duration-300');
                         } else {
-            panel.classList.add('hidden');
+                panel.classList.remove('flex');
+                panel.classList.add('hidden');
+            }
         }
+        function login(){
+            toggleLogin(true);
         }
+        function toggleLogin(show){
+            const panel = document.getElementById("loginPanel")
+            if(show){
+                panel.classList.remove('hidden');
+                panel.classList.add('flex');
+                panel.classList.add('animate-in','fade-in','zoom-in','duration-300');
+            }else{
+                panel.classList.remove('flex');
+                panel.classList.add('hidden');
+            }
+        }
+        
+        function toggleRegister(show){
+            const panel = document.getElementById("registerPanel")
+            if(show){
+                panel.classList.remove('hidden');
+                panel.classList.add('flex');
+                panel.classList.add('animate-in','fade-in','zoom-in','duration-300');
+            }else{
+                panel.classList.remove('flex');
+                panel.classList.add('hidden');
+            }
+        }
+        
+        // === 切换登录/注册面板 ===
+        function switchToRegister() {
+            toggleLogin(false);
+            setTimeout(() => toggleRegister(true), 200);
+        }
+        
+        function switchToLogin() {
+            toggleRegister(false);
+            setTimeout(() => toggleLogin(true), 200);
+        }
+        
 
         // === 打开独立模块窗口 ===
         function openModule(moduleName) {
@@ -347,6 +587,348 @@
             // 展开功能
             alert('Expand feature');
         }
+        // === API 基础配置 ===
+        const API_BASE = 'http://127.0.0.1:8000';
+        
+        // === 通用 API 调用函数 ===
+        async function apiCall(endpoint, options = {}) {
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    ...options,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                return await response.json();
+            } catch (error) {
+                if (error.message.includes('getaddrinfo')) {
+                    throw new Error('无法连接到后端服务器，请确保 Django 服务已启动\n端口: 8000');
+                }
+                throw error;
+            }
+        }
+        
+        // === 加载配置 ===
+        async function loadConfig() {
+            try {
+                const result = await apiCall('/api/config/');
+
+                if (result.success && result.data) {
+                    applyUserConfig(result.data);
+                }
+            } catch (error) {
+                console.error('加载配置失败:', error);
+            }
+        }
+
+        // === 应用UI设置 ===
+        function applyUISettings() {
+            const bgColor = document.getElementById('bg-color').value;
+            const opacity = parseInt(document.getElementById('opacity').value) / 100;
+
+            // 将16进制颜色转换为RGB
+            const hex = bgColor.replace('#', '');
+            const r = parseInt(hex.substring(0, 2), 16);
+            const g = parseInt(hex.substring(2, 4), 16);
+            const b = parseInt(hex.substring(4, 6), 16);
+
+            console.log(`应用UI设置: 颜色=${bgColor}, 透明度=${opacity}`);
+
+            // 应用到主容器（而不是body，避免与Electron透明窗口冲突）
+            const mainContainer = document.getElementById('main-container');
+            if (mainContainer) {
+                mainContainer.style.backgroundColor = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+            }
+
+            // 更新动态样式（导航栏和卡片）
+            const style = document.getElementById('dynamic-styles') || document.createElement('style');
+            style.id = 'dynamic-styles';
+            style.textContent = `
+                /* 主容器 - 禁用背景色过渡 */
+                #main-container {
+                    transition: none !important;
+                }
+
+                /* 顶部导航栏 */
+                .drag-area {
+                    background-color: rgba(${r}, ${g}, ${b}, ${opacity * 0.8}) !important;
+                    transition: none !important;
+                }
+
+                /* 底部导航栏 */
+                .border-t.border-white\\/10 {
+                    background-color: rgba(${r}, ${g}, ${b}, ${opacity * 0.8}) !important;
+                    transition: none !important;
+                }
+
+                /* 卡片基础样式 - 只保留 transform 和 border 的过渡 */
+                .nav-card {
+                    background-color: rgba(${r}, ${g}, ${b}, ${opacity * 0.3}) !important;
+                    transition: transform 0.3s ease, border-color 0.3s ease !important;
+                }
+
+                /* 卡片悬停效果 */
+                .nav-card:hover {
+                    background-color: rgba(${r}, ${g}, ${b}, ${opacity * 0.5}) !important;
+                }
+
+                /* 卡片激活状态 */
+                .nav-card.active {
+                    background-color: rgba(236, 72, 153, ${opacity * 0.3}) !important;
+                }
+            `;
+            if (!document.getElementById('dynamic-styles')) {
+                document.head.appendChild(style);
+            }
+        }
+
+        // === 保存配置 ===
+        async function saveSettings() {
+            try {
+                const config = {
+                    filter_config: {
+                        min_chinese_ratio: parseInt(document.getElementById('chinese-ratio').value) / 100,
+                        min_quality_score: parseInt(document.getElementById('quality-score').value) / 100,
+                        max_char_repeat: parseInt(document.getElementById('char-repeat').value),
+                        dedup_method: document.getElementById('dedup-method').value
+                    },
+                    whitelist_config: {
+                        high_like_threshold: parseInt(document.getElementById('high-like').value),
+                        high_reply_threshold: parseInt(document.getElementById('high-reply').value),
+                        combined_like_threshold: 20,  // 保持默认
+                        combined_reply_threshold: 5   // 保持默认
+                    },
+                    ui_config: {
+                        background_color: document.getElementById('bg-color').value,
+                        opacity: parseInt(document.getElementById('opacity').value) / 100
+                    }
+                };
+
+                const response = await fetch('http://127.0.0.1:8000/api/config/save/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // 应用UI设置
+                    applyUISettings();
+                    // 显示成功提示
+                    alert('配置保存成功！');
+                    toggleSettings(false);
+                } else {
+                    alert('保存失败: ' + result.error);
+                }
+            } catch (error) {
+                console.error('保存配置失败:', error);
+                alert('保存失败: ' + error.message);
+            }
+        }
+
+        // 监听分析窗口关闭事件
+        ipcRenderer.on('analysis-window-closed', () => {
+            // 找到 emotional 卡片并移除 active 状态
+            const cards = document.querySelectorAll('.nav-card');
+            cards.forEach(card => {
+                // 检查是否是 emotional 卡片（通过 onclick 属性判断）
+                const onclickAttr = card.getAttribute('onclick');
+                if (onclickAttr && onclickAttr.includes("'emotional'")) {
+                    card.classList.remove('active');
+                }
+            });
+        });
+
+        // === 用户认证功能 ===
+        let sendCodeCountdown = 0;
+
+        // 发送验证码
+        async function sendVerificationCode() {
+            const email = document.getElementById('register-email').value.trim();
+            const btn = document.getElementById('send-code-btn');
+
+            if (!email) {
+                alert('请输入邮箱地址');
+                return;
+            }
+
+            if (sendCodeCountdown > 0) {
+                return;
+            }
+
+            try {
+                btn.disabled = true;
+                btn.textContent = 'Sending...';
+
+                const response = await fetch('http://127.0.0.1:8000/api/auth/send-code/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, purpose: 'register' })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('验证码已发送到您的邮箱！\n\n开发模式：验证码为 ' + (result.code || '请查看控制台'));
+
+                    // 开始倒计时
+                    sendCodeCountdown = 60;
+                    const countdown = setInterval(() => {
+                        sendCodeCountdown--;
+                        btn.textContent = `${sendCodeCountdown}s`;
+                        if (sendCodeCountdown <= 0) {
+                            clearInterval(countdown);
+                            btn.textContent = 'Send Code';
+                            btn.disabled = false;
+                        }
+                    }, 1000);
+                } else {
+                    alert(result.message || '发送失败');
+                    btn.textContent = 'Send Code';
+                    btn.disabled = false;
+                }
+            } catch (error) {
+                alert('发送失败: ' + error.message);
+                btn.textContent = 'Send Code';
+                btn.disabled = false;
+            }
+        }
+
+        // 注册
+        async function handleRegister() {
+            const username = document.getElementById('register-username').value.trim();
+            const email = document.getElementById('register-email').value.trim();
+            const code = document.getElementById('register-code').value.trim();
+            const password = document.getElementById('register-password').value;
+            const confirmPassword = document.getElementById('register-confirm-password').value;
+
+            if (!username || !email || !code || !password || !confirmPassword) {
+                alert('请填写所有字段');
+                return;
+            }
+
+            if (password !== confirmPassword) {
+                alert('两次密码输入不一致');
+                return;
+            }
+
+            try {
+                const response = await fetch('http://127.0.0.1:8000/api/auth/register/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, email, password, code })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('注册成功！请登录');
+                    switchToLogin();
+                    // 清空表单
+                    document.getElementById('register-username').value = '';
+                    document.getElementById('register-email').value = '';
+                    document.getElementById('register-code').value = '';
+                    document.getElementById('register-password').value = '';
+                    document.getElementById('register-confirm-password').value = '';
+                } else {
+                    alert(result.message || '注册失败');
+                }
+            } catch (error) {
+                alert('注册失败: ' + error.message);
+            }
+        }
+
+        // 登录
+        async function handleLogin() {
+            const username = document.getElementById('login-account').value.trim();
+            const password = document.getElementById('login-password').value;
+
+            if (!username || !password) {
+                alert('请输入用户名/邮箱和密码');
+                return;
+            }
+
+            try {
+                const response = await fetch('http://127.0.0.1:8000/api/auth/login/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert(`欢迎回来，${result.data.username}！`);
+                    toggleLogin(false);
+                    // 清空表单
+                    document.getElementById('login-account').value = '';
+                    document.getElementById('login-password').value = '';
+
+                    // 应用用户配置
+                    if (result.data.config) {
+                        applyUserConfig(result.data.config);
+                    }
+                } else {
+                    alert(result.message || '登录失败');
+                }
+            } catch (error) {
+                alert('登录失败: ' + error.message);
+            }
+        }
+
+        // 应用用户配置
+        function applyUserConfig(config) {
+            const { filter_config, whitelist_config, ui_config } = config;
+
+            // 应用白名单配置
+            if (whitelist_config) {
+                document.getElementById('high-like').value = whitelist_config.high_like_threshold;
+                document.getElementById('high-like-value').innerText = whitelist_config.high_like_threshold;
+                document.getElementById('high-reply').value = whitelist_config.high_reply_threshold;
+                document.getElementById('high-reply-value').innerText = whitelist_config.high_reply_threshold;
+            }
+
+            // 应用过滤配置
+            if (filter_config) {
+                const chineseRatio = Math.round(filter_config.min_chinese_ratio * 100);
+                document.getElementById('chinese-ratio').value = chineseRatio;
+                document.getElementById('chinese-ratio-value').innerText = chineseRatio + '%';
+
+                const qualityScore = Math.round(filter_config.min_quality_score * 100);
+                document.getElementById('quality-score').value = qualityScore;
+                document.getElementById('quality-score-value').innerText = (filter_config.min_quality_score).toFixed(2);
+
+                document.getElementById('char-repeat').value = filter_config.max_char_repeat;
+                document.getElementById('char-repeat-value').innerText = filter_config.max_char_repeat;
+
+                document.getElementById('dedup-method').value = filter_config.dedup_method;
+            }
+
+            // 应用UI配置
+            if (ui_config) {
+                document.getElementById('bg-color').value = ui_config.background_color;
+                document.getElementById('bg-color-value').innerText = ui_config.background_color;
+
+                const opacityPercent = Math.round(ui_config.opacity * 100);
+                document.getElementById('opacity').value = opacityPercent;
+                document.getElementById('opacity-value').innerText = opacityPercent + '%';
+
+                // 立即应用UI设置
+                applyUISettings();
+            }
+        }
+
+        // 页面加载时加载配置
+        document.addEventListener('DOMContentLoaded', () => {
+            loadConfig();
+        });
     </script>
 </body>
 </html>

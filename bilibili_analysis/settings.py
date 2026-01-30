@@ -122,3 +122,27 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = "static/"
+
+# Default primary key field type
+# https://docs.djangoproject.com/en/6.0/ref/settings/#default-auto-field
+
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Email settings (邮件配置)
+# 使用 SMTP 发送邮件
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.qq.com'  # QQ邮箱 SMTP 服务器
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = '2902523121@qq.com'  # 替换为你的邮箱
+EMAIL_HOST_PASSWORD = 'cfnawpmsfgzsdeda'  # 替换为你的应用密码
+DEFAULT_FROM_EMAIL = 'BiliMood <2902523121@qq.com>'  # 发件人显示
+
+# 开发环境下使用控制台输出（不发送真实邮件）
+#if DEBUG:
+ #   EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# Session 配置
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+SESSION_COOKIE_AGE = 86400 * 7  # 7天
+SESSION_SAVE_EVERY_REQUEST = True

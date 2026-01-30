@@ -9,7 +9,7 @@ import requests
 from bs4 import BeautifulSoup
 from django.utils import timezone
 from .sentiment_model import SentimentModel
-from .models import Video, Comment, Danmu
+from .models import Video, Comment, Danmu, UserConfig
 
 # 初始化OpenCC繁简转换
 try:
@@ -88,9 +88,10 @@ def remove_emoji(text):
         "\U0001F680-\U0001F6FF"  # 交通和地图符号
         "\U0001F1E0-\U0001F1FF"  # 旗帜
         "\U00002702-\U000027B0"  # 装饰符号
-        "\U000024C2-\U0001F251"  # 其他符号
+        "\U000024C2-\U000024FF"  # 封闭字母数字
         "\U0001F900-\U0001F9FF"  # 补充符号和图标
         "\U0001FA70-\U0001FAFF"  # 扩展符号
+        "\U0001F004-\U0001F004"  # 麻将🀄
         "]+",
         flags=re.UNICODE
     )
@@ -183,12 +184,25 @@ def clean_text(text, for_analysis=False):
 # 数据过滤模块
 # ============================================
 
-def filter_by_length(text, min_length=2, max_length=500):
+def filter_by_length(text, min_length=None, max_length=None):
     """
-    长度过滤
+    长度过滤（从数据库读取默认配置）
     """
     if not text:
         return False
+
+    # 从数据库读取配置
+    if min_length is None or max_length is None:
+        try:
+            config = UserConfig.get_config()
+            if min_length is None:
+                min_length = config.min_length
+            if max_length is None:
+                max_length = config.max_length
+        except:
+            # 数据库读取失败时使用默认值
+            min_length = min_length or 1
+            max_length = max_length or 500
 
     length = len(text)
     return min_length <= length <= max_length
@@ -196,10 +210,22 @@ def filter_by_length(text, min_length=2, max_length=500):
 
 def is_spam_content(text):
     """
-    垃圾内容检测
+    垃圾内容检测（从数据库读取配置）
     """
     if not text:
         return True
+
+    # 从数据库读取配置
+    try:
+        config = UserConfig.get_config()
+        max_char_repeat = config.max_char_repeat
+        min_unique_ratio = config.min_unique_ratio
+        min_unique_check_length = config.min_unique_check_length
+    except:
+        # 数据库读取失败时使用默认值
+        max_char_repeat = 10
+        min_unique_ratio = 0.2
+        min_unique_check_length = 15
 
     # 1. 纯数字
     if text.isdigit():
@@ -209,13 +235,13 @@ def is_spam_content(text):
     if not re.search(r'[\w\u4e00-\u9fff]', text):
         return True
 
-    # 3. 单字符重复（如：啊啊啊啊啊啊啊啊）
-    if len(set(text)) == 1 and len(text) > 5:
+    # 3. 单字符重复（如：啊啊啊啊啊啊啊啊啊啊）
+    if len(set(text)) == 1 and len(text) > max_char_repeat:
         return True
 
     # 4. 字符种类太少（可能是无意义内容）
     unique_ratio = len(set(text)) / len(text)
-    if len(text) > 10 and unique_ratio < 0.3:
+    if len(text) > min_unique_check_length and unique_ratio < min_unique_ratio:
         return True
 
     return False
@@ -232,12 +258,49 @@ def get_chinese_ratio(text):
     return chinese_chars / len(text)
 
 
-def is_meaningful_text(text, min_chinese_ratio=0.3):
+def is_meaningful_text(text, min_chinese_ratio=None, like_count=0, reply_count=0):
     """
-    综合判断文本是否有意义
+    综合判断文本是否有意义（带白名单机制，从数据库读取配置）
+
+    Args:
+        text: 文本内容
+        min_chinese_ratio: 最小中文占比（None 则从配置读取）
+        like_count: 点赞数
+        reply_count: 回复数/子评论数
+
+    白名单规则（满足任一条件直接保留）：
+        1. 点赞数 >= high_like_threshold → 高赞评论直接保留
+        2. 回复数 >= high_reply_threshold → 热门讨论评论直接保留
+        3. 点赞数 >= combined_like_threshold 且 回复数 >= combined_reply_threshold → 综合热度高的评论保留
     """
     if not text:
         return False
+
+    # 从数据库读取配置
+    try:
+        config = UserConfig.get_config()
+        if min_chinese_ratio is None:
+            min_chinese_ratio = config.min_chinese_ratio
+        high_like = config.high_like_threshold
+        high_reply = config.high_reply_threshold
+        combined_like = config.combined_like_threshold
+        combined_reply = config.combined_reply_threshold
+    except:
+        # 数据库读取失败时使用默认值
+        if min_chinese_ratio is None:
+            min_chinese_ratio = 0.15
+        high_like = 50
+        high_reply = 10
+        combined_like = 20
+        combined_reply = 5
+
+    # 【白名单机制】高赞或高回复评论直接通过
+    if like_count >= high_like:
+        return True  # 高赞评论
+    if reply_count >= high_reply:
+        return True  # 热门讨论
+    if like_count >= combined_like and reply_count >= combined_reply:
+        return True  # 综合热度高
 
     # 1. 长度检查
     if not filter_by_length(text):
@@ -654,34 +717,38 @@ class DataCleaningPipeline:
 
     def __init__(self, config=None):
         """
-        初始化Pipeline
+        初始化Pipeline（从数据库读取默认配置）
 
         Args:
-            config: 配置字典
-                {
-                    'clean_for_analysis': False,
-                    'min_length': 2,
-                    'max_length': 500,
-                    'min_chinese_ratio': 0.3,
-                    'min_quality_score': 0.3,
-                    'dedup_method': 'exact',  # 'exact', 'fuzzy', 'embedding', 'all'
-                    'fuzzy_threshold': 0.85,
-                    'embedding_threshold': 0.85,
-                }
+            config: 配置字典（可选，用于覆盖默认配置）
         """
-        # 默认配置
-        self.config = {
-            'clean_for_analysis': False,
-            'min_length': 2,
-            'max_length': 500,
-            'min_chinese_ratio': 0.3,
-            'min_quality_score': 0.3,
-            'dedup_method': 'exact',
-            'fuzzy_threshold': 0.85,
-            'embedding_threshold': 0.85,
-        }
+        # 从数据库读取默认配置
+        try:
+            db_config = UserConfig.get_config()
+            self.config = {
+                'clean_for_analysis': False,
+                'min_length': db_config.min_length,
+                'max_length': db_config.max_length,
+                'min_chinese_ratio': db_config.min_chinese_ratio,
+                'min_quality_score': db_config.min_quality_score,
+                'dedup_method': db_config.dedup_method,
+                'fuzzy_threshold': db_config.fuzzy_threshold,
+                'embedding_threshold': db_config.embedding_threshold,
+            }
+        except:
+            # 数据库读取失败时使用默认值
+            self.config = {
+                'clean_for_analysis': False,
+                'min_length': 1,
+                'max_length': 500,
+                'min_chinese_ratio': 0.15,
+                'min_quality_score': 0.2,
+                'dedup_method': 'exact',
+                'fuzzy_threshold': 0.85,
+                'embedding_threshold': 0.85,
+            }
 
-        # 更新配置
+        # 更新配置（如果提供了自定义配置）
         if config:
             self.config.update(config)
 
@@ -1059,15 +1126,16 @@ def save_comment(comment_data, video_obj, score, sentiment_label):
         uname = comment_data.get('member', {}).get('uname', '')
         message = comment_data.get('content', {}).get('message', '')
         like_count = comment_data.get('like', 0)
+        reply_count = comment_data.get('rcount', 0)  # 子评论数
         mid = comment_data.get('mid', 0)
         parent_rpid = comment_data.get('parent', 0)
 
         # 数据清洗（用于展示的版本）
         cleaned_message = clean_text(message, for_analysis=False)
 
-        # 数据过滤：检查清洗后的文本是否有意义
-        if not is_meaningful_text(cleaned_message):
-            print(f"评论被过滤 (rpid={rpid}): 无意义内容")
+        # 数据过滤：检查清洗后的文本是否有意义（带白名单机制）
+        if not is_meaningful_text(cleaned_message, like_count=like_count, reply_count=reply_count):
+            print(f"评论被过滤 (rpid={rpid}): 无意义内容 (赞:{like_count}, 回复:{reply_count})")
             return None
 
         # 提取身份标签
@@ -1099,6 +1167,7 @@ def save_comment(comment_data, video_obj, score, sentiment_label):
                 'uname': uname,
                 'message': cleaned_message,
                 'like_count': like_count,
+                'reply_count': reply_count,  # 新增：子评论数
                 'location': location,
                 'ctime': ctime_dt,
                 'vip_type': vip_type,
