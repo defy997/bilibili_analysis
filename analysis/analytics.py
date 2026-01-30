@@ -277,6 +277,47 @@ def get_danmu_stats(bvid):
         }
 
 
+def get_user_profile_dashboard(bvid):
+    """
+    获取用户画像仪表板数据
+    """
+    try:
+        video = Video.objects.get(bvid=bvid)
+        comments = Comment.objects.filter(video_id=bvid)
+        total_users = comments.values('mid').distinct().count()
+
+        # 会员分布
+        vip = get_vip_distribution(bvid)
+        vip_total = vip['monthly_vip'] + vip['annual_vip']
+        vip_ratio = round(vip_total / total_users * 100, 1) if total_users > 0 else 0
+
+        # 平均用户等级
+        avg_level = comments.aggregate(avg=Avg('user_level'))['avg']
+        avg_level = round(avg_level, 1) if avg_level else 0
+
+        return {
+            "success": True,
+            "video_info": {
+                "bvid": video.bvid,
+                "title": video.title,
+            },
+            "overview_stats": {
+                "total_users": total_users,
+                "vip_ratio": vip_ratio,
+                "avg_level": avg_level,
+            },
+            "level_distribution": get_user_level_distribution(bvid),
+            "vip_distribution": vip,
+            "location_distribution": get_location_distribution(bvid, limit=15),
+            "top_users": get_top_users_by_likes(bvid, limit=10),
+        }
+    except Video.DoesNotExist:
+        return {
+            "success": False,
+            "error": "Video not found"
+        }
+
+
 def get_comprehensive_dashboard(bvid):
     """
     获取综合仪表板数据（一次性返回所有可视化数据）

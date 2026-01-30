@@ -504,17 +504,21 @@
             if (isActive) {
                 // 如果已激活，则关闭模块
                 element.classList.remove('active');
-                // 如果是emotional模块，关闭独立窗口
                 if (moduleName === 'emotional') {
                     ipcRenderer.send('close-analysis-window');
+                }
+                if (moduleName === 'user') {
+                    ipcRenderer.send('close-user-profile-window');
                 }
             } else {
                 // 如果未激活，则开启模块
                 element.classList.add('active');
 
-                // 如果是emotional模块，打开独立窗口
                 if (moduleName === 'emotional') {
                     ipcRenderer.send('toggle-analysis-window');
+                }
+                if (moduleName === 'user') {
+                    ipcRenderer.send('toggle-user-profile-window');
                 }
             }
         }
@@ -735,12 +739,21 @@
 
         // 监听分析窗口关闭事件
         ipcRenderer.on('analysis-window-closed', () => {
-            // 找到 emotional 卡片并移除 active 状态
             const cards = document.querySelectorAll('.nav-card');
             cards.forEach(card => {
-                // 检查是否是 emotional 卡片（通过 onclick 属性判断）
                 const onclickAttr = card.getAttribute('onclick');
                 if (onclickAttr && onclickAttr.includes("'emotional'")) {
+                    card.classList.remove('active');
+                }
+            });
+        });
+
+        // 监听用户画像窗口关闭事件
+        ipcRenderer.on('user-profile-window-closed', () => {
+            const cards = document.querySelectorAll('.nav-card');
+            cards.forEach(card => {
+                const onclickAttr = card.getAttribute('onclick');
+                if (onclickAttr && onclickAttr.includes("'user'")) {
                     card.classList.remove('active');
                 }
             });

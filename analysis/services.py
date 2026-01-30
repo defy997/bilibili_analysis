@@ -5,11 +5,16 @@
 import re
 import datetime
 import unicodedata
+import threading
 import requests
 from bs4 import BeautifulSoup
 from django.utils import timezone
 from .sentiment_model import SentimentModel
 from .models import Video, Comment, Danmu, UserConfig
+
+# 视频处理锁，防止同一视频被并发分析
+_video_processing_locks = {}
+_locks_lock = threading.Lock()
 
 # 初始化OpenCC繁简转换
 try:
@@ -1013,9 +1018,12 @@ class DataCleaningPipeline:
         print("=" * 60 + "\n")
 
 
-def crawl_video_info(bvid, headers, cookie):
+CPP_CRAWLER_URL = 'http://localhost:8081'
+
+
+def _crawl_video_info_python(bvid, headers, cookie):
     """
-    爬取视频基本信息
+    爬取视频基本信息（Python 实现）
     """
     video_url = f"https://api.bilibili.com/x/web-interface/view?bvid={bvid}"
     resp = requests.get(video_url, headers=headers)
@@ -1024,48 +1032,182 @@ def crawl_video_info(bvid, headers, cookie):
     if data['code'] != 0:
         raise Exception(f"获取视频信息失败: {data['message']}")
 
+    stat = data['data'].get('stat', {})
     return {
         'aid': data["data"]["aid"],
         'cid': data['data']['cid'],
         'title': data['data']['title'],
-        'pubdate_ts': data['data'].get('pubdate')
+        'pubdate_ts': data['data'].get('pubdate'),
+        'reply_count': stat.get('reply', 0)
     }
 
 
-def crawl_comments(aid, headers, pages=3):
+def crawl_video_info(bvid, headers, cookie):
     """
-    爬取视频评论
+    爬取视频基本信息，优先使用 C++ 服务，失败则 fallback 到 Python
     """
+    try:
+        resp = requests.post(f'{CPP_CRAWLER_URL}/crawl/video',
+                             json={'bvid': bvid, 'cookie': cookie}, timeout=10)
+        if resp.ok:
+            data = resp.json()
+            if data.get('success'):
+                print("[crawl_video_info] 使用 C++ 爬虫服务")
+                return data['data']
+    except Exception as e:
+        print(f"[crawl_video_info] C++ 服务不可用({e})，使用 Python fallback")
+    return _crawl_video_info_python(bvid, headers, cookie)
+
+
+def check_need_refresh(bvid, headers, cookie, threshold=0.1):
+    """
+    检查视频评论数据是否需要刷新
+    对比B站远程评论总数与本地数据库评论数，差异超过阈值则需要刷新
+
+    Args:
+        threshold: 差异比例阈值，默认10%（远程比本地多10%以上就刷新）
+
+    Returns:
+        (need_refresh, video_info) — 是否需要刷新 + 视频信息
+    """
+    video_info = crawl_video_info(bvid, headers, cookie)
+    remote_count = video_info.get('reply_count', 0)
+
+    # 用原始爬取数对比，而非清洗后的数量
+    try:
+        video = Video.objects.get(bvid=bvid)
+        local_count = video.raw_comment_count
+    except Video.DoesNotExist:
+        local_count = 0
+
+    if local_count == 0:
+        print(f"[刷新检测] 本地无数据，需要爬取")
+        return True, video_info
+
+    diff_ratio = (remote_count - local_count) / local_count if local_count > 0 else 1
+    print(f"[刷新检测] 远程评论: {remote_count}, 本地原始爬取: {local_count}, 差异: {diff_ratio:.1%}")
+
+    if diff_ratio > threshold:
+        print(f"[刷新检测] 差异超过{threshold:.0%}，需要刷新")
+        return True, video_info
+
+    print(f"[刷新检测] 数据无明显变化，使用缓存")
+    return False, video_info
+
+
+def _crawl_comments_python(aid, headers):
+    """
+    爬取视频全部评论（Python 实现，使用游标分页，带重试和反风控）
+    """
+    import time
+    import random
+
     all_comments = []
-    for page in range(1, pages + 1):
-        comment_api = "https://api.bilibili.com/x/v2/reply/main"
+    next_cursor = 0
+    page = 0
+    max_retries = 3
+    comment_api = "https://api.bilibili.com/x/v2/reply/main"
+
+    while True:
+        page += 1
         params = {
             "type": 1,
             "oid": aid,
-            "next": page
+            "mode": 3,
+            "next": next_cursor
         }
-        try:
-            comment_resp = requests.get(comment_api, params=params, headers=headers)
-            comment_data = comment_resp.json()
 
-            if comment_data['code'] != 0:
-                break
+        for retry in range(max_retries):
+            try:
+                comment_resp = requests.get(comment_api, params=params, headers=headers, timeout=15)
+                comment_data = comment_resp.json()
 
-            replies = comment_data['data'].get('replies', [])
-            if not replies:
-                break
+                if comment_data['code'] != 0:
+                    print(f"评论API返回错误码: {comment_data['code']}")
+                    return all_comments
 
-            all_comments.extend(replies)
-        except Exception as e:
-            print(f"获取第{page}页评论出错: {e}")
-            break
+                data = comment_data.get('data', {})
+                replies = data.get('replies', [])
+                if not replies:
+                    print(f"评论爬取完成: 共{len(all_comments)}条")
+                    return all_comments
 
+                all_comments.extend(replies)
+
+                # 使用API返回的游标值翻页
+                cursor = data.get('cursor', {})
+                is_end = cursor.get('is_end', True)
+                next_cursor = cursor.get('next', 0)
+
+                print(f"第{page}页: 获取{len(replies)}条评论，累计{len(all_comments)}条")
+
+                if is_end:
+                    print(f"评论爬取完成: 共{len(all_comments)}条")
+                    return all_comments
+
+                # 随机请求间隔 0.5~1.5s，避免固定节奏被风控
+                time.sleep(random.uniform(0.5, 1.5))
+                break  # 请求成功，跳出重试循环
+
+            except Exception as e:
+                print(f"获取第{page}页评论出错 (重试 {retry+1}/{max_retries}): {e}")
+                if retry < max_retries - 1:
+                    wait = (retry + 1) * 5 + random.uniform(1, 3)
+                    print(f"等待 {wait:.1f}s 后重试...")
+                    time.sleep(wait)
+                else:
+                    print(f"第{page}页重试耗尽，已获取{len(all_comments)}条评论")
+                    return all_comments
+
+    print(f"评论爬取完成: 共{len(all_comments)}条")
     return all_comments
 
 
-def crawl_danmaku(cid, headers):
+def _cpp_comment_to_bilibili_format(c):
     """
-    爬取视频弹幕
+    将 C++ 服务返回的扁平评论格式转换回 Bilibili API 的嵌套格式，
+    以兼容 save_comment 等下游函数
+    """
+    return {
+        'rpid': c.get('rpid'),
+        'mid': c.get('mid', 0),
+        'parent': c.get('parent', 0),
+        'like': c.get('like', 0),
+        'rcount': c.get('rcount', 0),
+        'ctime': c.get('ctime', 0),
+        'content': {'message': c.get('message', '')},
+        'member': {
+            'uname': c.get('uname', ''),
+            'vip': {
+                'vipType': c.get('vip_type', 0),
+                'label': {'text': c.get('vip_label', '')}
+            }
+        },
+        'reply_control': {'location': c.get('location', '')}
+    }
+
+
+def crawl_comments(aid, headers):
+    """
+    爬取视频全部评论，优先使用 C++ 服务，失败则 fallback 到 Python
+    """
+    cookie = headers.get('cookie', '')
+    try:
+        resp = requests.post(f'{CPP_CRAWLER_URL}/crawl/comments',
+                             json={'aid': aid, 'cookie': cookie}, timeout=300)
+        if resp.ok:
+            data = resp.json()
+            if data.get('success'):
+                print(f"[crawl_comments] 使用 C++ 爬虫服务，获取 {data.get('total', 0)} 条评论")
+                return [_cpp_comment_to_bilibili_format(c) for c in data['data']]
+    except Exception as e:
+        print(f"[crawl_comments] C++ 服务不可用({e})，使用 Python fallback")
+    return _crawl_comments_python(aid, headers)
+
+
+def _crawl_danmaku_python(cid, headers):
+    """
+    爬取视频弹幕（Python 实现）
     """
     danmaku_list = []
     try:
@@ -1086,6 +1228,26 @@ def crawl_danmaku(cid, headers):
         print(f"获取弹幕失败: {e}")
 
     return danmaku_list
+
+
+def crawl_danmaku(cid, headers):
+    """
+    爬取视频弹幕，优先使用 C++ 服务，失败或返回空则 fallback 到 Python
+    """
+    cookie = headers.get('cookie', '')
+    try:
+        resp = requests.post(f'{CPP_CRAWLER_URL}/crawl/danmaku',
+                             json={'cid': cid, 'cookie': cookie}, timeout=30)
+        if resp.ok:
+            data = resp.json()
+            if data.get('success') and data.get('total', 0) > 0:
+                print(f"[crawl_danmaku] 使用 C++ 爬虫服务，获取 {data.get('total', 0)} 条弹幕")
+                return data['data']
+            else:
+                print(f"[crawl_danmaku] C++ 服务返回 0 条弹幕，使用 Python fallback")
+    except Exception as e:
+        print(f"[crawl_danmaku] C++ 服务不可用({e})，使用 Python fallback")
+    return _crawl_danmaku_python(cid, headers)
 
 
 def save_video(video_info, bvid):
@@ -1234,89 +1396,124 @@ def analyze_sentiment(text_list):
 def process_video(bvid, headers, cookie):
     """
     处理单个视频：爬取 -> 清洗 -> 分析 -> 保存
+    使用锁防止同一视频被并发处理
     """
-    print(f"开始处理视频: {bvid}")
+    # 获取该视频专属锁
+    with _locks_lock:
+        if bvid not in _video_processing_locks:
+            _video_processing_locks[bvid] = threading.Lock()
+        lock = _video_processing_locks[bvid]
 
-    # 1. 爬取视频信息
-    video_info = crawl_video_info(bvid, headers, cookie)
-    video_obj = save_video(video_info, bvid)
+    # 非阻塞尝试获取锁
+    if not lock.acquire(blocking=False):
+        print(f"[跳过] 视频 {bvid} 正在被其他请求处理，等待结果...")
+        # 阻塞等待处理完成
+        with lock:
+            pass
+        # 处理已完成，直接返回缓存标记
+        return {"status": "already_processing"}
 
-    # 2. 爬取评论和弹幕
-    all_comments = crawl_comments(video_info['aid'], headers)
-    danmaku_list = crawl_danmaku(video_info['cid'], headers)
+    try:
+        print(f"开始处理视频: {bvid}")
 
-    # 3. 数据清洗和过滤（评论）
-    # 用于分析的文本（保留更多语义信息）
-    analysis_comments = []
-    valid_comment_indices = []  # 记录有效评论的索引
+        # 1. 爬取视频信息
+        video_info = crawl_video_info(bvid, headers, cookie)
+        video_obj = save_video(video_info, bvid)
 
-    for i, comment in enumerate(all_comments):
-        message = comment.get('content', {}).get('message', '')
-        if message:
-            cleaned = clean_text(message, for_analysis=True)
-            if is_meaningful_text(cleaned):
-                analysis_comments.append(cleaned)
-                valid_comment_indices.append(i)
+        # 2. 爬取评论和弹幕
+        all_comments = crawl_comments(video_info['aid'], headers)
+        danmaku_list = crawl_danmaku(video_info['cid'], headers)
 
-    # 3. 数据清洗和过滤（弹幕）
-    analysis_danmu = []
-    valid_danmu_indices = []  # 记录有效弹幕的索引
+        # 记录原始爬取评论数
+        video_obj.raw_comment_count = len(all_comments)
+        video_obj.save(update_fields=['raw_comment_count'])
 
-    for i, content in enumerate(danmaku_list):
-        if content:
-            cleaned = clean_text(content, for_analysis=True)
-            if is_meaningful_text(cleaned):
-                analysis_danmu.append(cleaned)
-                valid_danmu_indices.append(i)
+        # 3. 数据清洗和过滤（评论）
+        analysis_comments = []
+        valid_comment_indices = []
 
-    # 4. 合并文本用于分析
-    raw_texts = analysis_comments + analysis_danmu
+        for i, comment in enumerate(all_comments):
+            message = comment.get('content', {}).get('message', '')
+            if message:
+                cleaned = clean_text(message, for_analysis=True)
+                if is_meaningful_text(cleaned):
+                    analysis_comments.append(cleaned)
+                    valid_comment_indices.append(i)
 
-    if not raw_texts:
-        print("过滤后没有有效数据")
-        return {"status": "no_data"}
+        # 数据清洗和过滤（弹幕）
+        analysis_danmu = []
+        valid_danmu_indices = []
 
-    print(f"原始评论: {len(all_comments)}, 有效评论: {len(analysis_comments)}")
-    print(f"原始弹幕: {len(danmaku_list)}, 有效弹幕: {len(analysis_danmu)}")
+        for i, content in enumerate(danmaku_list):
+            if content:
+                cleaned = clean_text(content, for_analysis=True)
+                if is_meaningful_text(cleaned):
+                    analysis_danmu.append(cleaned)
+                    valid_danmu_indices.append(i)
 
-    # 5. 情感分析
-    scores = analyze_sentiment(raw_texts)
+        # 4. 合并文本用于分析
+        raw_texts = analysis_comments + analysis_danmu
 
-    # 6. 保存结果
-    # 保存评论（使用有效评论的索引）
-    comment_count = 0
-    for analysis_idx, original_idx in enumerate(valid_comment_indices):
-        comment = all_comments[original_idx]
-        score = scores[analysis_idx] if analysis_idx < len(scores) else 0.5
-        sentiment = get_sentiment_label(score)
-        result = save_comment(comment, video_obj, score, sentiment)
-        if result:
-            comment_count += 1
+        if not raw_texts:
+            print("过滤后没有有效数据")
+            return {"status": "no_data"}
 
-    # 保存弹幕（使用有效弹幕的索引）
-    danmu_count = 0
-    base_idx = len(analysis_comments)  # 弹幕的得分从评论之后开始
-    for analysis_idx, original_idx in enumerate(valid_danmu_indices):
-        content = danmaku_list[original_idx]
-        score_idx = base_idx + analysis_idx
-        score = scores[score_idx] if score_idx < len(scores) else 0.5
-        sentiment = get_sentiment_label(score)
-        result = save_danmaku(video_info['cid'], content, score, sentiment)
-        if result:
-            danmu_count += 1
+        print(f"原始评论: {len(all_comments)}, 有效评论: {len(analysis_comments)}")
+        print(f"原始弹幕: {len(danmaku_list)}, 有效弹幕: {len(analysis_danmu)}")
 
-    # 7. 统计结果
-    positive_count = sum(1 for s in scores if s >= 0.6)
-    negative_count = sum(1 for s in scores if s <= 0.4)
-    neutral_count = len(scores) - positive_count - negative_count
+        # 5. 情感分析（优先 Celery 并行，不可用时回退同步）
+        CHUNK_SIZE = 64
+        try:
+            from .tasks import analyze_sentiment_chunk
+            from celery import group
 
-    return {
-        "status": "success",
-        "title": video_info['title'],
-        "positive_count": positive_count,
-        "neutral_count": neutral_count,
-        "negative_count": negative_count,
-        "comment_count": comment_count,
-        "danmu_count": danmu_count
-    }
+            chunks = [raw_texts[i:i + CHUNK_SIZE] for i in range(0, len(raw_texts), CHUNK_SIZE)]
+            print(f"Submitting {len(chunks)} chunks to Celery")
+            job = group(analyze_sentiment_chunk.s(chunk) for chunk in chunks)
+            result = job.apply_async()
+            chunk_scores = result.get(timeout=300)
+            scores = [s for chunk in chunk_scores for s in chunk]
+        except Exception as e:
+            print(f"Celery 不可用({e})，回退同步分析")
+            scores = analyze_sentiment(raw_texts)
+
+        # 6. 保存结果
+        comment_count = 0
+        for analysis_idx, original_idx in enumerate(valid_comment_indices):
+            comment = all_comments[original_idx]
+            score = scores[analysis_idx] if analysis_idx < len(scores) else 0.5
+            sentiment = get_sentiment_label(score)
+            result = save_comment(comment, video_obj, score, sentiment)
+            if result:
+                comment_count += 1
+
+        danmu_count = 0
+        base_idx = len(analysis_comments)
+        for analysis_idx, original_idx in enumerate(valid_danmu_indices):
+            content = danmaku_list[original_idx]
+            score_idx = base_idx + analysis_idx
+            score = scores[score_idx] if score_idx < len(scores) else 0.5
+            sentiment = get_sentiment_label(score)
+            result = save_danmaku(video_info['cid'], content, score, sentiment)
+            if result:
+                danmu_count += 1
+
+        # 7. 统计结果
+        positive_count = sum(1 for s in scores if s >= 0.6)
+        negative_count = sum(1 for s in scores if s <= 0.4)
+        neutral_count = len(scores) - positive_count - negative_count
+
+        return {
+            "status": "success",
+            "title": video_info['title'],
+            "positive_count": positive_count,
+            "neutral_count": neutral_count,
+            "negative_count": negative_count,
+            "comment_count": comment_count,
+            "danmu_count": danmu_count
+        }
+    finally:
+        lock.release()
+        with _locks_lock:
+            _video_processing_locks.pop(bvid, None)
 

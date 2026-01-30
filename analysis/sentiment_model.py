@@ -39,31 +39,35 @@ class SentimentModel:
         self.model.to(self.device)
         self.initialized = True
 
-    def predict(self, text_list):
+    def predict(self, text_list, batch_size=32):
         """
-        批量预测一组文本的情感
+        批量预测一组文本的情感（分 mini-batch 防 OOM）
         :param text_list: 字符串列表
+        :param batch_size: 每个 mini-batch 的大小
         :return: 情感得分列表 (0~1)
         """
         if not text_list:
             return []
 
-        # 1. 编码与对齐
-        inputs = self.tokenizer(
-            text_list, 
-            padding=True, 
-            truncation=True, 
-            max_length=128, 
-            return_tensors="pt"
-        ).to(self.device)
+        all_scores = []
+        for i in range(0, len(text_list), batch_size):
+            batch = text_list[i:i + batch_size]
 
-        # 2. 推理
-        with torch.no_grad():
-            outputs = self.model(**inputs)
-            # 对输出进行 Softmax 转换成概率
-            probs = F.softmax(outputs.logits, dim=1)
-            
-        # 3. 提取正面情感的概率 (假设 label 1 是正面)
-        # .cpu().numpy() 将数据从显存移回内存
-        scores = probs[:, 1].tolist() 
-        return scores
+            # 1. 编码与对齐
+            inputs = self.tokenizer(
+                batch,
+                padding=True,
+                truncation=True,
+                max_length=128,
+                return_tensors="pt"
+            ).to(self.device)
+
+            # 2. 推理
+            with torch.no_grad():
+                outputs = self.model(**inputs)
+                probs = F.softmax(outputs.logits, dim=1)
+
+            # 3. 提取正面情感的概率 (假设 label 1 是正面)
+            all_scores.extend(probs[:, 1].tolist())
+
+        return all_scores

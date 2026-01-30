@@ -146,3 +146,10 @@ DEFAULT_FROM_EMAIL = 'BiliMood <2902523121@qq.com>'  # 发件人显示
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_COOKIE_AGE = 86400 * 7  # 7天
 SESSION_SAVE_EVERY_REQUEST = True
+
+# Celery 配置（Redis 作为 Broker 和 Backend）
+CELERY_BROKER_URL = 'redis://localhost:6379/0'
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/1'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'

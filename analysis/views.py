@@ -2,12 +2,12 @@ import json
 import requests
 from django.http import JsonResponse, HttpResponseNotAllowed
 from django.views.decorators.csrf import csrf_exempt
-from .services import process_video
-from .analytics import get_comprehensive_dashboard
+from .services import process_video, check_need_refresh
+from .analytics import get_comprehensive_dashboard, get_user_profile_dashboard
 from .models import UserConfig
 
 # B站 Cookie（临时硬编码，后续从数据库读取）
-BILI_COOKIE = "SESSDATA=9d152316%2C1784773229%2Cf7490%2A12CjA977l9BccQUeqHZrB3ZqChrOlOXKFQ8Kti5_wGgZ3oITJclsdPgXJiw9zi5S2JsiMSVllkNGsyY3d2TVB2eFl6dU84ckZ3dk9DQU9Zb21xS3U4cUMxMUE1WURXaXFsQjhtby1sd0VRdlptX0x4WFZsa3FLSzBiNU0tVGVBWlJaUVBqTDBEZGZRIIEC"
+BILI_COOKIE = "SESSDATA=b946e8f1%2C1785116159%2C0eabf%2A11CjBctKZ6g7g6nHZ7Oy_m31LUSM7SgaxXkfPZNvsn78ZoqBybck-zwkKuFL761GGZRFQSVkhrVjM3M2s4MWRheHJESkxMU1FSLVBQd1N0T1VxSE95YVVXenI3T28wSHFXaF9jSTlycjZDNkRva0hWM01PREpNMjQtRUF4NHlHUlVhbXp0dlJqOU5RIIEC"
 
 
 @csrf_exempt
@@ -74,29 +74,29 @@ def video_dashboard(request, bvid):
         try:
             print(f"[Dashboard] 请求视频: {bvid}")
 
-            # 检查视频是否存在于数据库
-            from .models import Video
+            headers = {
+                'authority': 'api.bilibili.com',
+                'accept': 'application/json, text/plain, */*',
+                'accept-language': 'zh-CN,zh;q=0.9',
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'referer': 'https://www.bilibili.com/',
+                'cookie': BILI_COOKIE,
+            }
 
-            if not Video.objects.filter(bvid=bvid).exists():
-                print(f"[Dashboard] 视频不存在，开始自动分析: {bvid}")
+            # 检查是否需要刷新数据（对比远程评论数与本地评论数）
+            try:
+                need_refresh, _ = check_need_refresh(bvid, headers, BILI_COOKIE)
+            except Exception:
+                from .models import Video
+                need_refresh = not Video.objects.filter(bvid=bvid).exists()
 
-                # 准备请求头
-                headers = {
-                    'authority': 'api.bilibili.com',
-                    'accept': 'application/json, text/plain, */*',
-                    'accept-language': 'zh-CN,zh;q=0.9',
-                    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'referer': 'https://www.bilibili.com/',
-                    'cookie': BILI_COOKIE,
-                }
-
-                # 调用分析流程
+            if need_refresh:
+                print(f"[Dashboard] 数据需要刷新，开始分析: {bvid}")
                 try:
                     result = process_video(bvid, headers, BILI_COOKIE)
                     print(f"[Dashboard] 视频分析完成: {bvid}")
 
                     if result.get("status") == "no_data":
-                        print(f"[Dashboard] 视频无数据: {bvid}")
                         return JsonResponse({
                             "success": False,
                             "error": "Video has no data to analyze"
@@ -128,6 +128,62 @@ def video_dashboard(request, bvid):
             print(f"[Dashboard] 错误详情: {e}")
             import traceback
             traceback.print_exc()
+            return JsonResponse({
+                "success": False,
+                "error": f"Server error: {str(e)}"
+            }, status=500)
+    else:
+        return HttpResponseNotAllowed(['GET'])
+
+
+@csrf_exempt
+def user_profile_dashboard(request, bvid):
+    """
+    用户画像接口
+    GET /api/video/user-profile/<bvid>/
+    """
+    if request.method == 'GET':
+        try:
+            headers = {
+                'authority': 'api.bilibili.com',
+                'accept': 'application/json, text/plain, */*',
+                'accept-language': 'zh-CN,zh;q=0.9',
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'referer': 'https://www.bilibili.com/',
+                'cookie': BILI_COOKIE,
+            }
+
+            try:
+                need_refresh, _ = check_need_refresh(bvid, headers, BILI_COOKIE)
+            except Exception:
+                from .models import Video
+                need_refresh = not Video.objects.filter(bvid=bvid).exists()
+
+            if need_refresh:
+                try:
+                    result = process_video(bvid, headers, BILI_COOKIE)
+                    if result.get("status") == "no_data":
+                        return JsonResponse({
+                            "success": False,
+                            "error": "Video has no data to analyze"
+                        }, status=404)
+                except Exception as analysis_error:
+                    return JsonResponse({
+                        "success": False,
+                        "error": f"Failed to analyze video: {str(analysis_error)}"
+                    }, status=500)
+
+            dashboard_data = get_user_profile_dashboard(bvid)
+
+            if not dashboard_data.get("success"):
+                return JsonResponse({
+                    "success": False,
+                    "error": "Failed to get user profile data"
+                }, status=500)
+
+            return JsonResponse(dashboard_data, safe=False)
+
+        except Exception as e:
             return JsonResponse({
                 "success": False,
                 "error": f"Server error: {str(e)}"

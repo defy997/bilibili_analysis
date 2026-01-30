@@ -399,22 +399,18 @@
                 // 更新标题
                 document.getElementById('video-title').innerText = data.video_info?.title || 'Unknown';
                 document.getElementById('video-bvid').innerText = currentBvId || '';
-
                 // 更新统计
                 const pos = data.sentiment.distribution.positive;
                 const neu = data.sentiment.distribution.neutral;
                 const neg = data.sentiment.distribution.negative;
                 const total = pos + neu + neg;
-
                 document.getElementById('total-comments').innerText = total;
                 document.getElementById('positive-count').innerText = pos;
                 document.getElementById('neutral-count').innerText = neu;
                 document.getElementById('negative-count').innerText = neg;
-
                 document.getElementById('positive-percent').innerText = total ? Math.round(pos/total*100) + '%' : '0%';
                 document.getElementById('neutral-percent').innerText = total ? Math.round(neu/total*100) + '%' : '0%';
                 document.getElementById('negative-percent').innerText = total ? Math.round(neg/total*100) + '%' : '0%';
-
                 // 更新饼图
                 pieChart.setOption({
                     series: [{ data: [

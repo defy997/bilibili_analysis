@@ -6,6 +6,7 @@ const WebSocket = require('ws');
 // 保持对window对象的全局引用
 let mainWindow;
 let analysisWindow; // 情感分析窗口
+let userProfileWindow; // 用户画像窗口
 let wss; // WebSocket服务器，用于与Chrome插件通信
 let tray = null; // 系统托盘
 let lastWindowPosition = null; // 记录上次主窗口位置以便还原
@@ -148,6 +149,10 @@ function createWebSocketServer() {
                     if (analysisWindow && !analysisWindow.isDestroyed()) {
                         analysisWindow.webContents.send('video-change', message.bvId);
                     }
+                    // 向用户画像窗口发送信号
+                    if (userProfileWindow && !userProfileWindow.isDestroyed()) {
+                        userProfileWindow.webContents.send('video-change', message.bvId);
+                    }
                 }
             } catch (error) {
                 console.error('解析WebSocket消息失败:', error);
@@ -214,6 +219,9 @@ function createTray() {
         }
         if (analysisWindow && !analysisWindow.isDestroyed()) {
           analysisWindow.destroy();
+        }
+        if (userProfileWindow && !userProfileWindow.isDestroyed()) {
+          userProfileWindow.destroy();
         }
 
         // 关闭WebSocket服务器
@@ -298,6 +306,9 @@ ipcMain.on('close-window', () => {
   }
   if (analysisWindow && !analysisWindow.isDestroyed()) {
     analysisWindow.destroy();
+  }
+  if (userProfileWindow && !userProfileWindow.isDestroyed()) {
+    userProfileWindow.destroy();
   }
 
   // 关闭WebSocket服务器
@@ -433,5 +444,96 @@ function createAnalysisWindow() {
 function closeAnalysisWindow() {
     if (analysisWindow && !analysisWindow.isDestroyed()) {
         analysisWindow.hide();
+    }
+}
+
+
+// ==========================================
+// 用户画像窗口
+// ==========================================
+
+// 打开/切换用户画像窗口
+ipcMain.on('toggle-user-profile-window', () => {
+    if (userProfileWindow && !userProfileWindow.isDestroyed()) {
+        if (userProfileWindow.isVisible()) {
+            userProfileWindow.hide();
+        } else {
+            userProfileWindow.show();
+            userProfileWindow.focus();
+        }
+    } else {
+        createUserProfileWindow();
+    }
+});
+
+// 关闭用户画像窗口
+ipcMain.on('close-user-profile-window', () => {
+    closeUserProfileWindow();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('user-profile-window-closed');
+    }
+});
+
+function createUserProfileWindow() {
+    if (userProfileWindow && !userProfileWindow.isDestroyed()) {
+        userProfileWindow.show();
+        userProfileWindow.focus();
+        return;
+    }
+
+    let x = 500, y = 300;
+    if (lastWindowPosition) {
+        x = lastWindowPosition.x + lastWindowPosition.width + 20;
+        y = lastWindowPosition.y;
+    }
+
+    userProfileWindow = new BrowserWindow({
+        width: 500,
+        height: 600,
+        x: x,
+        y: y,
+        frame: false,
+        alwaysOnTop: true,
+        transparent: true,
+        resizable: false,
+        skipTaskbar: true,
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false,
+            enableRemoteModule: true
+        },
+        backgroundColor: '#00000000',
+        hasShadow: false,
+        focusable: true,
+        show: false
+    });
+
+    userProfileWindow.loadFile('src/user-profile.html');
+
+    userProfileWindow.once('ready-to-show', () => {
+        userProfileWindow.show();
+    });
+
+    userProfileWindow.on('closed', () => {
+        userProfileWindow = null;
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('user-profile-window-closed');
+        }
+    });
+
+    userProfileWindow.on('blur', () => {
+        try {
+            if (userProfileWindow && !userProfileWindow.isDestroyed()) {
+                userProfileWindow.setAlwaysOnTop(true, 'pop-up-menu');
+            }
+        } catch (err) {
+            console.error('blur handler error:', err);
+        }
+    });
+}
+
+function closeUserProfileWindow() {
+    if (userProfileWindow && !userProfileWindow.isDestroyed()) {
+        userProfileWindow.hide();
     }
 }

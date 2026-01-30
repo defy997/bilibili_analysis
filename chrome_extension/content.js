@@ -40,6 +40,13 @@ class BilibiliVideoMonitor {
                     type: 'EXTENSION_CONNECTED',
                     timestamp: Date.now()
                 });
+
+                // 连接成功后，立即发送当前视频信息
+                const currentBvId = this.extractBvId(window.location.href);
+                if (currentBvId) {
+                    this.lastBvId = currentBvId;
+                    this.notifyVideoChange(currentBvId);
+                }
             };
 
             this.socket.onmessage = (event) => {

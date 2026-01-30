@@ -8,6 +8,7 @@ class Video(models.Model):
     cid = models.BigIntegerField(null=True, verbose_name="弹幕ID")
     title = models.CharField(max_length=255, null=True, verbose_name="视频标题")
     pubdate = models.DateTimeField(null=True, verbose_name="发布日期")
+    raw_comment_count = models.IntegerField(default=0, verbose_name="原始爬取评论数")
 
     class Meta:
         db_table = 'videos'

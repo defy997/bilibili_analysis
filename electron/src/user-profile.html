@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Profile</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: transparent;
+        }
+        .glass-panel {
+            background: rgba(20, 20, 30, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .stat-card {
+            transition: all 0.3s ease;
+        }
+        .stat-card:hover {
+            transform: translateY(-2px);
+            background: rgba(255, 255, 255, 0.15);
+        }
+        .drag-area {
+            -webkit-app-region: drag;
+            cursor: grab;
+        }
+        .drag-area:active {
+            cursor: grabbing;
+        }
+        .no-drag {
+            -webkit-app-region: no-drag;
+        }
+        .overflow-y-auto::-webkit-scrollbar {
+            width: 8px;
+        }
+        .overflow-y-auto::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+        }
+        .overflow-y-auto::-webkit-scrollbar-thumb {
+            background: rgba(59, 130, 246, 0.3);
+            border-radius: 4px;
+        }
+        .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+            background: rgba(59, 130, 246, 0.5);
+        }
+    </style>
+</head>
+<body class="h-full w-full text-white overflow-hidden">
+
+    <div class="h-full w-full flex flex-col">
+
+        <!-- 顶部标题栏 -->
+        <div class="h-12 flex items-center justify-between px-4 border-b border-white/10 bg-blue-500/10 flex-shrink-0 drag-area select-none">
+            <div class="flex items-center gap-3">
+                <button onclick="goBack()" class="text-white/60 hover:text-white transition-colors no-drag">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </button>
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400">
+                        <i class="fa-solid fa-user"></i>
+                    </div>
+                    <span class="font-bold tracking-wide">User Profile</span>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 no-drag text-xs">
+                <button onclick="refreshData()" class="text-white/60 hover:text-white transition-colors">
+                    <i class="fa-solid fa-rotate-right"></i>
+                </button>
+                <button onclick="closeModule()" class="text-white/60 hover:text-blue-400 transition-colors">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- 主内容区域 -->
+        <div class="flex-1 w-full p-6 overflow-y-auto">
+
+            <!-- 加载中提示 -->
+            <div id="loading-indicator" class="hidden glass-panel rounded-2xl p-8 mb-6 text-center">
+                <div class="flex flex-col items-center gap-4">
+                    <div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
+                    <div class="text-lg font-semibold">Loading user profile...</div>
+                    <div class="text-sm text-white/60">This may take a few moments</div>
+                </div>
+            </div>
+
+            <!-- 概览统计卡片 -->
+            <div class="grid grid-cols-3 gap-4 mb-6">
+                <div class="stat-card glass-panel rounded-2xl p-4 border-l-4 border-blue-500">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400">
+                            <i class="fa-solid fa-users"></i>
+                        </div>
+                        <span class="text-xs text-white/60 uppercase">Users</span>
+                    </div>
+                    <div class="text-3xl font-bold text-blue-400" id="total-users">0</div>
+                    <div class="text-xs text-white/40 mt-1">Total Commenters</div>
+                </div>
+
+                <div class="stat-card glass-panel rounded-2xl p-4 border-l-4 border-amber-500">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400">
+                            <i class="fa-solid fa-crown"></i>
+                        </div>
+                        <span class="text-xs text-white/60 uppercase">VIP</span>
+                    </div>
+                    <div class="text-3xl font-bold text-amber-400" id="vip-ratio">0%</div>
+                    <div class="text-xs text-white/40 mt-1">VIP Ratio</div>
+                </div>
+
+                <div class="stat-card glass-panel rounded-2xl p-4 border-l-4 border-cyan-500">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400">
+                            <i class="fa-solid fa-star"></i>
+                        </div>
+                        <span class="text-xs text-white/60 uppercase">Avg Level</span>
+                    </div>
+                    <div class="text-3xl font-bold text-cyan-400" id="avg-level">0</div>
+                    <div class="text-xs text-white/40 mt-1">Average User Level</div>
+                </div>
+            </div>
+
+            <!-- IP 地域分布 -->
+            <div class="glass-panel rounded-2xl p-6 mb-6">
+                <h4 class="text-sm font-bold uppercase tracking-wider text-white/60 mb-4">IP Location Distribution (Top 15)</h4>
+                <div id="location-chart" class="w-full h-80"></div>
+            </div>
+
+            <!-- 会员类型分布 -->
+            <div class="glass-panel rounded-2xl p-6 mb-6">
+                <h4 class="text-sm font-bold uppercase tracking-wider text-white/60 mb-4">VIP Type Distribution</h4>
+                <div id="vip-chart" class="w-full h-64"></div>
+            </div>
+
+            <!-- 用户等级分布 -->
+            <div class="glass-panel rounded-2xl p-6 mb-6">
+                <h4 class="text-sm font-bold uppercase tracking-wider text-white/60 mb-4">User Level Distribution</h4>
+                <div id="level-chart" class="w-full h-64"></div>
+            </div>
+
+            <!-- 高赞用户 Top10 -->
+            <div class="glass-panel rounded-2xl p-6 mb-6">
+                <h4 class="text-sm font-bold uppercase tracking-wider text-white/60 mb-4">Top 10 Users by Likes</h4>
+                <div id="top-users" class="space-y-3 max-h-96 overflow-y-auto"></div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+
+        let locationChart = null;
+        let vipChart = null;
+        let levelChart = null;
+        let currentBvId = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            listenForVideoChange();
+        });
+
+        function initCharts() {
+            // IP 地域分布 - 横向柱状图
+            locationChart = echarts.init(document.getElementById('location-chart'));
+            locationChart.setOption({
+                backgroundColor: 'transparent',
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                grid: { left: '3%', right: '10%', bottom: '3%', top: '3%', containLabel: true },
+                xAxis: {
+                    type: 'value',
+                    axisLine: { show: false },
+                    splitLine: { lineStyle: { color: '#333' } },
+                    axisLabel: { color: '#888' }
+                },
+                yAxis: {
+                    type: 'category',
+                    data: [],
+                    axisLine: { lineStyle: { color: '#444' } },
+                    axisLabel: { color: '#ccc' },
+                    inverse: true
+                },
+                series: [{
+                    type: 'bar',
+                    data: [],
+                    itemStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                            { offset: 0, color: '#3b82f6' },
+                            { offset: 1, color: '#60a5fa' }
+                        ]),
+                        borderRadius: [0, 4, 4, 0]
+                    },
+                    label: {
+                        show: true,
+                        position: 'right',
+                        color: '#888',
+                        fontSize: 11
+                    }
+                }]
+            });
+
+            // 会员类型分布 - 饼图
+            vipChart = echarts.init(document.getElementById('vip-chart'));
+            vipChart.setOption({
+                backgroundColor: 'transparent',
+                tooltip: { trigger: 'item' },
+                legend: { bottom: '0%', textStyle: { color: '#fff' } },
+                series: [{
+                    type: 'pie',
+                    radius: ['40%', '70%'],
+                    itemStyle: { borderRadius: 8, borderColor: 'rgba(20,20,30,0.8)', borderWidth: 2 },
+                    label: { show: false },
+                    data: [
+                        { value: 0, name: 'Normal', itemStyle: { color: '#94a3b8' } },
+                        { value: 0, name: 'Monthly VIP', itemStyle: { color: '#f59e0b' } },
+                        { value: 0, name: 'Annual VIP', itemStyle: { color: '#ef4444' } }
+                    ]
+                }]
+            });
+
+            // 用户等级分布 - 柱状图
+            levelChart = echarts.init(document.getElementById('level-chart'));
+            levelChart.setOption({
+                backgroundColor: 'transparent',
+                tooltip: { trigger: 'axis' },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: {
+                    type: 'category',
+                    data: ['LV0', 'LV1', 'LV2', 'LV3', 'LV4', 'LV5', 'LV6'],
+                    axisLine: { lineStyle: { color: '#444' } },
+                    axisLabel: { color: '#888' }
+                },
+                yAxis: {
+                    type: 'value',
+                    axisLine: { show: false },
+                    splitLine: { lineStyle: { color: '#333' } },
+                    axisLabel: { color: '#888' }
+                },
+                series: [{
+                    data: Array(7).fill(0),
+                    type: 'bar',
+                    itemStyle: {
+                        color: (params) => {
+                            const colors = ['#64748b', '#94a3b8', '#38bdf8', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444'];
+                            return colors[params.dataIndex] || '#3b82f6';
+                        },
+                        borderRadius: [4, 4, 0, 0]
+                    }
+                }]
+            });
+        }
+
+        function listenForVideoChange() {
+            ipcRenderer.on('video-change', (event, bvId) => {
+                console.log('收到视频信号:', bvId);
+                currentBvId = bvId;
+                loadData(bvId);
+            });
+        }
+
+        async function loadData(bvId) {
+            try {
+                showLoading(true);
+                const response = await fetch(`http://127.0.0.1:8000/api/video/user-profile/${bvId}/`);
+                const data = await response.json();
+                showLoading(false);
+
+                if (data.success) {
+                    updateUI(data);
+                } else {
+                    console.error('数据加载失败:', data.error);
+                }
+            } catch (error) {
+                showLoading(false);
+                console.error('加载数据失败:', error);
+            }
+        }
+
+        function showLoading(show) {
+            const loader = document.getElementById('loading-indicator');
+            if (show) {
+                loader.classList.remove('hidden');
+            } else {
+                loader.classList.add('hidden');
+            }
+        }
+
+        function updateUI(data) {
+            // 概览统计
+            const stats = data.overview_stats;
+            document.getElementById('total-users').innerText = stats.total_users;
+            document.getElementById('vip-ratio').innerText = stats.vip_ratio + '%';
+            document.getElementById('avg-level').innerText = stats.avg_level;
+
+            // IP 地域分布
+            updateLocationChart(data.location_distribution);
+
+            // 会员类型分布
+            updateVipChart(data.vip_distribution);
+
+            // 用户等级分布
+            updateLevelChart(data.level_distribution);
+
+            // 高赞用户 Top10
+            updateTopUsers(data.top_users);
+        }
+
+        function updateLocationChart(locationData) {
+            if (!locationData || locationData.length === 0) return;
+
+            const provinces = locationData.map(item => item.province).reverse();
+            const values = locationData.map(item => item.value).reverse();
+
+            locationChart.setOption({
+                yAxis: { data: provinces },
+                series: [{ data: values }]
+            });
+        }
+
+        function updateVipChart(vipData) {
+            if (!vipData) return;
+
+            vipChart.setOption({
+                series: [{
+                    data: [
+                        { value: vipData.normal, name: 'Normal', itemStyle: { color: '#94a3b8' } },
+                        { value: vipData.monthly_vip, name: 'Monthly VIP', itemStyle: { color: '#f59e0b' } },
+                        { value: vipData.annual_vip, name: 'Annual VIP', itemStyle: { color: '#ef4444' } }
+                    ]
+                }]
+            });
+        }
+
+        function updateLevelChart(levelData) {
+            if (!levelData || levelData.length === 0) return;
+
+            const counts = Array(7).fill(0);
+            levelData.forEach(item => {
+                if (item.user_level >= 0 && item.user_level <= 6) {
+                    counts[item.user_level] = item.count;
+                }
+            });
+
+            levelChart.setOption({
+                series: [{ data: counts }]
+            });
+        }
+
+        function updateTopUsers(users) {
+            const container = document.getElementById('top-users');
+
+            if (!users || users.length === 0) {
+                container.innerHTML = '<div class="text-white/40 text-center py-8">No users available</div>';
+                return;
+            }
+
+            container.innerHTML = users.map((user, index) => {
+                const medalColors = ['text-amber-400', 'text-gray-300', 'text-amber-600'];
+                const medalColor = index < 3 ? medalColors[index] : 'text-white/40';
+
+                return `
+                    <div class="glass-panel rounded-xl p-4 hover:bg-white/10 transition-all">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <span class="font-mono text-sm font-bold ${medalColor}">#${index + 1}</span>
+                                <div>
+                                    <span class="text-white/90 font-semibold text-sm">${user.uname || 'Anonymous'}</span>
+                                    <div class="text-xs text-white/40 mt-0.5">${user.comment_count} comments</div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-1 text-blue-400">
+                                <i class="fa-solid fa-thumbs-up text-xs"></i>
+                                <span class="font-bold">${user.total_likes}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function goBack() {
+            ipcRenderer.send('close-user-profile-window');
+        }
+
+        function closeModule() {
+            ipcRenderer.send('close-user-profile-window');
+        }
+
+        function refreshData() {
+            if (currentBvId) {
+                loadData(currentBvId);
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            locationChart?.resize();
+            vipChart?.resize();
+            levelChart?.resize();
+        });
+    </script>
+</body>
+</html>
