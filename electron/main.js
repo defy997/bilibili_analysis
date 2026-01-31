@@ -7,6 +7,7 @@ const WebSocket = require('ws');
 let mainWindow;
 let analysisWindow; // 情感分析窗口
 let userProfileWindow; // 用户画像窗口
+let videoAudioWindow; // 视频音频分析窗口
 let wss; // WebSocket服务器，用于与Chrome插件通信
 let tray = null; // 系统托盘
 let lastWindowPosition = null; // 记录上次主窗口位置以便还原
@@ -153,6 +154,10 @@ function createWebSocketServer() {
                     if (userProfileWindow && !userProfileWindow.isDestroyed()) {
                         userProfileWindow.webContents.send('video-change', message.bvId);
                     }
+                    // 向视频音频分析窗口发送信号
+                    if (videoAudioWindow && !videoAudioWindow.isDestroyed()) {
+                        videoAudioWindow.webContents.send('video-change', message.bvId);
+                    }
                 }
             } catch (error) {
                 console.error('解析WebSocket消息失败:', error);
@@ -222,6 +227,9 @@ function createTray() {
         }
         if (userProfileWindow && !userProfileWindow.isDestroyed()) {
           userProfileWindow.destroy();
+        }
+        if (videoAudioWindow && !videoAudioWindow.isDestroyed()) {
+          videoAudioWindow.destroy();
         }
 
         // 关闭WebSocket服务器
@@ -309,6 +317,9 @@ ipcMain.on('close-window', () => {
   }
   if (userProfileWindow && !userProfileWindow.isDestroyed()) {
     userProfileWindow.destroy();
+  }
+  if (videoAudioWindow && !videoAudioWindow.isDestroyed()) {
+    videoAudioWindow.destroy();
   }
 
   // 关闭WebSocket服务器
@@ -537,3 +548,106 @@ function closeUserProfileWindow() {
         userProfileWindow.hide();
     }
 }
+
+
+// ==========================================
+// 视频音频分析窗口
+// ==========================================
+
+ipcMain.on('toggle-video-audio-window', () => {
+    if (videoAudioWindow && !videoAudioWindow.isDestroyed()) {
+        if (videoAudioWindow.isVisible()) {
+            videoAudioWindow.hide();
+        } else {
+            videoAudioWindow.show();
+            videoAudioWindow.focus();
+        }
+    } else {
+        createVideoAudioWindow();
+    }
+});
+
+ipcMain.on('close-video-audio-window', () => {
+    closeVideoAudioWindow();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('video-audio-window-closed');
+    }
+});
+
+function createVideoAudioWindow() {
+    if (videoAudioWindow && !videoAudioWindow.isDestroyed()) {
+        videoAudioWindow.show();
+        videoAudioWindow.focus();
+        return;
+    }
+
+    let x = 500, y = 300;
+    if (lastWindowPosition) {
+        x = lastWindowPosition.x + lastWindowPosition.width + 20;
+        y = lastWindowPosition.y;
+    }
+
+    videoAudioWindow = new BrowserWindow({
+        width: 500,
+        height: 600,
+        x: x,
+        y: y,
+        frame: false,
+        alwaysOnTop: true,
+        transparent: true,
+        resizable: false,
+        skipTaskbar: true,
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false,
+            enableRemoteModule: true
+        },
+        backgroundColor: '#00000000',
+        hasShadow: false,
+        focusable: true,
+        show: false
+    });
+
+    videoAudioWindow.loadFile('src/video-audio-analysis.html');
+
+    videoAudioWindow.once('ready-to-show', () => {
+        videoAudioWindow.show();
+    });
+
+    videoAudioWindow.on('closed', () => {
+        videoAudioWindow = null;
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('video-audio-window-closed');
+        }
+    });
+
+    videoAudioWindow.on('blur', () => {
+        try {
+            if (videoAudioWindow && !videoAudioWindow.isDestroyed()) {
+                videoAudioWindow.setAlwaysOnTop(true, 'pop-up-menu');
+            }
+        } catch (err) {
+            console.error('blur handler error:', err);
+        }
+    });
+}
+
+function closeVideoAudioWindow() {
+    if (videoAudioWindow && !videoAudioWindow.isDestroyed()) {
+        videoAudioWindow.hide();
+    }
+}
+
+
+// ==========================================
+// UI 设置广播（主窗口 → 所有子窗口）
+// ==========================================
+
+ipcMain.on('broadcast-ui-settings', (event, settings) => {
+    const windows = [analysisWindow, userProfileWindow, videoAudioWindow];
+    windows.forEach(win => {
+        if (win && !win.isDestroyed()) {
+            win.webContents.send('apply-ui-settings', settings);
+        }
+    });
+});

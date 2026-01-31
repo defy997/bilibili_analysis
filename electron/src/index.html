@@ -510,6 +510,9 @@
                 if (moduleName === 'user') {
                     ipcRenderer.send('close-user-profile-window');
                 }
+                if (moduleName === 'video') {
+                    ipcRenderer.send('close-video-audio-window');
+                }
             } else {
                 // 如果未激活，则开启模块
                 element.classList.add('active');
@@ -519,6 +522,9 @@
                 }
                 if (moduleName === 'user') {
                     ipcRenderer.send('toggle-user-profile-window');
+                }
+                if (moduleName === 'video') {
+                    ipcRenderer.send('toggle-video-audio-window');
                 }
             }
         }
@@ -690,6 +696,9 @@
             if (!document.getElementById('dynamic-styles')) {
                 document.head.appendChild(style);
             }
+
+            // 广播设置到所有子窗口
+            ipcRenderer.send('broadcast-ui-settings', { bgColor, opacity });
         }
 
         // === 保存配置 ===
@@ -743,6 +752,17 @@
             cards.forEach(card => {
                 const onclickAttr = card.getAttribute('onclick');
                 if (onclickAttr && onclickAttr.includes("'emotional'")) {
+                    card.classList.remove('active');
+                }
+            });
+        });
+
+        // 监听视频音频分析窗口关闭事件
+        ipcRenderer.on('video-audio-window-closed', () => {
+            const cards = document.querySelectorAll('.nav-card');
+            cards.forEach(card => {
+                const onclickAttr = card.getAttribute('onclick');
+                if (onclickAttr && onclickAttr.includes("'video'")) {
                     card.classList.remove('active');
                 }
             });

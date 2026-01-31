@@ -2,9 +2,9 @@ import json
 import requests
 from django.http import JsonResponse, HttpResponseNotAllowed
 from django.views.decorators.csrf import csrf_exempt
-from .services import process_video, check_need_refresh
+from .services import process_video, check_need_refresh, crawl_video_info, crawl_audio_url
 from .analytics import get_comprehensive_dashboard, get_user_profile_dashboard
-from .models import UserConfig
+from .models import UserConfig, Video, Comment, Danmu, AudioSentiment
 
 # B站 Cookie（临时硬编码，后续从数据库读取）
 BILI_COOKIE = "SESSDATA=b946e8f1%2C1785116159%2C0eabf%2A11CjBctKZ6g7g6nHZ7Oy_m31LUSM7SgaxXkfPZNvsn78ZoqBybck-zwkKuFL761GGZRFQSVkhrVjM3M2s4MWRheHJESkxMU1FSLVBQd1N0T1VxSE95YVVXenI3T28wSHFXaF9jSTlycjZDNkRva0hWM01PREpNMjQtRUF4NHlHUlVhbXp0dlJqOU5RIIEC"
@@ -188,6 +188,86 @@ def user_profile_dashboard(request, bvid):
                 "success": False,
                 "error": f"Server error: {str(e)}"
             }, status=500)
+    else:
+        return HttpResponseNotAllowed(['GET'])
+
+
+@csrf_exempt
+def video_audio_dashboard(request, bvid):
+    """
+    视频音频分析仪表板
+    GET /api/video/audio-dashboard/<bvid>/
+    """
+    if request.method == 'GET':
+        try:
+            headers = {
+                'authority': 'api.bilibili.com',
+                'accept': 'application/json, text/plain, */*',
+                'accept-language': 'zh-CN,zh;q=0.9',
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'referer': 'https://www.bilibili.com/',
+                'cookie': BILI_COOKIE,
+            }
+
+            # Ensure video exists in DB
+            try:
+                video = Video.objects.get(bvid=bvid)
+            except Video.DoesNotExist:
+                # Trigger crawl to get video info
+                try:
+                    result = process_video(bvid, headers, BILI_COOKIE)
+                    if result.get("status") == "no_data":
+                        return JsonResponse({"success": False, "error": "Video has no data"}, status=404)
+                    video = Video.objects.get(bvid=bvid)
+                except Exception as e:
+                    return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+            # Check for existing audio sentiment data
+            audio_sentiments = AudioSentiment.objects.filter(video=video)
+            timeline = []
+            audio_avg = None
+            audio_info = {}
+
+            if audio_sentiments.exists():
+                timeline = [
+                    {"time": s.time_offset, "score": s.sentiment_score, "label": s.sentiment_label}
+                    for s in audio_sentiments
+                ]
+                from django.db.models import Avg
+                audio_avg = audio_sentiments.aggregate(avg=Avg('sentiment_score'))['avg']
+                audio_status = "analyzed"
+            else:
+                # Get audio URL for future analysis
+                audio_status = "ready"
+                try:
+                    audio_info = crawl_audio_url(bvid, video.cid, headers, BILI_COOKIE)
+                except Exception:
+                    audio_info = {}
+
+            # Calculate comparison data
+            from django.db.models import Avg
+            comment_avg = Comment.objects.filter(video=video).aggregate(avg=Avg('sentiment_score'))['avg']
+            danmu_avg = Danmu.objects.filter(cid=video.cid).aggregate(avg=Avg('sentiment_score'))['avg']
+
+            return JsonResponse({
+                "success": True,
+                "video_info": {"title": video.title, "bvid": bvid},
+                "audio": {
+                    "audio_url": audio_info.get('audio_url', '') if audio_status == 'ready' else '',
+                    "status": audio_status,
+                    "timeline": timeline
+                },
+                "comparison": {
+                    "comment_avg_sentiment": round(comment_avg, 3) if comment_avg else None,
+                    "danmu_avg_sentiment": round(danmu_avg, 3) if danmu_avg else None,
+                    "audio_avg_sentiment": round(audio_avg, 3) if audio_avg else None
+                }
+            })
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({"success": False, "error": str(e)}, status=500)
     else:
         return HttpResponseNotAllowed(['GET'])
 

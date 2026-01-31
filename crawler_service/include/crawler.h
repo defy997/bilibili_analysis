@@ -21,6 +21,7 @@ public:
     json crawl_video(const std::string& bvid, const std::string& cookie);
     json crawl_comments(int64_t aid, const std::string& cookie);
     json crawl_danmaku(int64_t cid, const std::string& cookie);
+    json crawl_audio_url(const std::string& bvid, int64_t cid, const std::string& cookie);
 
 private:
     Config config_;

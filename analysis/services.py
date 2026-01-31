@@ -27,7 +27,7 @@ except Exception as e:
 
 # 初始化情感分析模型
 try:
-    MODEL_PATH = r"D:\code\python\bert-model-train\checkpoints_hotel_finetuned\best_model_epoch_3.pt"
+    MODEL_PATH = r"D:\code\python\bert-model-train\checkpoints_hotel_finetuned\best_model_epoch_3.onnx"
     analyze = SentimentModel(MODEL_PATH)
 except Exception as e:
     print(f"模型加载失败: {e}")
@@ -1019,6 +1019,37 @@ class DataCleaningPipeline:
 
 
 CPP_CRAWLER_URL = 'http://localhost:8081'
+
+
+def _crawl_audio_url_python(bvid, cid, headers):
+    """Python fallback: 获取B站音频流URL"""
+    url = f"https://api.bilibili.com/x/player/playurl?bvid={bvid}&cid={cid}&fnval=16&fnver=0&fourk=1"
+    resp = requests.get(url, headers=headers)
+    data = resp.json()
+    if data['code'] != 0:
+        raise Exception(f"playurl API error: {data['message']}")
+    audio_list = data['data']['dash']['audio']
+    audio_list.sort(key=lambda x: x.get('bandwidth', 0), reverse=True)
+    best = audio_list[0]
+    return {
+        'audio_url': best['baseUrl'],
+        'codec': best.get('codecs', ''),
+        'bandwidth': best.get('bandwidth', 0)
+    }
+
+
+def crawl_audio_url(bvid, cid, headers, cookie):
+    """获取音频流URL，C++ 优先，Python fallback"""
+    try:
+        resp = requests.post(f'{CPP_CRAWLER_URL}/crawl/audio-url',
+                             json={'bvid': bvid, 'cid': cid, 'cookie': cookie}, timeout=10)
+        if resp.ok:
+            data = resp.json()
+            if data.get('success'):
+                return data['data']
+    except Exception as e:
+        print(f"C++ audio-url service failed: {e}")
+    return _crawl_audio_url_python(bvid, cid, headers)
 
 
 def _crawl_video_info_python(bvid, headers, cookie):

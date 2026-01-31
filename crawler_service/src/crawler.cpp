@@ -363,6 +363,51 @@ json Crawler::crawl_comments(int64_t aid, const std::string& cookie) {
 }
 
 // ============================================================
+// 爬取：音频流URL
+// ============================================================
+
+json Crawler::crawl_audio_url(const std::string& bvid, int64_t cid, const std::string& cookie) {
+    std::ostringstream url;
+    url << "https://api.bilibili.com/x/player/playurl"
+        << "?bvid=" << bvid
+        << "&cid=" << cid
+        << "&fnval=16&fnver=0&fourk=1";
+
+    std::string body = http_get(url.str(), cookie);
+    json resp = json::parse(body);
+
+    if (resp["code"].get<int>() != 0) {
+        std::string msg = resp.value("message", "unknown error");
+        throw std::runtime_error("playurl API error: " + msg);
+    }
+
+    auto& dash = resp["data"]["dash"];
+    auto& audio_list = dash["audio"];
+
+    if (!audio_list.is_array() || audio_list.empty()) {
+        throw std::runtime_error("No audio streams found");
+    }
+
+    // Find highest bandwidth audio
+    int best_idx = 0;
+    int64_t best_bw = 0;
+    for (size_t i = 0; i < audio_list.size(); i++) {
+        int64_t bw = audio_list[i].value("bandwidth", (int64_t)0);
+        if (bw > best_bw) {
+            best_bw = bw;
+            best_idx = static_cast<int>(i);
+        }
+    }
+
+    auto& best = audio_list[best_idx];
+    json result;
+    result["audio_url"] = best.value("baseUrl", "");
+    result["codec"] = best.value("codecs", "");
+    result["bandwidth"] = best.value("bandwidth", 0);
+    return result;
+}
+
+// ============================================================
 // 爬取：弹幕
 // ============================================================
 

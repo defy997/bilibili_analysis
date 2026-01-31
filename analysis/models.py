@@ -82,6 +82,21 @@ class Danmu(models.Model):
         return self.content[:20]
 
 
+class AudioSentiment(models.Model):
+    video = models.ForeignKey(Video, on_delete=models.CASCADE, related_name='audio_sentiments')
+    time_offset = models.FloatField(verbose_name="视频内时间偏移(秒)")
+    sentiment_score = models.FloatField(default=0.5, verbose_name="情感得分")
+    sentiment_label = models.CharField(max_length=10, default="neutral")
+    text_transcript = models.TextField(null=True, blank=True, verbose_name="ASR转录文本")
+
+    class Meta:
+        db_table = 'audio_sentiments'
+        ordering = ['time_offset']
+
+    def __str__(self):
+        return f"AudioSentiment({self.video_id}, t={self.time_offset}s)"
+
+
 class UserConfig(models.Model):
     """用户配置表（单例模式，只有一条记录）"""
     # 数据过滤配置

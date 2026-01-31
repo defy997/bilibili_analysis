@@ -99,6 +99,33 @@ void start_server(const Config& cfg) {
         }
     });
 
+    // POST /crawl/audio-url
+    svr.Post("/crawl/audio-url", [&crawler](const httplib::Request& req, httplib::Response& res) {
+        try {
+            auto body = json::parse(req.body);
+            std::string bvid = body.value("bvid", "");
+            int64_t cid = body.value("cid", (int64_t)0);
+            std::string cookie = body.value("cookie", "");
+
+            if (bvid.empty() || cid == 0) {
+                res.status = 400;
+                res.set_content(make_error("bvid and cid are required").dump(), "application/json");
+                return;
+            }
+
+            json data = crawler.crawl_audio_url(bvid, cid, cookie);
+
+            json resp;
+            resp["success"] = true;
+            resp["data"] = data;
+            res.set_content(resp.dump(), "application/json");
+
+        } catch (const std::exception& e) {
+            res.status = 500;
+            res.set_content(make_error(e.what()).dump(), "application/json");
+        }
+    });
+
     std::cout << "Crawler service starting on port " << cfg.port << "..." << std::endl;
     svr.listen("0.0.0.0", cfg.port);
 }

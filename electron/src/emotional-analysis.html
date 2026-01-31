@@ -203,6 +203,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             initCharts();
             listenForVideoChange();
+            loadThemeFromConfig();
         });
 
         // === 初始化图表 ===
@@ -579,6 +580,41 @@
         function refreshData() {
             if (currentBvId) {
                 loadData(currentBvId);
+            }
+        }
+
+        // === Theme support ===
+        function applyTheme(bgColor, opacity) {
+            const hex = bgColor.replace('#', '');
+            const r = parseInt(hex.substring(0, 2), 16);
+            const g = parseInt(hex.substring(2, 4), 16);
+            const b = parseInt(hex.substring(4, 6), 16);
+
+            const style = document.getElementById('dynamic-theme') || document.createElement('style');
+            style.id = 'dynamic-theme';
+            style.textContent = `
+                .glass-panel { background: rgba(${r}, ${g}, ${b}, ${opacity * 0.6}) !important; }
+                .drag-area { background-color: rgba(${r}, ${g}, ${b}, ${opacity * 0.8}) !important; }
+                .stat-card:hover { background: rgba(${r}, ${g}, ${b}, ${opacity * 0.4}) !important; }
+            `;
+            if (!document.getElementById('dynamic-theme')) {
+                document.head.appendChild(style);
+            }
+        }
+
+        ipcRenderer.on('apply-ui-settings', (event, settings) => {
+            applyTheme(settings.bgColor, settings.opacity);
+        });
+
+        async function loadThemeFromConfig() {
+            try {
+                const resp = await fetch('http://127.0.0.1:8000/api/config/');
+                const result = await resp.json();
+                if (result.success && result.data?.ui_config) {
+                    applyTheme(result.data.ui_config.background_color, result.data.ui_config.opacity);
+                }
+            } catch (e) {
+                console.error('Failed to load theme:', e);
             }
         }
 

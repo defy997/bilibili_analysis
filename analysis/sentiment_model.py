@@ -1,7 +1,9 @@
 import os
-import torch
-from transformers import BertTokenizer, BertForSequenceClassification
-import torch.nn.functional as F
+import numpy as np
+import onnxruntime as ort
+from transformers import BertTokenizer
+
+
 class SentimentModel:
     _instance = None
 
@@ -9,34 +11,26 @@ class SentimentModel:
         if not cls._instance:
             cls._instance = super(SentimentModel,cls).__new__(cls)
         return cls._instance
-    
+
     def __init__(self, model_path=None):
         if hasattr(self,'initialized') and self.initialized:
             return
 
-        # 默认使用最新训练的模型
+        # 默认使用最新训练的模型（ONNX 格式）
         if model_path is None:
-            # 自动选择 checkpoints 目录下最新的模型
-            checkpoints_dir = r"D:\code\python\bert-model-train\checkpoints_hotel_finetuned\best_model_epoch_3.pt"
-            if os.path.exists(checkpoints_dir):
-                import glob
-                checkpoints = glob.glob(os.path.join(checkpoints_dir, '*.pt'))
-                if checkpoints:
-                    # 按修改时间排序
-                    checkpoints.sort(key=lambda x: os.path.getmtime(x), reverse=True)
-                    model_path = checkpoints[0]
-                    print(f"自动选择模型: {os.path.basename(model_path)}")
-                else:
-                    model_path = r"D:\code\python\bert-model-train\checkpoints_hotel_finetuned\best_model_epoch_2.pt"
-            else:
-                model_path = r"D:\code\python\bert-model-train\checkpoints_hotel_finetuned\best_model_epoch_2.pt"
+            model_path = r"D:\code\python\bert-model-train\checkpoints_hotel_finetuned\best_model_epoch_3.onnx"
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"正在加载模型: {model_path}")
-        print(f"设备: {self.device}")
-        self.tokenizer = BertTokenizer.from_pretrained(model_path)
-        self.model = BertForSequenceClassification.from_pretrained(model_path)
-        self.model.to(self.device)
+
+        # tokenizer 从 .onnx 同目录加载（export_onnx.py 会将 tokenizer 保存到同目录）
+        tokenizer_dir = os.path.dirname(model_path)
+        self.tokenizer = BertTokenizer.from_pretrained(tokenizer_dir)
+
+        # ONNX Runtime 推理会话
+        self.session = ort.InferenceSession(model_path)
+        # 获取模型需要的输入名称
+        self.input_names = [inp.name for inp in self.session.get_inputs()]
+
         self.initialized = True
 
     def predict(self, text_list, batch_size=32):
@@ -59,15 +53,25 @@ class SentimentModel:
                 padding=True,
                 truncation=True,
                 max_length=128,
-                return_tensors="pt"
-            ).to(self.device)
+                return_tensors="np"
+            )
 
-            # 2. 推理
-            with torch.no_grad():
-                outputs = self.model(**inputs)
-                probs = F.softmax(outputs.logits, dim=1)
+            # 2. 构造 ONNX Runtime 输入
+            ort_inputs = {}
+            for name in self.input_names:
+                if name in inputs:
+                    ort_inputs[name] = inputs[name]
+                elif name == "token_type_ids":
+                    # 部分 tokenizer 不返回 token_type_ids，手动补零
+                    ort_inputs[name] = np.zeros_like(inputs["input_ids"])
 
-            # 3. 提取正面情感的概率 (假设 label 1 是正面)
+            # 3. 推理
+            logits = self.session.run(None, ort_inputs)[0]
+
+            # 4. softmax → 提取正面情感概率 (label 1)
+            exp_logits = np.exp(logits - np.max(logits, axis=1, keepdims=True))
+            probs = exp_logits / np.sum(exp_logits, axis=1, keepdims=True)
+
             all_scores.extend(probs[:, 1].tolist())
 
         return all_scores
