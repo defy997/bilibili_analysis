@@ -87,6 +87,8 @@ class AudioSentiment(models.Model):
     time_offset = models.FloatField(verbose_name="视频内时间偏移(秒)")
     sentiment_score = models.FloatField(default=0.5, verbose_name="情感得分")
     sentiment_label = models.CharField(max_length=10, default="neutral")
+    emotion_probs = models.JSONField(default=dict, verbose_name="各情感概率分布")
+    segment_duration = models.FloatField(default=15, verbose_name="分段时长(秒)")
     text_transcript = models.TextField(null=True, blank=True, verbose_name="ASR转录文本")
 
     class Meta:

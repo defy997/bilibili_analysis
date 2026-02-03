@@ -94,8 +94,14 @@ def export_onnx(model_path: str, output_path: str, opset: int = 14):
 
 
 def main():
+    # bilibili_analysis 项目根目录
+    PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    # 源模型路径（BERT 训练项目）
     default_model = r"D:\code\python\bert-model-train\checkpoints_hotel_finetuned\best_model_epoch_3.pt"
-    default_output = r"D:\code\python\bert-model-train\checkpoints_hotel_finetuned\best_model_epoch_3.onnx"
+
+    # 输出到 bilibili_analysis 的 models 目录
+    default_output = os.path.join(PROJECT_ROOT, "models", "text_sentiment", "text_sentiment_model.onnx")
 
     parser = argparse.ArgumentParser(description="导出 BERT 情感模型为 ONNX")
     parser.add_argument("--model_path", default=default_model, help="PyTorch 模型目录")

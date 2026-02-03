@@ -196,24 +196,24 @@ def user_profile_dashboard(request, bvid):
 def video_audio_dashboard(request, bvid):
     """
     视频音频分析仪表板
-    GET /api/video/audio-dashboard/<bvid>/
+    GET  /api/video/audio-dashboard/<bvid>/ — 返回已有数据 + status
+    POST /api/video/audio-dashboard/<bvid>/ — 触发异步分析
     """
+    headers = {
+        'authority': 'api.bilibili.com',
+        'accept': 'application/json, text/plain, */*',
+        'accept-language': 'zh-CN,zh;q=0.9',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'referer': 'https://www.bilibili.com/',
+        'cookie': BILI_COOKIE,
+    }
+
     if request.method == 'GET':
         try:
-            headers = {
-                'authority': 'api.bilibili.com',
-                'accept': 'application/json, text/plain, */*',
-                'accept-language': 'zh-CN,zh;q=0.9',
-                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'referer': 'https://www.bilibili.com/',
-                'cookie': BILI_COOKIE,
-            }
-
             # Ensure video exists in DB
             try:
                 video = Video.objects.get(bvid=bvid)
             except Video.DoesNotExist:
-                # Trigger crawl to get video info
                 try:
                     result = process_video(bvid, headers, BILI_COOKIE)
                     if result.get("status") == "no_data":
@@ -230,14 +230,20 @@ def video_audio_dashboard(request, bvid):
 
             if audio_sentiments.exists():
                 timeline = [
-                    {"time": s.time_offset, "score": s.sentiment_score, "label": s.sentiment_label}
+                    {
+                        "time": s.time_offset,
+                        "score": s.sentiment_score,
+                        "label": s.sentiment_label,
+                        "emotion": max(s.emotion_probs, key=s.emotion_probs.get) if s.emotion_probs else "",
+                        "probabilities": s.emotion_probs,
+                        "segment_duration": s.segment_duration,
+                    }
                     for s in audio_sentiments
                 ]
                 from django.db.models import Avg
                 audio_avg = audio_sentiments.aggregate(avg=Avg('sentiment_score'))['avg']
                 audio_status = "analyzed"
             else:
-                # Get audio URL for future analysis
                 audio_status = "ready"
                 try:
                     audio_info = crawl_audio_url(bvid, video.cid, headers, BILI_COOKIE)
@@ -245,9 +251,30 @@ def video_audio_dashboard(request, bvid):
                     audio_info = {}
 
             # Calculate comparison data
-            from django.db.models import Avg
-            comment_avg = Comment.objects.filter(video=video).aggregate(avg=Avg('sentiment_score'))['avg']
-            danmu_avg = Danmu.objects.filter(cid=video.cid).aggregate(avg=Avg('sentiment_score'))['avg']
+            from django.db.models import Avg, Count, Q
+            comment_qs = Comment.objects.filter(video=video)
+            danmu_qs = Danmu.objects.filter(cid=video.cid)
+
+            comment_avg = comment_qs.aggregate(avg=Avg('sentiment_score'))['avg']
+            danmu_avg = danmu_qs.aggregate(avg=Avg('sentiment_score'))['avg']
+
+            # 各类别数量统计（positive>=0.6, negative<=0.4, 其余neutral）
+            def count_sentiments(qs):
+                agg = qs.aggregate(
+                    positive=Count('id', filter=Q(sentiment_score__gte=0.6)),
+                    negative=Count('id', filter=Q(sentiment_score__lte=0.4)),
+                    total=Count('id'),
+                )
+                agg['neutral'] = agg['total'] - agg['positive'] - agg['negative']
+                return agg
+
+            comment_dist = count_sentiments(comment_qs) if comment_qs.exists() else {'positive': 0, 'neutral': 0, 'negative': 0}
+            danmu_dist = count_sentiments(danmu_qs) if danmu_qs.exists() else {'positive': 0, 'neutral': 0, 'negative': 0}
+
+            if audio_sentiments.exists():
+                audio_dist = count_sentiments(audio_sentiments)
+            else:
+                audio_dist = {'positive': 0, 'neutral': 0, 'negative': 0}
 
             return JsonResponse({
                 "success": True,
@@ -261,6 +288,11 @@ def video_audio_dashboard(request, bvid):
                     "comment_avg_sentiment": round(comment_avg, 3) if comment_avg else None,
                     "danmu_avg_sentiment": round(danmu_avg, 3) if danmu_avg else None,
                     "audio_avg_sentiment": round(audio_avg, 3) if audio_avg else None
+                },
+                "distribution": {
+                    "audio": [audio_dist['positive'], audio_dist['neutral'], audio_dist['negative']],
+                    "comments": [comment_dist['positive'], comment_dist['neutral'], comment_dist['negative']],
+                    "danmu": [danmu_dist['positive'], danmu_dist['neutral'], danmu_dist['negative']],
                 }
             })
 
@@ -268,6 +300,96 @@ def video_audio_dashboard(request, bvid):
             import traceback
             traceback.print_exc()
             return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+    elif request.method == 'POST':
+        try:
+            data = json.loads(request.body) if request.body else {}
+            force_refresh = data.get('force_refresh', False)
+
+            # 检查缓存
+            try:
+                video = Video.objects.get(bvid=bvid)
+                existing = AudioSentiment.objects.filter(video=video)
+                if existing.exists() and not force_refresh:
+                    timeline = [
+                        {
+                            "time": s.time_offset,
+                            "score": s.sentiment_score,
+                            "label": s.sentiment_label,
+                            "probabilities": s.emotion_probs,
+                            "segment_duration": s.segment_duration,
+                        }
+                        for s in existing
+                    ]
+                    return JsonResponse({
+                        "success": True,
+                        "status": "cached",
+                        "timeline": timeline,
+                    })
+                if force_refresh and existing.exists():
+                    existing.delete()
+            except Video.DoesNotExist:
+                pass
+
+            # 优先 Celery 异步，Redis 不可达时同步回退
+            celery_available = False
+            try:
+                import redis as _redis
+                _r = _redis.Redis(host='localhost', port=6379, socket_connect_timeout=2)
+                _r.ping()
+                celery_available = True
+            except Exception:
+                pass
+
+            if celery_available:
+                from .tasks import analyze_audio_task
+                task = analyze_audio_task.delay(bvid, BILI_COOKIE)
+                return JsonResponse({
+                    "success": True,
+                    "status": "processing",
+                    "task_id": task.id,
+                })
+            else:
+                print("Redis 不可达，同步执行音频分析")
+                from .services import analyze_video_audio
+                result = analyze_video_audio(bvid, headers, BILI_COOKIE)
+                return JsonResponse({
+                    "success": True,
+                    "status": "completed",
+                    "result": result,
+                })
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+    else:
+        return HttpResponseNotAllowed(['GET', 'POST'])
+
+
+@csrf_exempt
+def audio_task_status(request, task_id):
+    """
+    查询异步音频分析任务状态
+    GET /api/video/audio-task/<task_id>/
+    """
+    if request.method == 'GET':
+        from celery.result import AsyncResult
+        result = AsyncResult(task_id)
+
+        response = {
+            "task_id": task_id,
+            "status": result.status,
+        }
+
+        if result.ready():
+            if result.successful():
+                response["result"] = result.result
+            else:
+                response["error"] = str(result.result)
+
+        return JsonResponse(response)
     else:
         return HttpResponseNotAllowed(['GET'])
 

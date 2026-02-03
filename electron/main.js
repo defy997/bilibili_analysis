@@ -397,6 +397,10 @@ function createAnalysisWindow() {
         return;
     }
 
+    const winWidth = 500;
+    const winHeight = 600;
+    const workArea = screen.getPrimaryDisplay().workArea;
+
     // 位置在主窗口右边
     let x = 500, y = 300;
     if (lastWindowPosition) {
@@ -404,9 +408,13 @@ function createAnalysisWindow() {
         y = lastWindowPosition.y;
     }
 
+    // 确保窗口在屏幕可见范围内
+    x = Math.max(workArea.x, Math.min(x, workArea.x + workArea.width - winWidth));
+    y = Math.max(workArea.y, Math.min(y, workArea.y + workArea.height - winHeight));
+
     analysisWindow = new BrowserWindow({
-        width: 500,
-        height: 600,
+        width: winWidth,
+        height: winHeight,
         x: x,
         y: y,
         frame: false,
@@ -429,17 +437,24 @@ function createAnalysisWindow() {
 
     analysisWindow.once('ready-to-show', () => {
         analysisWindow.show();
+        analysisWindow.setAlwaysOnTop(true, 'pop-up-menu');
+        analysisWindow.setVisibleOnAllWorkspaces(true);
     });
+
+    setTimeout(() => {
+        if (analysisWindow && !analysisWindow.isDestroyed() && !analysisWindow.isVisible()) {
+            analysisWindow.show();
+            analysisWindow.setAlwaysOnTop(true, 'pop-up-menu');
+        }
+    }, 3000);
 
     analysisWindow.on('closed', () => {
         analysisWindow = null;
-        // 通知主窗口取消激活状态
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('analysis-window-closed');
         }
     });
 
-    // 失去焦点时重申置顶
     analysisWindow.on('blur', () => {
         try {
             if (analysisWindow && !analysisWindow.isDestroyed()) {
@@ -492,15 +507,23 @@ function createUserProfileWindow() {
         return;
     }
 
+    const winWidth = 500;
+    const winHeight = 600;
+    const workArea = screen.getPrimaryDisplay().workArea;
+
     let x = 500, y = 300;
     if (lastWindowPosition) {
         x = lastWindowPosition.x + lastWindowPosition.width + 20;
         y = lastWindowPosition.y;
     }
 
+    // 确保窗口在屏幕可见范围内
+    x = Math.max(workArea.x, Math.min(x, workArea.x + workArea.width - winWidth));
+    y = Math.max(workArea.y, Math.min(y, workArea.y + workArea.height - winHeight));
+
     userProfileWindow = new BrowserWindow({
-        width: 500,
-        height: 600,
+        width: winWidth,
+        height: winHeight,
         x: x,
         y: y,
         frame: false,
@@ -523,7 +546,16 @@ function createUserProfileWindow() {
 
     userProfileWindow.once('ready-to-show', () => {
         userProfileWindow.show();
+        userProfileWindow.setAlwaysOnTop(true, 'pop-up-menu');
+        userProfileWindow.setVisibleOnAllWorkspaces(true);
     });
+
+    setTimeout(() => {
+        if (userProfileWindow && !userProfileWindow.isDestroyed() && !userProfileWindow.isVisible()) {
+            userProfileWindow.show();
+            userProfileWindow.setAlwaysOnTop(true, 'pop-up-menu');
+        }
+    }, 3000);
 
     userProfileWindow.on('closed', () => {
         userProfileWindow = null;
@@ -581,15 +613,23 @@ function createVideoAudioWindow() {
         return;
     }
 
+    const winWidth = 500;
+    const winHeight = 600;
+    const workArea = screen.getPrimaryDisplay().workArea;
+
     let x = 500, y = 300;
     if (lastWindowPosition) {
         x = lastWindowPosition.x + lastWindowPosition.width + 20;
         y = lastWindowPosition.y;
     }
 
+    // 确保窗口在屏幕可见范围内
+    x = Math.max(workArea.x, Math.min(x, workArea.x + workArea.width - winWidth));
+    y = Math.max(workArea.y, Math.min(y, workArea.y + workArea.height - winHeight));
+
     videoAudioWindow = new BrowserWindow({
-        width: 500,
-        height: 600,
+        width: winWidth,
+        height: winHeight,
         x: x,
         y: y,
         frame: false,
@@ -612,7 +652,17 @@ function createVideoAudioWindow() {
 
     videoAudioWindow.once('ready-to-show', () => {
         videoAudioWindow.show();
+        videoAudioWindow.setAlwaysOnTop(true, 'pop-up-menu');
+        videoAudioWindow.setVisibleOnAllWorkspaces(true);
     });
+
+    // 兜底：如果 ready-to-show 迟迟不触发，3秒后强制显示
+    setTimeout(() => {
+        if (videoAudioWindow && !videoAudioWindow.isDestroyed() && !videoAudioWindow.isVisible()) {
+            videoAudioWindow.show();
+            videoAudioWindow.setAlwaysOnTop(true, 'pop-up-menu');
+        }
+    }, 3000);
 
     videoAudioWindow.on('closed', () => {
         videoAudioWindow = null;

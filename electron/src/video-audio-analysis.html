@@ -60,7 +60,7 @@
 </head>
 <body class="h-full w-full text-white overflow-hidden">
 
-    <div class="h-full w-full flex flex-col">
+    <div id="main-container" class="h-full w-full flex flex-col" style="background: rgba(20, 20, 30, 0.95);">
 
         <!-- Top title bar -->
         <div class="h-12 flex items-center justify-between px-4 border-b border-white/10 bg-purple-500/10 flex-shrink-0 drag-area select-none">
@@ -105,9 +105,14 @@
                         <h3 id="video-title" class="font-bold text-lg">Waiting for video...</h3>
                         <p id="video-bvid" class="text-white/40 text-xs font-mono mt-1">--</p>
                     </div>
-                    <div class="text-right">
-                        <div class="text-sm font-semibold text-purple-400" id="audio-status">--</div>
-                        <div class="text-xs text-white/40">Audio Status</div>
+                    <div class="flex items-center gap-3">
+                        <button id="analyze-btn" onclick="triggerAnalysis()" class="hidden no-drag px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white text-xs font-bold rounded-xl transition-all active:scale-95">
+                            <i class="fa-solid fa-waveform-lines mr-1"></i> Analyze Audio
+                        </button>
+                        <div class="text-right">
+                            <div class="text-sm font-semibold text-purple-400" id="audio-status">--</div>
+                            <div class="text-xs text-white/40">Audio Status</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -319,21 +324,52 @@
 
             // Audio status
             const audioData = data.audio || {};
-            document.getElementById('audio-status').innerText = audioData.status === 'analyzed' ? 'Analyzed' : 'Ready';
+            const status = audioData.status;
+            document.getElementById('audio-status').innerText = status === 'analyzed' ? 'Analyzed' : 'Ready';
 
-            // Audio timeline
+            // Show/hide analyze button
+            const analyzeBtn = document.getElementById('analyze-btn');
+            if (status === 'ready' && currentBvId) {
+                analyzeBtn.classList.remove('hidden');
+            } else {
+                analyzeBtn.classList.add('hidden');
+            }
+
+            // Audio timeline chart
             const timeline = audioData.timeline || [];
             if (timeline.length > 0) {
                 const times = timeline.map(t => t.time + 's');
                 const scores = timeline.map(t => t.score);
+                const labels = timeline.map(t => t.label || '');
                 audioTimelineChart.setOption({
+                    tooltip: {
+                        trigger: 'axis',
+                        formatter: function(params) {
+                            const idx = params[0].dataIndex;
+                            const label = labels[idx] || '';
+                            const prob = timeline[idx]?.probabilities;
+                            const emotion = timeline[idx]?.emotion || '';
+                            let tip = `<b>${params[0].axisValue}</b><br/>`;
+                            tip += `Polarity: ${params[0].value.toFixed(3)}<br/>`;
+                            tip += `Sentiment: ${label}<br/>`;
+                            if (emotion) tip += `Emotion: ${emotion}<br/>`;
+                            return tip;
+                        }
+                    },
                     xAxis: { data: times },
-                    series: [{ data: scores }]
+                    series: [{
+                        data: scores,
+                        markLine: {
+                            silent: true,
+                            lineStyle: { color: '#666', type: 'dashed' },
+                            data: [{ yAxis: 0.5, label: { formatter: 'Neutral', color: '#888' } }]
+                        }
+                    }]
                 });
                 document.getElementById('audio-timeline-placeholder').classList.add('hidden');
             }
 
-            // Comparison stats
+            // Comparison stats (stat cards)
             const comp = data.comparison || {};
             document.getElementById('comment-avg').innerText =
                 comp.comment_avg_sentiment != null ? comp.comment_avg_sentiment.toFixed(2) : '--';
@@ -341,6 +377,90 @@
                 comp.danmu_avg_sentiment != null ? comp.danmu_avg_sentiment.toFixed(2) : '--';
             document.getElementById('audio-avg').innerText =
                 comp.audio_avg_sentiment != null ? comp.audio_avg_sentiment.toFixed(2) : '--';
+
+            // Comparison bar chart (distribution)
+            const dist = data.distribution;
+            if (dist) {
+                comparisonChart.setOption({
+                    series: [
+                        { name: 'Audio',    data: dist.audio    || [0, 0, 0] },
+                        { name: 'Comments', data: dist.comments || [0, 0, 0] },
+                        { name: 'Danmu',    data: dist.danmu    || [0, 0, 0] },
+                    ]
+                });
+            }
+        }
+
+        // === Trigger audio analysis (POST) ===
+        async function triggerAnalysis(forceRefresh = false) {
+            if (!currentBvId) return;
+
+            const analyzeBtn = document.getElementById('analyze-btn');
+            analyzeBtn.disabled = true;
+            analyzeBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Submitting...';
+
+            try {
+                analyzeBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Analyzing...';
+                showLoading(true);
+
+                const resp = await fetch(`http://127.0.0.1:8000/api/video/audio-dashboard/${currentBvId}/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ force_refresh: forceRefresh })
+                });
+                const data = await resp.json();
+
+                if (data.success && (data.status === 'cached' || data.status === 'completed')) {
+                    // 同步完成或缓存命中，直接刷新
+                    showLoading(false);
+                    loadData(currentBvId);
+                    return;
+                }
+
+                if (data.success && data.task_id) {
+                    // Celery 异步，轮询
+                    pollTaskStatus(data.task_id);
+                } else {
+                    showLoading(false);
+                    analyzeBtn.disabled = false;
+                    analyzeBtn.innerHTML = '<i class="fa-solid fa-waveform-lines mr-1"></i> Analyze Audio';
+                    console.error('Trigger failed:', data.error);
+                }
+            } catch (error) {
+                showLoading(false);
+                analyzeBtn.disabled = false;
+                analyzeBtn.innerHTML = '<i class="fa-solid fa-waveform-lines mr-1"></i> Analyze Audio';
+                console.error('Trigger error:', error);
+            }
+        }
+
+        // === Poll task status ===
+        function pollTaskStatus(taskId) {
+            const interval = setInterval(async () => {
+                try {
+                    const resp = await fetch(`http://127.0.0.1:8000/api/video/audio-task/${taskId}/`);
+                    const data = await resp.json();
+
+                    if (data.status === 'SUCCESS') {
+                        clearInterval(interval);
+                        showLoading(false);
+                        // Reload dashboard data
+                        loadData(currentBvId);
+                    } else if (data.status === 'FAILURE') {
+                        clearInterval(interval);
+                        showLoading(false);
+                        const analyzeBtn = document.getElementById('analyze-btn');
+                        analyzeBtn.disabled = false;
+                        analyzeBtn.innerHTML = '<i class="fa-solid fa-waveform-lines mr-1"></i> Retry';
+                        console.error('Task failed:', data.error);
+                    }
+                    // PENDING / STARTED → keep polling
+                } catch (error) {
+                    clearInterval(interval);
+                    showLoading(false);
+                    console.error('Poll error:', error);
+                }
+            }, 3000);
         }
 
         // === Theme support ===
@@ -349,6 +469,12 @@
             const r = parseInt(hex.substring(0, 2), 16);
             const g = parseInt(hex.substring(2, 4), 16);
             const b = parseInt(hex.substring(4, 6), 16);
+
+            // Apply to root container
+            const mainContainer = document.getElementById('main-container');
+            if (mainContainer) {
+                mainContainer.style.backgroundColor = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+            }
 
             const style = document.getElementById('dynamic-theme') || document.createElement('style');
             style.id = 'dynamic-theme';
@@ -389,7 +515,7 @@
 
         function refreshData() {
             if (currentBvId) {
-                loadData(currentBvId);
+                triggerAnalysis(true);
             }
         }
 

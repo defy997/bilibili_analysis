@@ -18,7 +18,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 from django.http import JsonResponse
-from analysis.views import analyze_by_bvid, video_dashboard, user_profile_dashboard, video_audio_dashboard, get_config, save_config
+from analysis.views import analyze_by_bvid, video_dashboard, user_profile_dashboard, video_audio_dashboard, audio_task_status, get_config, save_config
 from analysis.auth_views import send_code, register, login, logout, check_login
 
 def index(request):
@@ -31,6 +31,7 @@ urlpatterns = [
     path("api/video/dashboard/<str:bvid>/", video_dashboard, name="video_dashboard"),
     path("api/video/user-profile/<str:bvid>/", user_profile_dashboard, name="user_profile_dashboard"),
     path("api/video/audio-dashboard/<str:bvid>/", video_audio_dashboard, name="video_audio_dashboard"),
+    path("api/video/audio-task/<str:task_id>/", audio_task_status, name="audio_task_status"),
     path("api/config/", get_config, name="get_config"),
     path("api/config/save/", save_config, name="save_config"),
 

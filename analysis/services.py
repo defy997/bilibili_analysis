@@ -2,8 +2,10 @@
 数据处理服务模块
 包含数据爬取、数据清洗、情感分析等逻辑
 """
+import os
 import re
 import datetime
+import tempfile
 import unicodedata
 import threading
 import requests
@@ -1494,18 +1496,31 @@ def process_video(bvid, headers, cookie):
 
         # 5. 情感分析（优先 Celery 并行，不可用时回退同步）
         CHUNK_SIZE = 64
+        celery_available = False
         try:
-            from .tasks import analyze_sentiment_chunk
-            from celery import group
+            import redis as _redis
+            _r = _redis.Redis(host='localhost', port=6379, socket_connect_timeout=2)
+            _r.ping()
+            celery_available = True
+        except Exception:
+            pass
 
-            chunks = [raw_texts[i:i + CHUNK_SIZE] for i in range(0, len(raw_texts), CHUNK_SIZE)]
-            print(f"Submitting {len(chunks)} chunks to Celery")
-            job = group(analyze_sentiment_chunk.s(chunk) for chunk in chunks)
-            result = job.apply_async()
-            chunk_scores = result.get(timeout=300)
-            scores = [s for chunk in chunk_scores for s in chunk]
-        except Exception as e:
-            print(f"Celery 不可用({e})，回退同步分析")
+        if celery_available:
+            try:
+                from .tasks import analyze_sentiment_chunk
+                from celery import group
+
+                chunks = [raw_texts[i:i + CHUNK_SIZE] for i in range(0, len(raw_texts), CHUNK_SIZE)]
+                print(f"Submitting {len(chunks)} chunks to Celery")
+                job = group(analyze_sentiment_chunk.s(chunk) for chunk in chunks)
+                result = job.apply_async()
+                chunk_scores = result.get(timeout=300)
+                scores = [s for chunk in chunk_scores for s in chunk]
+            except Exception as e:
+                print(f"Celery 任务执行失败({e})，回退同步分析")
+                scores = analyze_sentiment(raw_texts)
+        else:
+            print("Redis 不可达，直接使用同步分析")
             scores = analyze_sentiment(raw_texts)
 
         # 6. 保存结果
@@ -1547,4 +1562,135 @@ def process_video(bvid, headers, cookie):
         lock.release()
         with _locks_lock:
             _video_processing_locks.pop(bvid, None)
+
+
+def download_audio(audio_url, save_path):
+    """
+    下载B站音频流到本地文件
+
+    :param audio_url: 音频流URL
+    :param save_path: 保存路径
+    :return: 保存路径
+    """
+    resp = requests.get(
+        audio_url,
+        stream=True,
+        headers={
+            'Referer': 'https://www.bilibili.com',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+        timeout=120,
+    )
+    resp.raise_for_status()
+
+    with open(save_path, 'wb') as f:
+        for chunk in resp.iter_content(chunk_size=8192):
+            if chunk:
+                f.write(chunk)
+
+    return save_path
+
+
+def analyze_video_audio(bvid, headers, cookie, segment_duration=15, overlap=5):
+    """
+    完整的视频音频情感分析流程
+
+    1. 检查缓存 → 有数据直接返回
+    2. 获取音频URL → 下载 → 分段分析 → 批量写入DB
+    3. 返回 timeline 数据
+
+    :param bvid: 视频BV号
+    :param headers: 请求头
+    :param cookie: B站Cookie
+    :param segment_duration: 分段时长（秒）
+    :param overlap: 重叠时长（秒）
+    :return: dict with timeline data
+    """
+    from .models import Video, AudioSentiment
+
+    # 1. 检查缓存
+    try:
+        video = Video.objects.get(bvid=bvid)
+    except Video.DoesNotExist:
+        video_info = crawl_video_info(bvid, headers, cookie)
+        video = save_video(video_info, bvid)
+
+    existing = AudioSentiment.objects.filter(video=video)
+    if existing.exists():
+        timeline = [
+            {
+                'time_offset': s.time_offset,
+                'label': s.sentiment_label,
+                'score': s.sentiment_score,
+                'probabilities': s.emotion_probs,
+                'segment_duration': s.segment_duration,
+            }
+            for s in existing
+        ]
+        return {'status': 'cached', 'timeline': timeline}
+
+    # 2. 获取音频URL
+    if not video.cid:
+        raise Exception(f"视频 {bvid} 缺少 cid 信息")
+
+    audio_info = crawl_audio_url(bvid, video.cid, headers, cookie)
+    audio_url = audio_info.get('audio_url')
+    if not audio_url:
+        raise Exception(f"无法获取视频 {bvid} 的音频URL")
+
+    # 3. 下载到临时文件
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix='.m4a')
+    os.close(tmp_fd)
+
+    try:
+        print(f"[AudioAnalysis] 下载音频: {bvid}")
+        download_audio(audio_url, tmp_path)
+
+        # 4. 分段分析
+        print(f"[AudioAnalysis] 开始分段分析: {bvid}")
+        from .audio_sentiment_model import AudioSentimentModel
+        model = AudioSentimentModel()
+        segments = model.analyze_segments(
+            tmp_path,
+            segment_duration=segment_duration,
+            overlap=overlap,
+        )
+
+        if not segments:
+            return {'status': 'no_audio_data', 'timeline': []}
+
+        # 5. 批量写入数据库
+        #    sentiment_score 存情感极性（0=消极,1=积极），不存置信度
+        audio_objects = [
+            AudioSentiment(
+                video=video,
+                time_offset=seg['time_offset'],
+                sentiment_score=seg['sentiment_score'],
+                sentiment_label=get_sentiment_label(seg['sentiment_score']),
+                emotion_probs=seg['probabilities'],
+                segment_duration=seg['segment_duration'],
+            )
+            for seg in segments
+        ]
+        AudioSentiment.objects.bulk_create(audio_objects)
+        print(f"[AudioAnalysis] 写入 {len(audio_objects)} 条音频情感数据: {bvid}")
+
+        # 6. 返回 timeline
+        timeline = [
+            {
+                'time_offset': seg['time_offset'],
+                'label': get_sentiment_label(seg['sentiment_score']),
+                'score': seg['sentiment_score'],
+                'emotion': seg['label'],
+                'probabilities': seg['probabilities'],
+                'segment_duration': seg['segment_duration'],
+            }
+            for seg in segments
+        ]
+        return {'status': 'success', 'timeline': timeline}
+
+    finally:
+        # 7. 清理临时文件
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
