@@ -557,12 +557,21 @@ function createUserProfileWindow() {
         userProfileWindow.show();
         userProfileWindow.setAlwaysOnTop(true, 'pop-up-menu');
         userProfileWindow.setVisibleOnAllWorkspaces(true);
+        // 发送当前正在观看的视频ID
+        if (currentBvId) {
+            userProfileWindow.webContents.send('video-change', currentBvId);
+        }
     });
 
+    // 兜底：如果 ready-to-show 迟迟不触发，3秒后强制显示并发送视频ID
     setTimeout(() => {
         if (userProfileWindow && !userProfileWindow.isDestroyed() && !userProfileWindow.isVisible()) {
             userProfileWindow.show();
             userProfileWindow.setAlwaysOnTop(true, 'pop-up-menu');
+            // 发送当前正在观看的视频ID
+            if (currentBvId) {
+                userProfileWindow.webContents.send('video-change', currentBvId);
+            }
         }
     }, 3000);
 
