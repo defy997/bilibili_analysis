@@ -16,9 +16,9 @@ class SentimentModel:
         if hasattr(self,'initialized') and self.initialized:
             return
 
-        # 默认使用最新训练的模型（ONNX 格式）
+        # 默认使用 models 目录下的模型
         if model_path is None:
-            model_path = r"D:\code\python\bert-model-train\checkpoints_hotel_finetuned\best_model_epoch_3.onnx"
+            model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models", "text_sentiment", "text_sentiment_model.onnx")
 
         print(f"正在加载模型: {model_path}")
 

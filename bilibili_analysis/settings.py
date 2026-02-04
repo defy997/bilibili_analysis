@@ -25,7 +25,7 @@ SECRET_KEY = "django-insecure-y%&)nd6gy4b*b&b%f(z4!)2@98*vqv$i+79w(q+%^z+mozgnpd
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['127.0.0.1','localhost']
+ALLOWED_HOSTS = ['127.0.0.1','localhost', '118.25.39.91']
 
 
 # Application definition
@@ -81,8 +81,8 @@ DATABASES = {
         "NAME": 'bilibili_analysis',
         'USER': 'root',
         'PASSWORD': '142857',
-        'HOST': 'localhost',
-        'PORT': 3306,
+        'HOST': '127.0.0.1',
+        'PORT': '3306',
     }
 }
 

@@ -13,11 +13,10 @@ django-cors-headers>=4.0.0
 # 数据库驱动 (MySQL)
 # ============================================
 # 选项1：mysqlclient（推荐，性能更好）
-mysqlclient>=2.2.0
+# mysqlclient>=2.2.0
 
 # 选项2：PyMySQL（纯Python实现，安装更简单）
-# 如果mysqlclient安装失败，可以取消下面的注释使用PyMySQL
-# PyMySQL>=1.0.0
+PyMySQL>=1.0.0
 
 # ============================================
 # 数据爬取

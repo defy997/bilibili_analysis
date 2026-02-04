@@ -64,12 +64,18 @@ class AudioSentimentModel:
             # 默认标签（根据你的训练数据）
             self.class_labels = ['angry', 'fearful', 'happy', 'neutral', 'sad', 'surprise']
         
-        # 加载归一化器
+        # 加载归一化器 (使用 joblib 加载，因为 scaler 是用 joblib.dump 保存的)
         scaler_path = os.path.join(model_dir, "audio_scaler.pkl")
         if os.path.exists(scaler_path):
-            with open(scaler_path, 'rb') as f:
-                self.scaler = pickle.load(f)
-            self.has_scaler = True
+            try:
+                import joblib
+                with open(scaler_path, 'rb') as f:
+                    self.scaler = joblib.load(f)
+                self.has_scaler = True
+            except Exception as e:
+                print(f"[Warning] 加载 scaler 失败，跳过归一化: {e}")
+                self.scaler = None
+                self.has_scaler = False
         else:
             self.scaler = None
             self.has_scaler = False
@@ -137,28 +143,28 @@ class AudioSentimentModel:
         chroma = librosa.feature.chroma_stft(y=audio_data, sr=sample_rate)
         chroma_mean = np.mean(chroma, axis=1)
         
-        # 拼接所有特征
+        # 拼接所有特征 - 确保所有值都是1D数组，避免0维数组导致的concatenate错误
         features = np.concatenate([
             # MFCC 及其 delta (13*3 = 39)
-            mfccs_mean, mfccs_std,
-            delta_mean, delta_std,
-            delta2_mean, delta2_std,
+            np.atleast_1d(mfccs_mean), np.atleast_1d(mfccs_std),
+            np.atleast_1d(delta_mean), np.atleast_1d(delta_std),
+            np.atleast_1d(delta2_mean), np.atleast_1d(delta2_std),
             # 梅尔频谱 (128*3 = 384)
-            mel_spec_mean, mel_spec_std, mel_spec_max,
+            np.atleast_1d(mel_spec_mean), np.atleast_1d(mel_spec_std), np.atleast_1d(mel_spec_max),
             # 频谱特征 (1+1+1+7+1 = 11)
-            np.mean(spectral_centroid), np.std(spectral_centroid),
-            np.mean(spectral_bandwidth), np.std(spectral_bandwidth),
-            np.mean(spectral_rolloff), np.std(spectral_rolloff),
-            np.mean(spectral_contrast, axis=1),
-            np.mean(spectral_flatness), np.std(spectral_flatness),
+            np.atleast_1d(np.mean(spectral_centroid)), np.atleast_1d(np.std(spectral_centroid)),
+            np.atleast_1d(np.mean(spectral_bandwidth)), np.atleast_1d(np.std(spectral_bandwidth)),
+            np.atleast_1d(np.mean(spectral_rolloff)), np.atleast_1d(np.std(spectral_rolloff)),
+            np.atleast_1d(np.mean(spectral_contrast, axis=1)),
+            np.atleast_1d(np.mean(spectral_flatness)), np.atleast_1d(np.std(spectral_flatness)),
             # 过零率 (2)
-            np.mean(zero_crossing_rate), np.std(zero_crossing_rate),
+            np.atleast_1d(np.mean(zero_crossing_rate)), np.atleast_1d(np.std(zero_crossing_rate)),
             # 能量 (2)
-            np.mean(rms), np.std(rms),
+            np.atleast_1d(np.mean(rms)), np.atleast_1d(np.std(rms)),
             # 音高 (2)
-            pitch_mean, pitch_std,
+            np.atleast_1d(pitch_mean), np.atleast_1d(pitch_std),
             # 色度 (12)
-            chroma_mean,
+            np.atleast_1d(chroma_mean),
         ])
         
         # 填充或截断到固定维度
@@ -188,7 +194,7 @@ class AudioSentimentModel:
         
         # 归一化
         if self.has_scaler and self.scaler is not None:
-            features = self.scaler.transform([features])[0]
+            features = self.scaler.transform([features])[0].astype(np.float32)
         
         return features
     
@@ -210,8 +216,8 @@ class AudioSentimentModel:
         else:
             features = self.extract_features(audio_data, sample_rate)
             if self.has_scaler and self.scaler is not None:
-                features = self.scaler.transform([features])[0]
-        
+                features = self.scaler.transform([features])[0].astype(np.float32)
+
         if features is None:
             return "neutral", 0.0
         
@@ -309,8 +315,8 @@ class AudioSentimentModel:
         else:
             features = self.extract_features(audio_data, sample_rate)
             if self.has_scaler and self.scaler is not None:
-                features = self.scaler.transform([features])[0]
-        
+                features = self.scaler.transform([features])[0].astype(np.float32)
+
         if features is None:
             return {label: 0.0 for label in self.class_labels}
         
@@ -397,7 +403,7 @@ class AudioSentimentModel:
             # 提取特征
             features = self.extract_features(segment, sr)
             if self.has_scaler and self.scaler is not None:
-                features = self.scaler.transform([features])[0]
+                features = self.scaler.transform([features])[0].astype(np.float32)
 
             # ONNX 推理
             features_input = np.expand_dims(features, axis=0)

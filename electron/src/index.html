@@ -20,8 +20,8 @@
         /* 核心毛玻璃效果 */
         .glass-panel {
             background: rgba(20, 20, 30, 0.6);
-            backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
+            backdrop-filter: blur(20px);
             border: 1px solid rgba(255, 255, 255, 0.08);
             box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
         }
@@ -141,12 +141,132 @@
         .animate-in {
             animation: zoomIn 0.2s ease-out forwards;
         }
+
+        /* Toast 提示样式 */
+        #toast-container {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: none;
+        }
+        .toast {
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 500;
+            animation: toastIn 0.3s ease-out, toastOut 0.3s ease-in 2.7s forwards;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            max-width: 300px;
+            text-align: center;
+        }
+        .toast.success {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+        }
+        .toast.error {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+        }
+        .toast.info {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white;
+        }
+        .toast.warning {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: white;
+        }
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateY(20px) scale(0.9); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes toastOut {
+            from { opacity: 1; transform: translateY(0); }
+            to { opacity: 0; transform: translateY(-20px); }
+        }
+
+        /* 未登录遮罩层 */
+        #login-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px);
+            z-index: 40;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        #login-overlay.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .lock-icon {
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, #ec4899, #8b5cf6);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
+        }
+        .lock-icon i {
+            font-size: 28px;
+            color: white;
+        }
+        #login-overlay h3 {
+            font-size: 18px;
+            font-weight: 600;
+            color: white;
+            margin-bottom: 8px;
+        }
+        #login-overlay p {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 20px;
+        }
+        #login-overlay button {
+            padding: 12px 32px;
+            background: linear-gradient(135deg, #ec4899, #8b5cf6);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        #login-overlay button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 20px rgba(236, 72, 153, 0.4);
+        }
     </style>
 </head>
 <body class="h-screen flex flex-col text-white overflow-hidden">
 
     <!-- 悬浮窗主体容器 -->
     <div id="main-container" class="w-full h-full flex flex-col relative">
+
+        <!-- Toast 提示容器 -->
+        <div id="toast-container"></div>
+
+        <!-- 未登录遮罩层 -->
+        <div id="login-overlay" class="hidden">
+            <div class="lock-icon">
+                <i class="fa-solid fa-lock"></i>
+            </div>
+            <h3>Login Required</h3>
+            <p>Please login to access all features</p>
+            <button onclick="toggleLogin(true)">Login / Register</button>
+        </div>
         
         <!-- 顶部导航栏 -->
         <div class="h-12 w-full drag-area flex justify-between items-center px-4 select-none z-20 border-b border-white/10 bg-white/5 flex-shrink-0">
@@ -158,13 +278,22 @@
             
             <!-- 右侧：功能导航 -->
             <div class="flex items-center gap-4 no-drag text-xs font-medium">
-                <button onclick="toggleMinimize()" class="hover:text-pink-400 transition-colors flex items-center gap-1">
-                    <i class="fa-solid fa-minus"></i>
-                    <span>Minimize</span>
+                <!-- 未登录时显示登录按钮 -->
+                <button id="login-btn" onclick="toggleLogin(true)" class="hover:text-pink-400 transition-colors flex items-center gap-1">
+                    <i class="fa-solid fa-user"></i>
+                    <span>Login</span>
                 </button>
-                <button onclick="closeWindow()" class="hover:text-pink-400 transition-colors flex items-center gap-1">
-                    <i class="fa-solid fa-xmark"></i>
-                    <span>Close</span>
+                <!-- 已登录时显示用户名和登出 -->
+                <div id="user-info" class="hidden flex items-center gap-3">
+                    <span id="display-username" class="text-pink-400"></span>
+                    <button onclick="handleLogout()" class="hover:text-pink-400 transition-colors flex items-center gap-1">
+                        <i class="fa-solid fa-sign-out-alt"></i>
+                        <span>Logout</span>
+                    </button>
+                </div>
+                <button onclick="toggleSettings(true)" class="hover:text-pink-400 transition-colors flex items-center gap-1">
+                    <i class="fa-solid fa-gear"></i>
+                    <span>Settings</span>
                 </button>
             </div>
         </div>
@@ -235,7 +364,7 @@
                 
                 <div class="p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
                     <h3 class="text-sm font-black uppercase tracking-[0.2em] text-pink-500">Preference</h3>
-                    <button onclick="toggleSettings(false)" class="no-drag hover:rotate-90 transition-transform duration-300">
+                    <button onclick="toggleSettings(false)" class="no-drag hover:rotate-90 transition-transform duration-300" title="Close settings" aria-label="Close settings">
                         <i class="fa-solid fa-xmark text-white/40 hover:text-white"></i>
                     </button>
                 </div>
@@ -254,7 +383,8 @@
                                 </div>
                                 <input type="range" id="high-like" min="10" max="200" value="50"
                                        class="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500"
-                                       oninput="document.getElementById('high-like-value').innerText = this.value">
+                                       oninput="document.getElementById('high-like-value').innerText = this.value"
+                                       aria-label="高赞阈值">
                             </div>
 
                             <div>
@@ -264,7 +394,8 @@
                                 </div>
                                 <input type="range" id="high-reply" min="3" max="50" value="10"
                                        class="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500"
-                                       oninput="document.getElementById('high-reply-value').innerText = this.value">
+                                       oninput="document.getElementById('high-reply-value').innerText = this.value"
+                                       aria-label="热门讨论阈值">
                             </div>
                         </div>
                     </div>
@@ -281,7 +412,8 @@
                                 </div>
                                 <input type="range" id="chinese-ratio" min="0" max="50" value="15"
                                        class="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500"
-                                       oninput="document.getElementById('chinese-ratio-value').innerText = this.value + '%'">
+                                       oninput="document.getElementById('chinese-ratio-value').innerText = this.value + '%'"
+                                       aria-label="最小中文占比">
                             </div>
 
                             <div>
@@ -291,7 +423,8 @@
                                 </div>
                                 <input type="range" id="quality-score" min="0" max="50" value="20"
                                        class="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500"
-                                       oninput="document.getElementById('quality-score-value').innerText = (this.value/100).toFixed(2)">
+                                       oninput="document.getElementById('quality-score-value').innerText = (this.value/100).toFixed(2)"
+                                       aria-label="最小质量评分">
                             </div>
 
                             <div>
@@ -301,7 +434,8 @@
                                 </div>
                                 <input type="range" id="char-repeat" min="5" max="30" value="10"
                                        class="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500"
-                                       oninput="document.getElementById('char-repeat-value').innerText = this.value">
+                                       oninput="document.getElementById('char-repeat-value').innerText = this.value"
+                                       aria-label="最大重复字符">
                             </div>
                         </div>
                     </div>
@@ -313,7 +447,7 @@
                             <div class="flex justify-between items-center mb-2">
                                 <span class="text-xs text-white/80">去重方法</span>
                             </div>
-                            <select id="dedup-method" class="w-full bg-black/20 border-none text-[11px] rounded-lg py-2 focus:outline-none appearance-none cursor-pointer text-white/80">
+                            <select id="dedup-method" class="w-full bg-black/20 border-none text-[11px] rounded-lg py-2 focus:outline-none appearance-none cursor-pointer text-white/80" aria-label="去重方法">
                                 <option value="exact">精确去重 (推荐)</option>
                                 <option value="fuzzy">模糊去重</option>
                                 <option value="embedding">语义去重 (慢)</option>
@@ -334,7 +468,8 @@
                                 </div>
                                 <input type="color" id="bg-color" value="#1a1a2e"
                                        class="w-full h-10 bg-transparent border border-white/10 rounded-lg cursor-pointer"
-                                       oninput="document.getElementById('bg-color-value').innerText = this.value; applyUISettings()">
+                                       oninput="document.getElementById('bg-color-value').innerText = this.value; applyUISettings()"
+                                       aria-label="背景颜色">
                             </div>
 
                             <div>
@@ -344,7 +479,8 @@
                                 </div>
                                 <input type="range" id="opacity" min="50" max="100" value="95"
                                        class="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500"
-                                       oninput="document.getElementById('opacity-value').innerText = this.value + '%'; applyUISettings()">
+                                       oninput="document.getElementById('opacity-value').innerText = this.value + '%'; applyUISettings()"
+                                       aria-label="透明度">
                             </div>
                         </div>
                     </div>
@@ -482,6 +618,26 @@
     <script>
         const { ipcRenderer } = require('electron');
 
+        // === 全局登录状态 ===
+        let isLoggedIn = false;
+        let currentUser = null;
+
+        // === Toast 提示函数 ===
+        function showToast(message, type = 'info', duration = 3000) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+
+            // 自动移除
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-20px)';
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        }
+
         // === 窗口控制 ===
         function minimizeWindow() {
             ipcRenderer.send('minimize-window');
@@ -496,8 +652,66 @@
             e.returnValue = false;
         });
 
-        // === 卡片开关逻辑 ===
+        // 更新登录状态
+        function updateLoginUI() {
+            const loginBtn = document.getElementById('login-btn');
+            const userInfo = document.getElementById('user-info');
+            const displayUsername = document.getElementById('display-username');
+
+            if (isLoggedIn && currentUser) {
+                loginBtn.classList.add('hidden');
+                userInfo.classList.remove('hidden');
+                displayUsername.textContent = currentUser.username;
+                // 广播登录状态到所有子窗口
+                ipcRenderer.send('broadcast-login-status', { loggedIn: true, user: currentUser });
+            } else {
+                loginBtn.classList.remove('hidden');
+                userInfo.classList.add('hidden');
+                // 广播登出状态到所有子窗口
+                ipcRenderer.send('broadcast-login-status', { loggedIn: false });
+            }
+        }
+
+        function updateLoginOverlay() {
+            const overlay = document.getElementById('login-overlay');
+            if (!isLoggedIn) {
+                overlay.classList.remove('hidden');
+                setTimeout(() => overlay.classList.add('visible'), 10);
+            } else {
+                overlay.classList.remove('visible');
+                setTimeout(() => overlay.classList.add('hidden'), 300);
+            }
+        }
+
+        // 检查登录状态
+        async function checkLoginStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/check/`);
+                const result = await response.json();
+                if (result.success && result.logged_in) {
+                    isLoggedIn = true;
+                    currentUser = result.data;
+                    updateLoginUI();
+                    updateLoginOverlay();
+                } else {
+                    isLoggedIn = false;
+                    currentUser = null;
+                    updateLoginUI();
+                }
+            } catch (error) {
+                console.error('检查登录状态失败:', error);
+            }
+        }
+
+        // === 卡片开关逻辑（需要登录） ===
         function toggleCard(moduleName, element) {
+            // 检查是否登录
+            if (!isLoggedIn) {
+                showToast('Please login first', 'warning');
+                toggleLogin(true);
+                return;
+            }
+
             // 切换当前卡片的active状态
             const isActive = element.classList.contains('active');
 
@@ -530,6 +744,11 @@
         }
 
         function settings(){
+            if (!isLoggedIn) {
+                showToast('Please login first', 'warning');
+                toggleLogin(true);
+                return;
+            }
             toggleSettings(true);
         }
         function toggleSettings(show) {
@@ -537,9 +756,8 @@
              if (show) {
                 panel.classList.remove('hidden');
                 panel.classList.add('flex');
-                // 可选：添加一点进入动画
                 panel.classList.add('animate-in', 'fade-in', 'zoom-in', 'duration-300');
-                        } else {
+            } else {
                 panel.classList.remove('flex');
                 panel.classList.add('hidden');
             }
@@ -548,7 +766,7 @@
             toggleLogin(true);
         }
         function toggleLogin(show){
-            const panel = document.getElementById("loginPanel")
+            const panel = document.getElementById("loginPanel");
             if(show){
                 panel.classList.remove('hidden');
                 panel.classList.add('flex');
@@ -558,9 +776,9 @@
                 panel.classList.add('hidden');
             }
         }
-        
+
         function toggleRegister(show){
-            const panel = document.getElementById("registerPanel")
+            const panel = document.getElementById("registerPanel");
             if(show){
                 panel.classList.remove('hidden');
                 panel.classList.add('flex');
@@ -598,7 +816,7 @@
             alert('Expand feature');
         }
         // === API 基础配置 ===
-        const API_BASE = 'http://127.0.0.1:8000';
+        const API_BASE = 'http://118.25.39.91:8000';
         
         // === 通用 API 调用函数 ===
         async function apiCall(endpoint, options = {}) {
@@ -723,7 +941,7 @@
                     }
                 };
 
-                const response = await fetch('http://127.0.0.1:8000/api/config/save/', {
+                const response = await fetch('http://118.25.39.91:8000/api/config/save/', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(config)
@@ -785,10 +1003,9 @@
         // 发送验证码
         async function sendVerificationCode() {
             const email = document.getElementById('register-email').value.trim();
-            const btn = document.getElementById('send-code-btn');
 
             if (!email) {
-                alert('请输入邮箱地址');
+                showToast('Please enter your email', 'warning');
                 return;
             }
 
@@ -796,11 +1013,12 @@
                 return;
             }
 
-            try {
-                btn.disabled = true;
-                btn.textContent = 'Sending...';
+            const btn = document.getElementById('send-code-btn');
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
 
-                const response = await fetch('http://127.0.0.1:8000/api/auth/send-code/', {
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/send-code/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, purpose: 'register' })
@@ -809,7 +1027,11 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    alert('验证码已发送到您的邮箱！\n\n开发模式：验证码为 ' + (result.code || '请查看控制台'));
+                    showToast('Verification code sent!', 'success');
+                    // 开发模式显示验证码
+                    if (result.code) {
+                        console.log('开发模式验证码:', result.code);
+                    }
 
                     // 开始倒计时
                     sendCodeCountdown = 60;
@@ -823,12 +1045,12 @@
                         }
                     }, 1000);
                 } else {
-                    alert(result.message || '发送失败');
+                    showToast(result.message || 'Failed to send code', 'error');
                     btn.textContent = 'Send Code';
                     btn.disabled = false;
                 }
             } catch (error) {
-                alert('发送失败: ' + error.message);
+                showToast('Failed to send: ' + error.message, 'error');
                 btn.textContent = 'Send Code';
                 btn.disabled = false;
             }
@@ -843,17 +1065,27 @@
             const confirmPassword = document.getElementById('register-confirm-password').value;
 
             if (!username || !email || !code || !password || !confirmPassword) {
-                alert('请填写所有字段');
+                showToast('Please fill in all fields', 'warning');
                 return;
             }
 
             if (password !== confirmPassword) {
-                alert('两次密码输入不一致');
+                showToast('Passwords do not match', 'error');
+                return;
+            }
+
+            // 密码强度检查
+            if (password.length < 8) {
+                showToast('Password must be at least 8 characters', 'warning');
+                return;
+            }
+            if (!/[a-zA-Z]/.test(password)) {
+                showToast('Password must contain letters', 'warning');
                 return;
             }
 
             try {
-                const response = await fetch('http://127.0.0.1:8000/api/auth/register/', {
+                const response = await fetch(`${API_BASE}/api/auth/register/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, email, password, code })
@@ -862,7 +1094,7 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    alert('注册成功！请登录');
+                    showToast('Registration successful! Please login', 'success');
                     switchToLogin();
                     // 清空表单
                     document.getElementById('register-username').value = '';
@@ -871,10 +1103,10 @@
                     document.getElementById('register-password').value = '';
                     document.getElementById('register-confirm-password').value = '';
                 } else {
-                    alert(result.message || '注册失败');
+                    showToast(result.message || 'Registration failed', 'error');
                 }
             } catch (error) {
-                alert('注册失败: ' + error.message);
+                showToast('Registration failed: ' + error.message, 'error');
             }
         }
 
@@ -884,12 +1116,12 @@
             const password = document.getElementById('login-password').value;
 
             if (!username || !password) {
-                alert('请输入用户名/邮箱和密码');
+                showToast('Please enter username and password', 'warning');
                 return;
             }
 
             try {
-                const response = await fetch('http://127.0.0.1:8000/api/auth/login/', {
+                const response = await fetch(`${API_BASE}/api/auth/login/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
@@ -898,8 +1130,15 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    alert(`欢迎回来，${result.data.username}！`);
+                    showToast(`Welcome back, ${result.data.username}!`, 'success');
                     toggleLogin(false);
+
+                    // 更新登录状态
+                    isLoggedIn = true;
+                    currentUser = result.data;
+                    updateLoginUI();
+                    updateLoginOverlay();
+
                     // 清空表单
                     document.getElementById('login-account').value = '';
                     document.getElementById('login-password').value = '';
@@ -909,11 +1148,27 @@
                         applyUserConfig(result.data.config);
                     }
                 } else {
-                    alert(result.message || '登录失败');
+                    showToast(result.message || 'Login failed', 'error');
                 }
             } catch (error) {
-                alert('登录失败: ' + error.message);
+                showToast('Login failed: ' + error.message, 'error');
             }
+        }
+
+        // 登出
+        async function handleLogout() {
+            try {
+                await fetch(`${API_BASE}/api/auth/logout/`, { method: 'POST' });
+                showToast('Logged out successfully', 'success');
+            } catch (error) {
+                console.error('登出失败:', error);
+            }
+
+            // 重置登录状态
+            isLoggedIn = false;
+            currentUser = null;
+            updateLoginUI();
+            updateLoginOverlay();
         }
 
         // 应用用户配置
@@ -958,9 +1213,10 @@
             }
         }
 
-        // 页面加载时加载配置
+        // 页面加载时加载配置和检查登录状态
         document.addEventListener('DOMContentLoaded', () => {
             loadConfig();
+            checkLoginStatus();
         });
     </script>
 </body>

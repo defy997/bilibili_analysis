@@ -29,7 +29,7 @@ except Exception as e:
 
 # 初始化情感分析模型
 try:
-    MODEL_PATH = r"D:\code\python\bert-model-train\checkpoints_hotel_finetuned\best_model_epoch_3.onnx"
+    MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models", "text_sentiment", "text_sentiment_model.onnx")
     analyze = SentimentModel(MODEL_PATH)
 except Exception as e:
     print(f"模型加载失败: {e}")
@@ -1113,19 +1113,13 @@ def check_need_refresh(bvid, headers, cookie, threshold=0.1):
     except Video.DoesNotExist:
         local_count = 0
 
-    if local_count == 0:
-        print(f"[刷新检测] 本地无数据，需要爬取")
-        return True, video_info
+    # 只要本地有数据，就不重新爬取
+    if local_count > 0:
+        print(f"[刷新检测] 本地已有数据，无需刷新")
+        return False, video_info
 
-    diff_ratio = (remote_count - local_count) / local_count if local_count > 0 else 1
-    print(f"[刷新检测] 远程评论: {remote_count}, 本地原始爬取: {local_count}, 差异: {diff_ratio:.1%}")
-
-    if diff_ratio > threshold:
-        print(f"[刷新检测] 差异超过{threshold:.0%}，需要刷新")
-        return True, video_info
-
-    print(f"[刷新检测] 数据无明显变化，使用缓存")
-    return False, video_info
+    print(f"[刷新检测] 本地无数据，需要爬取")
+    return True, video_info
 
 
 def _crawl_comments_python(aid, headers):
@@ -1426,6 +1420,27 @@ def analyze_sentiment(text_list):
     return scores
 
 
+def is_video_processing(bvid):
+    """
+    检查视频是否正在被处理中（不阻塞）
+    
+    Args:
+        bvid: 视频BV号
+        
+    Returns:
+        bool: True 表示视频正在被处理，False 表示未被处理
+    """
+    with _locks_lock:
+        if bvid not in _video_processing_locks:
+            return False
+        lock = _video_processing_locks[bvid]
+        # 尝试非阻塞获取锁来判断是否正在处理
+        if lock.acquire(blocking=False):
+            lock.release()
+            return False
+        return True
+
+
 def process_video(bvid, headers, cookie):
     """
     处理单个视频：爬取 -> 清洗 -> 分析 -> 保存
@@ -1641,17 +1656,26 @@ def analyze_video_audio(bvid, headers, cookie, segment_duration=15, overlap=5):
     # 3. 下载到临时文件
     tmp_fd, tmp_path = tempfile.mkstemp(suffix='.m4a')
     os.close(tmp_fd)
+    # 转换为 wav 格式供 librosa 读取
+    wav_path = tempfile.mktemp(suffix='.wav')
 
     try:
         print(f"[AudioAnalysis] 下载音频: {bvid}")
         download_audio(audio_url, tmp_path)
+
+        # 使用 ffmpeg 转换为 wav 格式
+        import subprocess
+        print(f"[AudioAnalysis] 转换音频格式: m4a -> wav")
+        subprocess.run([
+            'ffmpeg', '-y', '-i', tmp_path, '-ar', '16000', '-ac', '1', wav_path
+        ], check=True, capture_output=True)
 
         # 4. 分段分析
         print(f"[AudioAnalysis] 开始分段分析: {bvid}")
         from .audio_sentiment_model import AudioSentimentModel
         model = AudioSentimentModel()
         segments = model.analyze_segments(
-            tmp_path,
+            wav_path,
             segment_duration=segment_duration,
             overlap=overlap,
         )
@@ -1693,4 +1717,6 @@ def analyze_video_audio(bvid, headers, cookie, segment_duration=15, overlap=5):
         # 7. 清理临时文件
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
+        if os.path.exists(wav_path):
+            os.remove(wav_path)
 

@@ -91,3 +91,12 @@ build/
 temp/
 tmp/
 .cache/
+.bashrc
+.bash_history
+
+# ===================
+# 临时文件
+# ===================
+*.tmp
+*.temp
+nul

@@ -3,6 +3,12 @@ app.isQuitting = false;
 const path = require('path');
 const WebSocket = require('ws');
 
+// 设置控制台输出编码为UTF-8(解决Windows终端中文乱码)
+if (process.platform === 'win32') {
+  process.stdout.setDefaultEncoding('utf-8');
+  process.stderr.setDefaultEncoding('utf-8');
+}
+
 // 保持对window对象的全局引用
 let mainWindow;
 let analysisWindow; // 情感分析窗口
@@ -11,6 +17,7 @@ let videoAudioWindow; // 视频音频分析窗口
 let wss; // WebSocket服务器，用于与Chrome插件通信
 let tray = null; // 系统托盘
 let lastWindowPosition = null; // 记录上次主窗口位置以便还原
+let currentBvId = null; // 当前正在观看的视频BV号
 
 function createWindow() {
   // 获取屏幕工作区和鼠标位置，用于定位悬浮窗口（默认靠近当前鼠标/活动窗口）
@@ -142,6 +149,8 @@ function createWebSocketServer() {
                 console.log('收到消息:', message);
 
                 if (message.type === 'VIDEO_CHANGE') {
+                    currentBvId = message.bvId; // 保存当前视频ID
+                    console.log('视频切换:', currentBvId);
                     // 向主窗口发送信号
                     if (mainWindow && !mainWindow.isDestroyed()) {
                         mainWindow.webContents.send('video-change', message.bvId);
@@ -593,6 +602,10 @@ ipcMain.on('toggle-video-audio-window', () => {
         } else {
             videoAudioWindow.show();
             videoAudioWindow.focus();
+            // 发送当前正在观看的视频ID
+            if (currentBvId) {
+                videoAudioWindow.webContents.send('video-change', currentBvId);
+            }
         }
     } else {
         createVideoAudioWindow();
@@ -654,6 +667,10 @@ function createVideoAudioWindow() {
         videoAudioWindow.show();
         videoAudioWindow.setAlwaysOnTop(true, 'pop-up-menu');
         videoAudioWindow.setVisibleOnAllWorkspaces(true);
+        // 发送当前正在观看的视频ID
+        if (currentBvId) {
+            videoAudioWindow.webContents.send('video-change', currentBvId);
+        }
     });
 
     // 兜底：如果 ready-to-show 迟迟不触发，3秒后强制显示
@@ -661,6 +678,10 @@ function createVideoAudioWindow() {
         if (videoAudioWindow && !videoAudioWindow.isDestroyed() && !videoAudioWindow.isVisible()) {
             videoAudioWindow.show();
             videoAudioWindow.setAlwaysOnTop(true, 'pop-up-menu');
+            // 发送当前正在观看的视频ID
+            if (currentBvId) {
+                videoAudioWindow.webContents.send('video-change', currentBvId);
+            }
         }
     }, 3000);
 
@@ -700,4 +721,28 @@ ipcMain.on('broadcast-ui-settings', (event, settings) => {
             win.webContents.send('apply-ui-settings', settings);
         }
     });
+});
+
+// ==========================================
+// 登录状态广播（主窗口 → 所有子窗口）
+// ==========================================
+
+ipcMain.on('broadcast-login-status', (event, status) => {
+    const windows = [analysisWindow, userProfileWindow, videoAudioWindow];
+    windows.forEach(win => {
+        if (win && !win.isDestroyed()) {
+            win.webContents.send('sync-login-status', status);
+        }
+    });
+});
+
+// ==========================================
+// 调试：打开开发者工具
+// ==========================================
+
+ipcMain.on('open-devtools', () => {
+    // 直接为 videoAudioWindow 打开开发者工具
+    if (videoAudioWindow && !videoAudioWindow.isDestroyed()) {
+        videoAudioWindow.webContents.openDevTools({ mode: 'detach' });
+    }
 });

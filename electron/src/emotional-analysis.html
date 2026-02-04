@@ -21,8 +21,8 @@
         }
         .glass-panel {
             background: rgba(20, 20, 30, 0.6);
-            backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
+            backdrop-filter: blur(20px);
             border: 1px solid rgba(255, 255, 255, 0.08);
         }
         .stat-card {
@@ -70,7 +70,7 @@
         <div class="h-12 flex items-center justify-between px-4 border-b border-white/10 bg-white/5 flex-shrink-0 drag-area select-none">
             <!-- 左侧：返回按钮 + 标题 -->
             <div class="flex items-center gap-3">
-                <button onclick="goBack()" class="text-white/60 hover:text-white transition-colors no-drag">
+                <button onclick="goBack()" class="text-white/60 hover:text-white transition-colors no-drag" title="Go back" aria-label="Go back">
                     <i class="fa-solid fa-arrow-left"></i>
                 </button>
                 <div class="flex items-center gap-2">
@@ -83,10 +83,10 @@
             
             <!-- 右侧：操作按钮 -->
             <div class="flex items-center gap-3 no-drag text-xs">
-                <button onclick="refreshData()" class="text-white/60 hover:text-white transition-colors">
+                <button onclick="refreshData()" class="text-white/60 hover:text-white transition-colors" title="Refresh data" aria-label="Refresh data">
                     <i class="fa-solid fa-rotate-right"></i>
                 </button>
-                <button onclick="closeModule()" class="text-white/60 hover:text-pink-400 transition-colors">
+                <button onclick="closeModule()" class="text-white/60 hover:text-pink-400 transition-colors" title="Close" aria-label="Close">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>
@@ -99,8 +99,23 @@
             <div id="loading-indicator" class="hidden glass-panel rounded-2xl p-8 mb-6 text-center">
                 <div class="flex flex-col items-center gap-4">
                     <div class="animate-spin rounded-full h-12 w-12 border-4 border-pink-500 border-t-transparent"></div>
-                    <div class="text-lg font-semibold">Analyzing video...</div>
-                    <div class="text-sm text-white/60">This may take a few moments</div>
+                    <div class="text-lg font-semibold" id="loading-title">Analyzing video...</div>
+                    <div class="text-sm text-white/60" id="loading-subtitle">This may take a few moments</div>
+                    <!-- 进度条 -->
+                    <div class="w-full max-w-xs bg-white/10 rounded-full h-2 mt-2">
+                        <div id="loading-progress" class="bg-pink-500 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                    <!-- 任务状态 -->
+                    <div id="loading-tasks" class="text-xs text-white/40 space-y-1 hidden">
+                        <div class="flex items-center justify-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span>
+                            <span>Comments: pending</span>
+                        </div>
+                        <div class="flex items-center justify-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span>
+                            <span>Danmu: pending</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -356,8 +371,33 @@
                 // 显示加载指示器
                 showLoading(true);
 
-                // 调用新的 dashboard API
-                const response = await fetch(`http://127.0.0.1:8000/api/video/dashboard/${bvId}/`);
+                // 1. 先尝试触发异步分析
+                try {
+                    const analyzeResp = await fetch(`http://118.25.39.91:8000/api/video/async-analyze/`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ bvid: bvId })
+                    });
+                    const analyzeData = await analyzeResp.json();
+
+                    if (analyzeData.success && analyzeData.status === 'processing') {
+                        // 有任务在进行中，开始轮询
+                        console.log('[LoadData] 异步任务已提交，开始轮询:', analyzeData.tasks);
+                        await pollAnalysisTasks(analyzeData.tasks, bvId);
+                        return; // 轮询完成后会自动加载 dashboard
+                    } else if (analyzeData.status === 'cached') {
+                        console.log('[LoadData] 数据已缓存');
+                        // 继续加载 dashboard
+                    } else if (analyzeData.status === 'already_processing') {
+                        console.log('[LoadData] 视频正在被其他请求处理');
+                    }
+                } catch (analyzeErr) {
+                    console.warn('[LoadData] 异步分析触发失败，回退同步:', analyzeErr);
+                    // 继续尝试同步加载
+                }
+
+                // 2. 调用 dashboard API
+                const response = await fetch(`http://118.25.39.91:8000/api/video/dashboard/${bvId}/`);
                 const data = await response.json();
 
                 // 隐藏加载指示器
@@ -373,6 +413,143 @@
                 showLoading(false);
                 console.error('加载数据失败:', error);
                 showError('Failed to load data: ' + error.message);
+            }
+        }
+
+        // === 轮询分析任务状态 ===
+        async function pollAnalysisTasks(tasks, bvId) {
+            const taskIds = Object.values(tasks).map(t => t.task_id);
+            const pollInterval = 2000; // 2秒轮询一次
+            const maxAttempts = 60; // 最多轮询60次（2分钟）
+            let attempts = 0;
+
+            // 显示任务状态
+            const loadingTasks = document.getElementById('loading-tasks');
+            const loadingProgress = document.getElementById('loading-progress');
+            const loadingTitle = document.getElementById('loading-title');
+            const loadingSubtitle = document.getElementById('loading-subtitle');
+
+            if (loadingTasks) loadingTasks.classList.remove('hidden');
+            if (loadingProgress) {
+                loadingProgress.style.width = '10%';
+                loadingProgress.classList.add('animate-pulse');
+            }
+
+            const pollTimer = setInterval(async () => {
+                attempts++;
+
+                try {
+                    const resp = await fetch(`http://118.25.39.91:8000/api/video/task-status/?task_ids=${taskIds.join(',')}`);
+                    const data = await resp.json();
+
+                    if (data.success && data.tasks) {
+                        // 更新进度
+                        const completed = Object.values(data.tasks).filter(t => t.status === 'completed').length;
+                        const total = Object.keys(data.tasks).length;
+                        const progress = Math.round((completed / total) * 80) + 10; // 10% ~ 90%
+
+                        if (loadingProgress) loadingProgress.style.width = `${progress}%`;
+                        if (loadingTitle) loadingTitle.innerText = `Analyzing... ${completed}/${total}`;
+
+                        // 更新任务状态
+                        for (const [type, task] of Object.entries(tasks)) {
+                            const taskStatus = data.tasks[task.task_id];
+                            const taskEl = loadingTasks?.querySelectorAll('span:last-child');
+                            if (taskEl) {
+                                for (const el of taskEl) {
+                                    if (el.textContent.toLowerCase().includes(type)) {
+                                        if (taskStatus?.status === 'completed') {
+                                            el.innerHTML = `<span class="text-green-400">${type}: completed (${taskStatus.result?.count || 0} items)</span>`;
+                                        } else {
+                                            el.innerHTML = `<span class="text-yellow-400 animate-pulse">${type}: processing...</span>`;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 检查是否全部完成
+                        let allCompleted = true;
+                        let hasError = false;
+
+                        for (const taskId of taskIds) {
+                            const taskStatus = data.tasks[taskId];
+                            if (!taskStatus || taskStatus.status !== 'completed') {
+                                allCompleted = false;
+                                break;
+                            }
+                            if (taskStatus.result?.error) {
+                                hasError = true;
+                            }
+                        }
+
+                        if (allCompleted) {
+                            clearInterval(pollTimer);
+
+                            if (loadingProgress) {
+                                loadingProgress.style.width = '100%';
+                                loadingProgress.classList.remove('animate-pulse');
+                                loadingProgress.classList.add('bg-green-500');
+                            }
+                            if (loadingTitle) loadingTitle.innerText = 'Analysis Complete!';
+                            if (loadingSubtitle) {
+                                if (data.summary) {
+                                    loadingSubtitle.innerText = `${data.summary.total_count} items processed (pos: ${data.summary.positive_count}, neg: ${data.summary.negative_count})`;
+                                } else {
+                                    loadingSubtitle.innerText = 'All tasks completed';
+                                }
+                            }
+
+                            // 延迟一点后加载 dashboard
+                            setTimeout(async () => {
+                                if (loadingTasks) loadingTasks.classList.add('hidden');
+                                showLoading(false);
+                                // 重新加载 dashboard
+                                await loadDashboard(bvId);
+                            }, 1500);
+                        }
+
+                        // 超时处理
+                        if (attempts >= maxAttempts) {
+                            clearInterval(pollTimer);
+                            console.warn('[PollTasks] 轮询超时');
+                            if (loadingTitle) loadingTitle.innerText = 'Timeout';
+                            if (loadingSubtitle) loadingSubtitle.innerText = 'Taking longer than expected, showing available data...';
+                            setTimeout(async () => {
+                                if (loadingTasks) loadingTasks.classList.add('hidden');
+                                showLoading(false);
+                                await loadDashboard(bvId);
+                            }, 2000);
+                        }
+                    }
+                } catch (err) {
+                    console.error('[PollTasks] 轮询错误:', err);
+                    attempts++; // 超时计数
+                    if (attempts >= maxAttempts) {
+                        clearInterval(pollTimer);
+                        if (loadingTasks) loadingTasks.classList.add('hidden');
+                        showLoading(false);
+                        await loadDashboard(bvId);
+                    }
+                }
+            }, pollInterval);
+        }
+
+        // === 加载 Dashboard 数据 ===
+        async function loadDashboard(bvId) {
+            try {
+                const response = await fetch(`http://118.25.39.91:8000/api/video/dashboard/${bvId}/`);
+                const data = await response.json();
+
+                if (data.success) {
+                    updateUI(data);
+                } else {
+                    console.error('Dashboard 加载失败:', data.error);
+                    showError(data.error);
+                }
+            } catch (error) {
+                console.error('Dashboard 加载失败:', error);
+                showError('Failed to load dashboard: ' + error.message);
             }
         }
 
@@ -608,7 +785,7 @@
 
         async function loadThemeFromConfig() {
             try {
-                const resp = await fetch('http://127.0.0.1:8000/api/config/');
+                const resp = await fetch('http://118.25.39.91:8000/api/config/');
                 const result = await resp.json();
                 if (result.success && result.data?.ui_config) {
                     applyTheme(result.data.ui_config.background_color, result.data.ui_config.opacity);
@@ -624,6 +801,15 @@
             trendChart?.resize();
             hourlyChart?.resize();
             danmuHeatmapChart?.resize();
+        });
+
+        // === 登录状态同步 ===
+        let isLoggedIn = false;
+
+        // 监听登录状态同步
+        ipcRenderer.on('sync-login-status', (event, status) => {
+            isLoggedIn = status.loggedIn;
+            console.log('登录状态同步:', isLoggedIn);
         });
     </script>
 </body>

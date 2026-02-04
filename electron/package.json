@@ -4,8 +4,8 @@
   "description": "B站视频评论情感分析悬浮窗口",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
-    "dev": "set NODE_ENV=development&& electron .",
+    "start": "chcp 65001 >nul && electron .",
+    "dev": "chcp 65001 >nul && set NODE_ENV=development&& electron .",
     "build": "electron-builder",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

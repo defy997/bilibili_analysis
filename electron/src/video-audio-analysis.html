@@ -21,8 +21,8 @@
         }
         .glass-panel {
             background: rgba(20, 20, 30, 0.6);
-            backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
+            backdrop-filter: blur(20px);
             border: 1px solid rgba(255, 255, 255, 0.08);
         }
         .stat-card {
@@ -65,7 +65,7 @@
         <!-- Top title bar -->
         <div class="h-12 flex items-center justify-between px-4 border-b border-white/10 bg-purple-500/10 flex-shrink-0 drag-area select-none">
             <div class="flex items-center gap-3">
-                <button onclick="goBack()" class="text-white/60 hover:text-white transition-colors no-drag">
+                <button onclick="goBack()" class="text-white/60 hover:text-white transition-colors no-drag" title="Go back" aria-label="Go back">
                     <i class="fa-solid fa-arrow-left"></i>
                 </button>
                 <div class="flex items-center gap-2">
@@ -77,10 +77,10 @@
             </div>
 
             <div class="flex items-center gap-3 no-drag text-xs">
-                <button onclick="refreshData()" class="text-white/60 hover:text-white transition-colors">
+                <button onclick="refreshData()" class="text-white/60 hover:text-white transition-colors" title="Refresh data" aria-label="Refresh data">
                     <i class="fa-solid fa-rotate-right"></i>
                 </button>
-                <button onclick="closeModule()" class="text-white/60 hover:text-purple-400 transition-colors">
+                <button onclick="closeModule()" class="text-white/60 hover:text-purple-400 transition-colors" title="Close" aria-label="Close">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>
@@ -191,6 +191,30 @@
             initCharts();
             listenForVideoChange();
             loadThemeFromConfig();
+            
+            // 临时调试：自动打开开发者工具
+            setTimeout(() => {
+                // 通过 ipcRenderer 请求主进程帮忙打开
+                ipcRenderer.send('open-devtools');
+            }, 1000);
+            
+            // Auto-load data on page open (fallback when ipc event not received)
+            console.log('Page loaded, checking for BV id...');
+            setTimeout(() => {
+                if (!currentBvId) {
+                    // Try to get BV id from URL hash or query
+                    const hash = window.location.hash;
+                    const params = new URLSearchParams(window.location.search);
+                    const bvIdFromUrl = params.get('bvid') || (hash ? hash.substring(1) : null);
+                    if (bvIdFromUrl) {
+                        currentBvId = bvIdFromUrl;
+                        console.log('Found BV id from URL:', bvIdFromUrl);
+                        loadData(bvIdFromUrl);
+                    } else {
+                        console.log('No BV id found in URL, listening for ipc event...');
+                    }
+                }
+            }, 500);
         });
 
         // === Init Charts ===
@@ -292,19 +316,137 @@
         async function loadData(bvId) {
             try {
                 showLoading(true);
-                const response = await fetch(`http://127.0.0.1:8000/api/video/audio-dashboard/${bvId}/`);
+                console.log('Loading data for:', bvId);
+
+                // 1. 先尝试触发异步分析（评论和弹幕）
+                try {
+                    const analyzeResp = await fetch(`http://118.25.39.91:8000/api/video/async-analyze/`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ bvid: bvId })
+                    });
+                    const analyzeData = await analyzeResp.json();
+
+                    if (analyzeData.success && analyzeData.status === 'processing') {
+                        console.log('[LoadData] 异步任务已提交，开始轮询...');
+                        // 开始轮询
+                        await pollAnalysisTasks(analyzeData.tasks, bvId);
+                        return;
+                    } else if (analyzeData.status === 'cached') {
+                        console.log('[LoadData] 数据已缓存');
+                    }
+                } catch (analyzeErr) {
+                    console.warn('[LoadData] 异步分析触发失败:', analyzeErr);
+                }
+
+                // 2. 调用 audio dashboard API
+                const response = await fetch(`http://118.25.39.91:8000/api/video/audio-dashboard/${bvId}/`);
                 const data = await response.json();
+                console.log('API Response:', JSON.stringify(data, null, 2));
                 showLoading(false);
 
                 if (data.success) {
                     updateUI(data);
                 } else {
                     console.error('Data load failed:', data.error);
+                    showDebugInfo(data);
                 }
             } catch (error) {
                 showLoading(false);
                 console.error('Load failed:', error);
             }
+        }
+
+        // === 轮询分析任务状态 ===
+        async function pollAnalysisTasks(tasks, bvId) {
+            const taskIds = Object.values(tasks).map(t => t.task_id);
+            const pollInterval = 2000;
+            const maxAttempts = 120;  // 增加超时时间（音频分析可能需要更长时间）
+            let attempts = 0;
+
+            const loadingText = document.querySelector('#loading-indicator .text-lg');
+            const loadingSubtext = document.querySelector('#loading-indicator .text-sm');
+
+            const pollTimer = setInterval(async () => {
+                attempts++;
+
+                try {
+                    const resp = await fetch(`http://118.25.39.91:8000/api/video/task-status/?task_ids=${taskIds.join(',')}`);
+                    const data = await resp.json();
+
+                    if (data.success && data.tasks) {
+                        const completed = Object.values(data.tasks).filter(t => t.status === 'completed').length;
+                        const total = Object.keys(data.tasks).length;
+
+                        if (loadingText) loadingText.innerText = `Analyzing... ${completed}/${total}`;
+                        if (loadingSubtext) loadingSubtext.innerText = 'Processing comments, danmu & audio';
+
+                        let allCompleted = true;
+                        for (const taskId of taskIds) {
+                            const taskStatus = data.tasks[taskId];
+                            if (!taskStatus || taskStatus.status !== 'completed') {
+                                allCompleted = false;
+                                break;
+                            }
+                        }
+
+                        if (allCompleted) {
+                            clearInterval(pollTimer);
+                            console.log('[PollTasks] 所有任务完成');
+
+                            if (loadingText) loadingText.innerText = 'Analysis Complete!';
+                            if (loadingSubtext && data.summary) {
+                                loadingSubtext.innerText = `${data.summary.total_count} items processed`;
+                            }
+
+                            setTimeout(async () => {
+                                showLoading(false);
+                                await loadDashboard(bvId);
+                            }, 1000);
+                        }
+
+                        if (attempts >= maxAttempts) {
+                            clearInterval(pollTimer);
+                            console.warn('[PollTasks] 轮询超时');
+                            showLoading(false);
+                            await loadDashboard(bvId);
+                        }
+                    }
+                } catch (err) {
+                    console.error('[PollTasks] 轮询错误:', err);
+                    attempts++;
+                    if (attempts >= maxAttempts) {
+                        clearInterval(pollTimer);
+                        showLoading(false);
+                        await loadDashboard(bvId);
+                    }
+                }
+            }, pollInterval);
+        }
+
+        // === 加载 Dashboard 数据 ===
+        async function loadDashboard(bvId) {
+            try {
+                const response = await fetch(`http://118.25.39.91:8000/api/video/audio-dashboard/${bvId}/`);
+                const data = await response.json();
+                if (data.success) {
+                    updateUI(data);
+                } else {
+                    console.error('Dashboard load failed:', data.error);
+                }
+            } catch (error) {
+                console.error('Dashboard load failed:', error);
+            }
+        }
+
+        // === Show debug info ===
+        function showDebugInfo(data) {
+            let html = '<div style="background:rgba(0,0,0,0.8);padding:10px;margin:10px;border-radius:8px;color:#fff;font-size:12px;max-height:300px;overflow:auto;">';
+            html += '<h4 style="margin:0 0 10px;color:#f55;">Debug Info</h4>';
+            html += '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+            html += '</div>';
+            const container = document.getElementById('main-container');
+            container.insertAdjacentHTML('beforeend', html);
         }
 
         function showLoading(show) {
@@ -337,6 +479,9 @@
 
             // Audio timeline chart
             const timeline = audioData.timeline || [];
+            console.log('Timeline data:', timeline);
+            console.log('Timeline length:', timeline.length);
+            
             if (timeline.length > 0) {
                 const times = timeline.map(t => t.time + 's');
                 const scores = timeline.map(t => t.score);
@@ -366,7 +511,16 @@
                         }
                     }]
                 });
+                // Force resize to ensure chart renders correctly
+                setTimeout(() => {
+                    audioTimelineChart.resize();
+                    console.log('Chart resized after data update');
+                }, 100);
                 document.getElementById('audio-timeline-placeholder').classList.add('hidden');
+                console.log('Chart updated with', timeline.length, 'data points');
+            } else {
+                document.getElementById('audio-timeline-placeholder').classList.remove('hidden');
+                console.log('No timeline data, showing placeholder');
             }
 
             // Comparison stats (stat cards)
@@ -388,6 +542,11 @@
                         { name: 'Danmu',    data: dist.danmu    || [0, 0, 0] },
                     ]
                 });
+                // Force resize
+                setTimeout(() => {
+                    comparisonChart.resize();
+                }, 100);
+                console.log('Comparison chart updated:', dist);
             }
         }
 
@@ -403,7 +562,7 @@
                 analyzeBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Analyzing...';
                 showLoading(true);
 
-                const resp = await fetch(`http://127.0.0.1:8000/api/video/audio-dashboard/${currentBvId}/`, {
+                const resp = await fetch(`http://118.25.39.91:8000/api/video/audio-dashboard/${currentBvId}/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ force_refresh: forceRefresh })
@@ -438,7 +597,7 @@
         function pollTaskStatus(taskId) {
             const interval = setInterval(async () => {
                 try {
-                    const resp = await fetch(`http://127.0.0.1:8000/api/video/audio-task/${taskId}/`);
+                    const resp = await fetch(`http://118.25.39.91:8000/api/video/audio-task/${taskId}/`);
                     const data = await resp.json();
 
                     if (data.status === 'SUCCESS') {
@@ -494,7 +653,7 @@
 
         async function loadThemeFromConfig() {
             try {
-                const resp = await fetch('http://127.0.0.1:8000/api/config/');
+                const resp = await fetch('http://118.25.39.91:8000/api/config/');
                 const result = await resp.json();
                 if (result.success && result.data?.ui_config) {
                     applyTheme(result.data.ui_config.background_color, result.data.ui_config.opacity);
@@ -522,6 +681,15 @@
         window.addEventListener('resize', () => {
             audioTimelineChart?.resize();
             comparisonChart?.resize();
+        });
+
+        // === 登录状态同步 ===
+        let isLoggedIn = false;
+
+        // 监听登录状态同步
+        ipcRenderer.on('sync-login-status', (event, status) => {
+            isLoggedIn = status.loggedIn;
+            console.log('登录状态同步:', isLoggedIn);
         });
     </script>
 </body>

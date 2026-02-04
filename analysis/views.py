@@ -2,9 +2,16 @@ import json
 import requests
 from django.http import JsonResponse, HttpResponseNotAllowed
 from django.views.decorators.csrf import csrf_exempt
-from .services import process_video, check_need_refresh, crawl_video_info, crawl_audio_url
+from .services import process_video, check_need_refresh, crawl_video_info, crawl_audio_url, is_video_processing
 from .analytics import get_comprehensive_dashboard, get_user_profile_dashboard
 from .models import UserConfig, Video, Comment, Danmu, AudioSentiment
+from celery.result import AsyncResult
+from .tasks import (
+    crawl_and_analyze_comments,
+    crawl_and_analyze_danmu,
+    analyze_audio_task,
+    get_task_results_async
+)
 
 # B站 Cookie（临时硬编码，后续从数据库读取）
 BILI_COOKIE = "SESSDATA=b946e8f1%2C1785116159%2C0eabf%2A11CjBctKZ6g7g6nHZ7Oy_m31LUSM7SgaxXkfPZNvsn78ZoqBybck-zwkKuFL761GGZRFQSVkhrVjM3M2s4MWRheHJESkxMU1FSLVBQd1N0T1VxSE95YVVXenI3T28wSHFXaF9jSTlycjZDNkRva0hWM01PREpNMjQtRUF4NHlHUlVhbXp0dlJqOU5RIIEC"
@@ -27,7 +34,7 @@ def analyze_by_bvid(request):
             'accept': 'application/json, text/plain, */*',
             'accept-language': 'zh-CN,zh;q=0.9',
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'referer': 'https://www.bilibili.com/',
+            'referer': 'https://www.biliibili.com/',
             'cookie': BILI_COOKIE,
         }
 
@@ -64,6 +71,236 @@ def analyze_by_bvid(request):
 
 
 @csrf_exempt
+def async_analyze_video(request):
+    """
+    并发分析视频接口 - 立即返回任务状态，前端轮询结果
+
+    POST /api/video/async-analyze/
+    Body: {"bvid": "BVxxx"}
+    """
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            bvid = data.get('bvid')
+
+            if not bvid:
+                return JsonResponse({"error": "BVID is required"}, status=400)
+
+            headers = {
+                'authority': 'api.bilibili.com',
+                'accept': 'application/json, text/plain, */*',
+                'accept-language': 'zh-CN,zh;q=0.9',
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'referer': 'https://www.bilibili.com/',
+                'cookie': BILI_COOKIE,
+            }
+
+            # 检查视频是否正在被处理
+            if is_video_processing(bvid):
+                return JsonResponse({
+                    "success": True,
+                    "status": "already_processing",
+                    "message": "视频正在被其他请求处理"
+                })
+
+            # 检查视频是否已有数据
+            try:
+                video = Video.objects.get(bvid=bvid)
+                if video.raw_comment_count and video.raw_comment_count > 0:
+                    # 已有数据，返回已缓存状态
+                    return JsonResponse({
+                        "success": True,
+                        "status": "cached",
+                        "message": "视频数据已存在"
+                    })
+            except Video.DoesNotExist:
+                pass
+
+            # 检查 Redis 是否可用（Celery 是否可用）
+            celery_available = False
+            try:
+                import redis as _redis
+                _r = _redis.Redis(host='localhost', port=6379, socket_connect_timeout=2)
+                _r.ping()
+                celery_available = True
+            except Exception:
+                pass
+
+            if not celery_available:
+                # 回退到同步分析
+                print(f"[AsyncAnalyze] Redis 不可用，回退同步分析: {bvid}")
+                try:
+                    result = process_video(bvid, headers, BILI_COOKIE)
+                    return JsonResponse({
+                        "success": True,
+                        "status": "completed",
+                        "data": result
+                    })
+                except Exception as e:
+                    return JsonResponse({
+                        "success": False,
+                        "error": str(e)
+                    }, status=500)
+
+            # 并行触发评论和弹幕分析
+            # 1. 先获取视频信息
+            try:
+                video_info = crawl_video_info(bvid, headers, BILI_COOKIE)
+                aid = video_info.get('aid')
+                cid = video_info.get('cid')
+            except Exception as e:
+                return JsonResponse({
+                    "success": False,
+                    "error": f"获取视频信息失败: {str(e)}"
+                }, status=500)
+
+            # 2. 并行提交任务（评论、弹幕、音频）- 真正的并行
+            from celery import chord, group
+            from .tasks import crawl_and_analyze_comments, crawl_and_analyze_danmu, analyze_audio_task
+
+            # 使用 group 并行执行三个任务
+            parallel_tasks = group([
+                crawl_and_analyze_comments.s(bvid, aid, headers, BILI_COOKIE),
+                crawl_and_analyze_danmu.s(bvid, cid, headers, BILI_COOKIE),
+                analyze_audio_task.s(bvid, BILI_COOKIE)
+            ])
+
+            # 异步提交
+            job_result = parallel_tasks.apply_async()
+
+            # 获取任务ID列表
+            task_ids = [job_result.results[i].id for i in range(3)]
+
+            print(f"[AsyncAnalyze] 已提交并行任务组: bvid={bvid}")
+            print(f"  - comments: {task_ids[0]}")
+            print(f"  - danmu: {task_ids[1]}")
+            print(f"  - audio: {task_ids[2]}")
+
+            return JsonResponse({
+                "success": True,
+                "status": "processing",
+                "bvid": bvid,
+                "group_id": str(job_result.id),
+                "tasks": {
+                    "comments": {
+                        "task_id": task_ids[0],
+                        "status": "PENDING"
+                    },
+                    "danmu": {
+                        "task_id": task_ids[1],
+                        "status": "PENDING"
+                    },
+                    "audio": {
+                        "task_id": task_ids[2],
+                        "status": "PENDING"
+                    }
+                },
+                "message": "分析任务已并行提交，请轮询 /api/video/task-status/ 获取进度"
+            })
+
+        except Exception as e:
+            print(f"[AsyncAnalyze] 错误: {e}")
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({
+                "success": False,
+                "error": str(e)
+            }, status=500)
+    else:
+        return HttpResponseNotAllowed(['POST'])
+
+
+@csrf_exempt
+def task_status(request):
+    """
+    查询任务状态接口
+
+    GET /api/video/task-status/?task_ids=id1,id2
+    """
+    if request.method == 'GET':
+        try:
+            task_ids_param = request.GET.get('task_ids', '')
+            if not task_ids_param:
+                return JsonResponse({
+                    "success": False,
+                    "error": "task_ids is required"
+                }, status=400)
+
+            task_ids = [tid.strip() for tid in task_ids_param.split(',') if tid.strip()]
+
+            # 批量获取任务结果
+            results = get_task_results_async(task_ids)
+
+            # 构建响应
+            response = {
+                "success": True,
+                "tasks": {}
+            }
+
+            all_completed = True
+
+            for task_id in task_ids:
+                if task_id in results and results[task_id] is not None:
+                    # 任务已完成
+                    result = results[task_id]
+                    response["tasks"][task_id] = {
+                        "status": "completed",
+                        "result": result
+                    }
+                else:
+                    # 任务还在进行中
+                    response["tasks"][task_id] = {
+                        "status": "processing",
+                        "result": None
+                    }
+                    all_completed = False
+
+            # 如果所有任务都完成，添加汇总信息
+            if all_completed and task_ids:
+                total_positive = 0
+                total_negative = 0
+                total_neutral = 0
+                total_count = 0
+
+                for task_id in task_ids:
+                    result = results.get(task_id)
+                    if result and isinstance(result, dict):
+                        if result.get('type') == 'comments':
+                            total_count += result.get('count', 0)
+                            total_positive += result.get('positive_count', 0)
+                            total_negative += result.get('negative_count', 0)
+                            total_neutral += result.get('neutral_count', 0)
+                        elif result.get('type') == 'danmu':
+                            total_count += result.get('count', 0)
+                            total_positive += result.get('positive_count', 0)
+                            total_negative += result.get('negative_count', 0)
+                            total_neutral += result.get('neutral_count', 0)
+                        elif result.get('type') == 'audio':
+                            # 音频任务完成后也会贡献到统计
+                            total_count += result.get('timeline_length', 0)
+
+                response["summary"] = {
+                    "total_count": total_count,
+                    "positive_count": total_positive,
+                    "negative_count": total_negative,
+                    "neutral_count": total_neutral
+                }
+
+            return JsonResponse(response)
+
+        except Exception as e:
+            print(f"[TaskStatus] 错误: {e}")
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({
+                "success": False,
+                "error": str(e)
+            }, status=500)
+    else:
+        return HttpResponseNotAllowed(['GET'])
+
+
+@csrf_exempt
 def video_dashboard(request, bvid):
     """
     综合仪表板接口 - 返回所有可视化数据
@@ -83,33 +320,37 @@ def video_dashboard(request, bvid):
                 'cookie': BILI_COOKIE,
             }
 
-            # 检查是否需要刷新数据（对比远程评论数与本地评论数）
-            try:
-                need_refresh, _ = check_need_refresh(bvid, headers, BILI_COOKIE)
-            except Exception:
-                from .models import Video
-                need_refresh = not Video.objects.filter(bvid=bvid).exists()
-
-            if need_refresh:
-                print(f"[Dashboard] 数据需要刷新，开始分析: {bvid}")
+            # 先检查视频是否正在被其他请求处理
+            if is_video_processing(bvid):
+                print(f"[Dashboard] 视频 {bvid} 正在被其他请求处理，直接返回缓存数据")
+            else:
+                # 检查是否需要刷新数据（对比远程评论数与本地评论数）
                 try:
-                    result = process_video(bvid, headers, BILI_COOKIE)
-                    print(f"[Dashboard] 视频分析完成: {bvid}")
+                    need_refresh, _ = check_need_refresh(bvid, headers, BILI_COOKIE)
+                except Exception:
+                    from .models import Video
+                    need_refresh = not Video.objects.filter(bvid=bvid).exists()
 
-                    if result.get("status") == "no_data":
+                if need_refresh:
+                    print(f"[Dashboard] 数据需要刷新，开始分析: {bvid}")
+                    try:
+                        result = process_video(bvid, headers, BILI_COOKIE)
+                        print(f"[Dashboard] 视频分析完成: {bvid}")
+
+                        if result.get("status") == "no_data":
+                            return JsonResponse({
+                                "success": False,
+                                "error": "Video has no data to analyze"
+                            }, status=404)
+
+                    except Exception as analysis_error:
+                        print(f"[Dashboard] 分析失败: {analysis_error}")
+                        import traceback
+                        traceback.print_exc()
                         return JsonResponse({
                             "success": False,
-                            "error": "Video has no data to analyze"
-                        }, status=404)
-
-                except Exception as analysis_error:
-                    print(f"[Dashboard] 分析失败: {analysis_error}")
-                    import traceback
-                    traceback.print_exc()
-                    return JsonResponse({
-                        "success": False,
-                        "error": f"Failed to analyze video: {str(analysis_error)}"
-                    }, status=500)
+                            "error": f"Failed to analyze video: {str(analysis_error)}"
+                        }, status=500)
 
             # 获取 dashboard 数据
             dashboard_data = get_comprehensive_dashboard(bvid)
@@ -153,25 +394,29 @@ def user_profile_dashboard(request, bvid):
                 'cookie': BILI_COOKIE,
             }
 
-            try:
-                need_refresh, _ = check_need_refresh(bvid, headers, BILI_COOKIE)
-            except Exception:
-                from .models import Video
-                need_refresh = not Video.objects.filter(bvid=bvid).exists()
-
-            if need_refresh:
+            # 先检查视频是否正在被其他请求处理
+            if is_video_processing(bvid):
+                print(f"[UserProfile] 视频 {bvid} 正在被其他请求处理，直接返回缓存数据")
+            else:
                 try:
-                    result = process_video(bvid, headers, BILI_COOKIE)
-                    if result.get("status") == "no_data":
+                    need_refresh, _ = check_need_refresh(bvid, headers, BILI_COOKIE)
+                except Exception:
+                    from .models import Video
+                    need_refresh = not Video.objects.filter(bvid=bvid).exists()
+
+                if need_refresh:
+                    try:
+                        result = process_video(bvid, headers, BILI_COOKIE)
+                        if result.get("status") == "no_data":
+                            return JsonResponse({
+                                "success": False,
+                                "error": "Video has no data to analyze"
+                            }, status=404)
+                    except Exception as analysis_error:
                         return JsonResponse({
                             "success": False,
-                            "error": "Video has no data to analyze"
-                        }, status=404)
-                except Exception as analysis_error:
-                    return JsonResponse({
-                        "success": False,
-                        "error": f"Failed to analyze video: {str(analysis_error)}"
-                    }, status=500)
+                            "error": f"Failed to analyze video: {str(analysis_error)}"
+                        }, status=500)
 
             dashboard_data = get_user_profile_dashboard(bvid)
 
@@ -259,17 +504,17 @@ def video_audio_dashboard(request, bvid):
             danmu_avg = danmu_qs.aggregate(avg=Avg('sentiment_score'))['avg']
 
             # 各类别数量统计（positive>=0.6, negative<=0.4, 其余neutral）
-            def count_sentiments(qs):
+            def count_sentiments(qs, pk_field='id'):
                 agg = qs.aggregate(
-                    positive=Count('id', filter=Q(sentiment_score__gte=0.6)),
-                    negative=Count('id', filter=Q(sentiment_score__lte=0.4)),
-                    total=Count('id'),
+                    positive=Count(pk_field, filter=Q(sentiment_score__gte=0.6)),
+                    negative=Count(pk_field, filter=Q(sentiment_score__lte=0.4)),
+                    total=Count(pk_field),
                 )
                 agg['neutral'] = agg['total'] - agg['positive'] - agg['negative']
                 return agg
 
-            comment_dist = count_sentiments(comment_qs) if comment_qs.exists() else {'positive': 0, 'neutral': 0, 'negative': 0}
-            danmu_dist = count_sentiments(danmu_qs) if danmu_qs.exists() else {'positive': 0, 'neutral': 0, 'negative': 0}
+            comment_dist = count_sentiments(comment_qs, 'rpid') if comment_qs.exists() else {'positive': 0, 'neutral': 0, 'negative': 0}
+            danmu_dist = count_sentiments(danmu_qs, 'id') if danmu_qs.exists() else {'positive': 0, 'neutral': 0, 'negative': 0}
 
             if audio_sentiments.exists():
                 audio_dist = count_sentiments(audio_sentiments)

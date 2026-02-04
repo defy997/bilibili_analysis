@@ -21,8 +21,8 @@
         }
         .glass-panel {
             background: rgba(20, 20, 30, 0.6);
-            backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
+            backdrop-filter: blur(20px);
             border: 1px solid rgba(255, 255, 255, 0.08);
         }
         .stat-card {
@@ -65,7 +65,7 @@
         <!-- 顶部标题栏 -->
         <div class="h-12 flex items-center justify-between px-4 border-b border-white/10 bg-blue-500/10 flex-shrink-0 drag-area select-none">
             <div class="flex items-center gap-3">
-                <button onclick="goBack()" class="text-white/60 hover:text-white transition-colors no-drag">
+                <button onclick="goBack()" class="text-white/60 hover:text-white transition-colors no-drag" title="Go back" aria-label="Go back">
                     <i class="fa-solid fa-arrow-left"></i>
                 </button>
                 <div class="flex items-center gap-2">
@@ -77,10 +77,10 @@
             </div>
 
             <div class="flex items-center gap-3 no-drag text-xs">
-                <button onclick="refreshData()" class="text-white/60 hover:text-white transition-colors">
+                <button onclick="refreshData()" class="text-white/60 hover:text-white transition-colors" title="Refresh data" aria-label="Refresh data">
                     <i class="fa-solid fa-rotate-right"></i>
                 </button>
-                <button onclick="closeModule()" class="text-white/60 hover:text-blue-400 transition-colors">
+                <button onclick="closeModule()" class="text-white/60 hover:text-blue-400 transition-colors" title="Close" aria-label="Close">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>
@@ -276,7 +276,7 @@
         async function loadData(bvId) {
             try {
                 showLoading(true);
-                const response = await fetch(`http://127.0.0.1:8000/api/video/user-profile/${bvId}/`);
+                const response = await fetch(`http://118.25.39.91:8000/api/video/user-profile/${bvId}/`);
                 const data = await response.json();
                 showLoading(false);
 
@@ -432,7 +432,7 @@
 
         async function loadThemeFromConfig() {
             try {
-                const resp = await fetch('http://127.0.0.1:8000/api/config/');
+                const resp = await fetch('http://118.25.39.91:8000/api/config/');
                 const result = await resp.json();
                 if (result.success && result.data?.ui_config) {
                     applyTheme(result.data.ui_config.background_color, result.data.ui_config.opacity);
@@ -446,6 +446,15 @@
             locationChart?.resize();
             vipChart?.resize();
             levelChart?.resize();
+        });
+
+        // === 登录状态同步 ===
+        let isLoggedIn = false;
+
+        // 监听登录状态同步
+        ipcRenderer.on('sync-login-status', (event, status) => {
+            isLoggedIn = status.loggedIn;
+            console.log('登录状态同步:', isLoggedIn);
         });
     </script>
 </body>
