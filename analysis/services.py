@@ -1235,6 +1235,8 @@ def crawl_comments(aid, headers):
 def _crawl_danmaku_python(cid, headers):
     """
     爬取视频弹幕（Python 实现）
+    返回格式: [{'content': str, 'video_time': float}, ...]
+    其中 video_time 是视频内的秒数，从 p 属性中提取
     """
     danmaku_list = []
     try:
@@ -1248,7 +1250,20 @@ def _crawl_danmaku_python(cid, headers):
             for element in danmaku_elements:
                 text = element.get_text(strip=True)
                 if text:
-                    danmaku_list.append(text)
+                    # 从 p 属性中提取视频内时间
+                    # p 格式: "时间,模式,字号,颜色,时间戳,弹幕池,用户hash,弹幕ID"
+                    p_attr = element.get('p', '')
+                    video_time = 0.0
+                    if p_attr:
+                        try:
+                            video_time = float(p_attr.split(',')[0])
+                        except (ValueError, IndexError):
+                            video_time = 0.0
+                    
+                    danmaku_list.append({
+                        'content': text,
+                        'video_time': video_time
+                    })
 
         print(f"获取到 {len(danmaku_list)} 条弹幕")
     except Exception as e:
@@ -1372,9 +1387,16 @@ def save_comment(comment_data, video_obj, score, sentiment_label):
         return None
 
 
-def save_danmaku(cid, content, score, sentiment_label):
+def save_danmaku(cid, content, score, sentiment_label, video_time=0.0):
     """
     保存单条弹幕到数据库（集成数据清洗和过滤）
+    
+    Args:
+        cid: 视频CID
+        content: 弹幕内容
+        score: 情感得分
+        sentiment_label: 情感分类
+        video_time: 视频内出现时间（秒）
     """
     try:
         # 数据清洗（用于展示的版本）
@@ -1388,6 +1410,7 @@ def save_danmaku(cid, content, score, sentiment_label):
         Danmu.objects.create(
             cid=cid,
             content=cleaned_content,
+            video_time=video_time,
             sentiment_score=score,
             sentiment_label=sentiment_label
         )

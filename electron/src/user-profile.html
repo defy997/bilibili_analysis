@@ -249,10 +249,15 @@
             vipChart.setOption({
                 backgroundColor: 'transparent',
                 tooltip: { trigger: 'item' },
-                legend: { bottom: '0%', textStyle: { color: '#fff' } },
+                legend: {
+                    bottom: '0%',
+                    left: 'center',
+                    textStyle: { color: '#fff' }
+                },
                 series: [{
                     type: 'pie',
                     radius: ['40%', '70%'],
+                    center: ['50%', '45%'],
                     itemStyle: { borderRadius: 8, borderColor: 'rgba(20,20,30,0.8)', borderWidth: 2 },
                     label: { show: false },
                     data: [
@@ -268,20 +273,33 @@
             levelChart.setOption({
                 backgroundColor: 'transparent',
                 tooltip: { trigger: 'axis' },
-                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                legend: {
+                    show: true,
+                    bottom: '0%',
+                    left: 'center',
+                    textStyle: { color: '#fff' },
+                    data: ['User Count']
+                },
+                grid: { left: '3%', right: '4%', bottom: '10%', top: '8%', containLabel: true },
                 xAxis: {
                     type: 'category',
                     data: ['LV0', 'LV1', 'LV2', 'LV3', 'LV4', 'LV5', 'LV6'],
                     axisLine: { lineStyle: { color: '#444' } },
-                    axisLabel: { color: '#888' }
+                    axisLabel: { color: '#888' },
+                    name: '用户等级',
+                    nameLocation: 'middle',
+                    nameGap: 25,
+                    nameTextStyle: { color: '#888', fontSize: 12 }
                 },
                 yAxis: {
                     type: 'value',
+                    name: '用户数量',
                     axisLine: { show: false },
                     splitLine: { lineStyle: { color: '#333' } },
                     axisLabel: { color: '#888' }
                 },
                 series: [{
+                    name: 'User Count',
                     data: Array(7).fill(0),
                     type: 'bar',
                     itemStyle: {
@@ -290,6 +308,12 @@
                             return colors[params.dataIndex] || '#3b82f6';
                         },
                         borderRadius: [4, 4, 0, 0]
+                    },
+                    label: {
+                        show: true,
+                        position: 'top',
+                        color: '#888',
+                        fontSize: 10
                     }
                 }]
             });
@@ -414,12 +438,26 @@
         }
 
         function updateLocationChart(locationData) {
-            if (!locationData || locationData.length === 0) return;
+            if (!locationData || locationData.length === 0) {
+                locationChart.setOption({
+                    title: {
+                        text: '暂无IP属地数据',
+                        left: 'center',
+                        top: 'center',
+                        textStyle: { color: '#fff', opacity: 0.4, fontSize: 14, fontWeight: 'normal' }
+                    },
+                    xAxis: { show: false },
+                    yAxis: { show: false },
+                    series: []
+                });
+                return;
+            }
 
             const provinces = locationData.map(item => item.province).reverse();
             const values = locationData.map(item => item.value).reverse();
 
             locationChart.setOption({
+                title: { show: false },
                 yAxis: { data: provinces },
                 series: [{ data: values }]
             });

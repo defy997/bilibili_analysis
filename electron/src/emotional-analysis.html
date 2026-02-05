@@ -229,10 +229,15 @@
             pieChart.setOption({
                 backgroundColor: 'transparent',
                 tooltip: { trigger: 'item' },
-                legend: { bottom: '0%', textStyle: { color: '#fff' } },
+                legend: {
+                    bottom: '0%',
+                    left: 'center',
+                    textStyle: { color: '#fff' }
+                },
                 series: [{
                     type: 'pie',
                     radius: ['40%', '70%'],
+                    center: ['50%', '45%'],
                     itemStyle: { borderRadius: 8, borderColor: 'rgba(20,20,30,0.8)', borderWidth: 2 },
                     label: { show: false },
                     data: [
@@ -327,30 +332,60 @@
             danmuHeatmapChart = echarts.init(danmuDom);
             danmuHeatmapChart.setOption({
                 backgroundColor: 'transparent',
-                tooltip: { trigger: 'axis' },
-                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                tooltip: {
+                    trigger: 'axis',
+                    formatter: function(params) {
+                        const data = params[0];
+                        return `时间: ${data.name}<br/>弹幕数: ${data.value}`;
+                    }
+                },
+                grid: { left: '3%', right: '8%', bottom: '15%', top: '10%', containLabel: true },
                 xAxis: {
                     type: 'category',
                     data: [],
                     axisLine: { lineStyle: { color: '#444' } },
-                    axisLabel: { color: '#888' }
+                    axisLabel: {
+                        color: '#888',
+                        interval: 'auto',
+                        rotate: 45,
+                        fontSize: 10,
+                        formatter: function(value) {
+                            // 保留原始格式
+                            return value;
+                        }
+                    },
+                    name: '视频时间',
+                    nameLocation: 'middle',
+                    nameGap: 25,
+                    nameTextStyle: { color: '#888', fontSize: 12 }
                 },
                 yAxis: {
                     type: 'value',
-                    name: 'Danmu Count',
+                    name: '弹幕数量',
                     axisLine: { show: false },
                     splitLine: { lineStyle: { color: '#333' } },
                     axisLabel: { color: '#888' }
                 },
+                visualMap: {
+                    show: true,
+                    min: 0,
+                    max: 100,
+                    calculable: true,
+                    orient: 'vertical',
+                    right: '2%',
+                    top: 'center',
+                    itemHeight: 150,
+                    textStyle: { color: '#fff', fontSize: 10 },
+                    inRange: {
+                        color: ['#4ade80', '#22c55e', '#eab308', '#f97316', '#ef4444']
+                    }
+                },
                 series: [{
                     data: [],
                     type: 'bar',
+                    barWidth: '80%',
                     itemStyle: {
-                        color: (params) => {
-                            // 根据弹幕数量设置颜色深度
-                            const colorList = ['#4ade80', '#94a3b8', '#f472b6'];
-                            return colorList[Math.floor(Math.random() * 3)];
-                        }
+                        borderRadius: [4, 4, 0, 0]
                     }
                 }]
             });
@@ -668,39 +703,61 @@
         function updateDanmuHeatmap(heatmapData) {
             if (!heatmapData || heatmapData.length === 0) {
                 danmuHeatmapChart.setOption({
-                    xAxis: { data: ['No Data'] },
-                    series: [{ data: [0] }]
-                });
+                    xAxis: { data: ['暂无数据'] },
+                    series: [{ data: [0] }],
+                    visualMap: { show: false }
+                }, true); // true 表示不合并，完全替换
                 return;
             }
 
-            const timeLabels = heatmapData.map(item => {
+            // 只取前50个点，避免标签过于密集
+            const maxPoints = 50;
+            const displayData = heatmapData.length > maxPoints ? heatmapData.slice(0, maxPoints) : heatmapData;
+
+            const timeLabels = displayData.map(item => {
                 // 转换秒为分:秒格式
                 const minutes = Math.floor(item.time / 60);
                 const seconds = Math.floor(item.time % 60);
                 return `${minutes}:${seconds.toString().padStart(2, '0')}`;
             });
 
-            const counts = heatmapData.map(item => item.count);
+            const counts = displayData.map(item => item.count);
+            const maxCount = Math.max(...counts);
+
+            // 计算显示间隔
+            const totalLabels = timeLabels.length;
+            const interval = totalLabels > 20 ? Math.ceil(totalLabels / 10) : 'auto';
 
             danmuHeatmapChart.setOption({
-                xAxis: { data: timeLabels },
+                xAxis: {
+                    data: timeLabels,
+                    axisLabel: {
+                        interval: interval,
+                        rotate: totalLabels > 15 ? 45 : 0,
+                        fontSize: 10
+                    }
+                },
+                visualMap: {
+                    min: 0,
+                    max: maxCount,
+                    show: true,
+                    orient: 'vertical',
+                    right: '2%',
+                    top: 'center',
+                    itemHeight: 120,
+                    textStyle: { color: '#fff', fontSize: 10 },
+                    inRange: {
+                        color: ['#4ade80', '#22c55e', '#eab308', '#f97316', '#ef4444']
+                    }
+                },
                 series: [{
                     data: counts,
+                    barWidth: '80%',
                     itemStyle: {
-                        color: (params) => {
-                            const value = params.value;
-                            const maxValue = Math.max(...counts);
-                            const ratio = value / maxValue;
-
-                            // 根据数量比例设置颜色
-                            if (ratio > 0.7) return '#f472b6'; // 高密度-粉色
-                            if (ratio > 0.4) return '#94a3b8'; // 中密度-灰色
-                            return '#4ade80'; // 低密度-绿色
-                        }
+                        borderRadius: [4, 4, 0, 0]
                     }
                 }]
-            });
+            }, true); // 不合并，完全替换之前的配置
         }
 
         // === 更新高赞评论列表 ===

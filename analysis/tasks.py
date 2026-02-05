@@ -214,8 +214,18 @@ def crawl_and_analyze_danmu(self, bvid, cid, headers, cookie):
         batch_size = 64  # 弹幕批量分析
         pending_texts = []
         pending_indices = []
+        # 用于存储 video_time（兼容新旧数据格式）
+        pending_video_times = []
 
-        for i, content in enumerate(danmaku_list):
+        for i, danmu in enumerate(danmaku_list):
+            # 兼容新旧数据格式：可能是字符串或字典
+            if isinstance(danmu, dict):
+                content = danmu.get('content', '')
+                video_time = danmu.get('video_time', 0.0)
+            else:
+                content = danmu
+                video_time = 0.0
+            
             if not content:
                 continue
 
@@ -229,6 +239,7 @@ def crawl_and_analyze_danmu(self, bvid, cid, headers, cookie):
             # 收集到待分析批次
             pending_texts.append(cleaned)
             pending_indices.append(i)
+            pending_video_times.append(video_time)
 
             # 如果批次满了，进行分析和保存
             if len(pending_texts) >= batch_size:
@@ -238,10 +249,18 @@ def crawl_and_analyze_danmu(self, bvid, cid, headers, cookie):
                 # 逐条保存结果
                 for idx, original_idx in enumerate(pending_indices):
                     original_content = danmaku_list[original_idx]
+                    # 兼容新旧格式重新获取
+                    if isinstance(original_content, dict):
+                        content_to_save = original_content.get('content', '')
+                        video_time_to_save = original_content.get('video_time', 0.0)
+                    else:
+                        content_to_save = original_content
+                        video_time_to_save = 0.0
+                    
                     score = scores[idx]
                     sentiment = get_sentiment_label(score)
 
-                    result = save_danmaku(cid, original_content, score, sentiment)
+                    result = save_danmaku(cid, content_to_save, score, sentiment, video_time_to_save)
                     if result:
                         danmu_count += 1
                         if sentiment == 'positive':
@@ -254,6 +273,7 @@ def crawl_and_analyze_danmu(self, bvid, cid, headers, cookie):
                 # 清空批次
                 pending_texts = []
                 pending_indices = []
+                pending_video_times = []
 
                 print(f"[DanmuTask] 流水线处理进度: {i+1}/{len(danmaku_list)}")
 
@@ -262,10 +282,18 @@ def crawl_and_analyze_danmu(self, bvid, cid, headers, cookie):
             scores = analyze_sentiment(pending_texts)
             for idx, original_idx in enumerate(pending_indices):
                 original_content = danmaku_list[original_idx]
+                # 兼容新旧格式重新获取
+                if isinstance(original_content, dict):
+                    content_to_save = original_content.get('content', '')
+                    video_time_to_save = original_content.get('video_time', 0.0)
+                else:
+                    content_to_save = original_content
+                    video_time_to_save = 0.0
+                
                 score = scores[idx]
                 sentiment = get_sentiment_label(score)
 
-                result = save_danmaku(cid, original_content, score, sentiment)
+                result = save_danmaku(cid, content_to_save, score, sentiment, video_time_to_save)
                 if result:
                     danmu_count += 1
                     if sentiment == 'positive':
