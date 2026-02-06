@@ -19,6 +19,7 @@ from django.contrib import admin
 from django.urls import path
 from django.http import JsonResponse
 from analysis.views import analyze_by_bvid, video_dashboard, user_profile_dashboard, video_audio_dashboard, audio_task_status, get_config, save_config, async_analyze_video, task_status
+from analysis.views import check_sessdata, refresh_sessdata, generate_qrcode, poll_login, get_cookie_header
 from analysis.auth_views import send_code, register, login, logout, check_login
 
 def index(request):
@@ -47,4 +48,11 @@ urlpatterns = [
     path("api/auth/login/", login, name="login"),
     path("api/auth/logout/", logout, name="logout"),
     path("api/auth/check/", check_login, name="check_login"),
+
+    # B站 SESSDATA 管理
+    path("api/sessdata/check/", check_sessdata, name="check_sessdata"),
+    path("api/sessdata/refresh/", refresh_sessdata, name="refresh_sessdata"),
+    path("api/sessdata/qrcode/", generate_qrcode, name="generate_qrcode"),
+    path("api/sessdata/poll/", poll_login, name="poll_login"),
+    path("api/sessdata/cookie/", get_cookie_header, name="get_cookie_header"),
 ]

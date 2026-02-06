@@ -1,9 +1,6 @@
 from celery import Celery, group, chain, shared_task
 from celery.result import AsyncResult
 import celery
-import json
-from concurrent.futures import ThreadPoolExecutor
-
 
 # 创建 Celery 应用实例（供其他模块导入）
 app = Celery('bilibili_analysis')
@@ -11,121 +8,13 @@ app.config_from_object('django.conf:settings', namespace='CELERY')
 app.autodiscover_tasks()
 
 
-# ============================================================
-# 用户画像统计任务
-# ============================================================
-
-@shared_task(bind=True)
-def calculate_user_profile_stats(self, bvid):
+def get_valid_cookie():
     """
-    并发计算用户画像统计数据
-
-    原来需要 4 次数据库查询，现在使用线程池并发执行：
-    1. 用户等级分布
-    2. VIP 类型分布
-    3. 地域分布 Top15
-    4. 高赞用户 Top10
-
-    结果存储到 Redis 缓存 (TTL: 1小时)
+    获取有效的 B站 Cookie
+    优先从数据库获取，如果无效则返回默认 cookie
     """
-    from .models import Comment, Video
-    from django.db.models import Count, Sum, Avg
-    import redis
-    import time
-
-    print(f"[UserProfile] 开始计算用户画像: bvid={bvid}")
-    start_time = time.time()
-
-    try:
-        # 获取视频信息
-        video = Video.objects.get(bvid=bvid)
-        comments = Comment.objects.filter(video_id=bvid)
-
-        # 使用线程池并发执行 4 个查询
-        def get_level_dist():
-            return list(comments.values('user_level').annotate(
-                count=Count('rpid')
-            ).order_by('user_level'))
-
-        def get_vip_dist():
-            return {
-                "normal": comments.filter(vip_type=0).count(),
-                "monthly_vip": comments.filter(vip_type=1).count(),
-                "annual_vip": comments.filter(vip_type=2).count()
-            }
-
-        def get_location_dist():
-            return list(comments.exclude(
-                location__isnull=True
-            ).exclude(
-                location=''
-            ).values('location').annotate(
-                count=Count('rpid')
-            ).order_by('-count')[:15])
-
-        def get_top_users():
-            return list(comments.values('mid', 'uname').annotate(
-                total_likes=Sum('like_count'),
-                comment_count=Count('rpid')
-            ).order_by('-total_likes')[:10])
-
-        # 并发执行 4 个查询
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            future_level = executor.submit(get_level_dist)
-            future_vip = executor.submit(get_vip_dist)
-            future_location = executor.submit(get_location_dist)
-            future_top = executor.submit(get_top_users)
-
-            level_distribution = future_level.result()
-            vip_distribution = future_vip.result()
-            location_distribution = future_location.result()
-            top_users = future_top.result()
-
-        # 计算汇总数据
-        total_users = comments.values('mid').distinct().count()
-        vip_total = vip_distribution['monthly_vip'] + vip_distribution['annual_vip']
-        vip_ratio = round(vip_total / total_users * 100, 1) if total_users > 0 else 0
-        avg_level = comments.aggregate(avg=Avg('user_level'))['avg']
-        avg_level = round(avg_level, 1) if avg_level else 0
-
-        result = {
-            "success": True,
-            "video_info": {
-                "bvid": video.bvid,
-                "title": video.title,
-            },
-            "overview_stats": {
-                "total_users": total_users,
-                "vip_ratio": vip_ratio,
-                "avg_level": avg_level,
-            },
-            "level_distribution": level_distribution,
-            "vip_distribution": vip_distribution,
-            "location_distribution": location_distribution,
-            "top_users": top_users,
-        }
-
-        # 存储到 Redis 缓存
-        try:
-            r = redis.Redis(host='localhost', port=6379, db=0, socket_timeout=2)
-            cache_key = f"user_profile:{bvid}"
-            r.setex(cache_key, 3600, json.dumps(result, ensure_ascii=False, default=str))
-            print(f"[UserProfile] 缓存已更新: {cache_key}")
-        except Exception as redis_err:
-            print(f"[UserProfile] Redis 缓存失败: {redis_err}")
-
-        elapsed = time.time() - start_time
-        print(f"[UserProfile] 计算完成: 耗时{elapsed:.2f}s, 用户数={total_users}")
-
-        return result
-
-    except Video.DoesNotExist:
-        return {"success": False, "error": "Video not found"}
-    except Exception as e:
-        print(f"[UserProfile] 计算失败: {e}")
-        import traceback
-        traceback.print_exc()
-        return {"success": False, "error": str(e)}
+    from .services import ensure_valid_cookie
+    return ensure_valid_cookie()
 
 
 @shared_task(bind=True)
@@ -137,14 +26,19 @@ def analyze_sentiment_chunk(self, text_chunk):
 
 
 @shared_task(bind=True)
-def analyze_audio_task(self, bvid, cookie):
+def analyze_audio_task(self, bvid, cookie=None):
     """
     异步音频情感分析任务
 
     :param bvid: 视频BV号
-    :param cookie: B站Cookie
+    :param cookie: B站Cookie（可选，如果不提供则自动获取）
     :return: timeline 数据
     """
+    # 如果没有提供 cookie，自动获取有效的 cookie
+    if cookie is None:
+        cookie = get_valid_cookie()
+        print(f"[analyze_audio_task] 自动获取到 cookie: {cookie[:30]}...")
+
     headers = {
         'authority': 'api.bilibili.com',
         'accept': 'application/json, text/plain, */*',
@@ -160,10 +54,16 @@ def analyze_audio_task(self, bvid, cookie):
 
 
 @shared_task(bind=True)
-def crawl_and_analyze_comments(self, bvid, aid, headers, cookie):
+def crawl_and_analyze_comments(self, bvid, aid, headers=None, cookie=None):
     """
     爬取并分析评论的任务 - 流水线模式
     边爬取边分析边保存，而不是全部爬完再处理
+
+    Args:
+        bvid: 视频BV号
+        aid: 视频AID
+        headers: 请求头（可选，自动生成）
+        cookie: B站Cookie（可选，自动获取）
 
     Returns:
         {
@@ -175,6 +75,22 @@ def crawl_and_analyze_comments(self, bvid, aid, headers, cookie):
             'neutral_count': int
         }
     """
+    # 如果没有提供 cookie，自动获取有效的 cookie
+    if cookie is None:
+        cookie = get_valid_cookie()
+        print(f"[crawl_and_analyze_comments] 自动获取到 cookie: {cookie[:30]}...")
+
+    # 如果没有提供 headers，自动生成
+    if headers is None:
+        headers = {
+            'authority': 'api.bilibili.com',
+            'accept': 'application/json, text/plain, */*',
+            'accept-language': 'zh-CN,zh;q=0.9',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'referer': 'https://www.bilibili.com/',
+            'cookie': cookie,
+        }
+
     from .services import (
         crawl_comments, clean_text, is_meaningful_text,
         analyze_sentiment, get_sentiment_label, save_comment,
@@ -293,10 +209,16 @@ def crawl_and_analyze_comments(self, bvid, aid, headers, cookie):
 
 
 @shared_task(bind=True)
-def crawl_and_analyze_danmu(self, bvid, cid, headers, cookie):
+def crawl_and_analyze_danmu(self, bvid, cid, headers=None, cookie=None):
     """
     爬取并分析弹幕的任务 - 流水线模式
     边爬取边分析边保存，而不是全部爬完再处理
+
+    Args:
+        bvid: 视频BV号
+        cid: 弹幕CID
+        headers: 请求头（可选，自动生成）
+        cookie: B站Cookie（可选，自动获取）
 
     Returns:
         {
@@ -308,6 +230,22 @@ def crawl_and_analyze_danmu(self, bvid, cid, headers, cookie):
             'neutral_count': int
         }
     """
+    # 如果没有提供 cookie，自动获取有效的 cookie
+    if cookie is None:
+        cookie = get_valid_cookie()
+        print(f"[crawl_and_analyze_danmu] 自动获取到 cookie: {cookie[:30]}...")
+
+    # 如果没有提供 headers，自动生成
+    if headers is None:
+        headers = {
+            'authority': 'api.bilibili.com',
+            'accept': 'application/json, text/plain, */*',
+            'accept-language': 'zh-CN,zh;q=0.9',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'referer': 'https://www.bilibili.com/',
+            'cookie': cookie,
+        }
+
     from .services import (
         crawl_danmaku, clean_text, is_meaningful_text,
         analyze_sentiment, get_sentiment_label, save_danmaku

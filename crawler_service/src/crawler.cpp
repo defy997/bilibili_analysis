@@ -1,4 +1,5 @@
 #include "crawler.h"
+#include "wbi_signer.h"
 #include "pugixml.hpp"
 #include <curl/curl.h>
 #include <random>
@@ -219,7 +220,17 @@ json Crawler::crawl_video(const std::string& bvid, const std::string& cookie) {
     // 每个视频开始时重置为直连模式
     reset_to_direct();
 
-    std::string url = "https://api.bilibili.com/x/web-interface/view?bvid=" + bvid;
+    // Wbi 签名
+    WbiSigner& wbi = WbiSigner::get_instance();
+    wbi.init();
+
+    std::map<std::string, std::string> params;
+    params["bvid"] = bvid;
+
+    auto signed_params = wbi.sign_params(params);
+    std::string query = WbiSigner::map_to_query(signed_params);
+
+    std::string url = "https://api.bilibili.com/x/web-interface/view?" + query;
     std::string body = http_get(url, cookie);
     json resp = json::parse(body);
 
@@ -248,6 +259,10 @@ json Crawler::crawl_comments(int64_t aid, const std::string& cookie) {
     // 每个视频开始时重置为直连模式
     reset_to_direct();
 
+    // Wbi 签名
+    WbiSigner& wbi = WbiSigner::get_instance();
+    wbi.init();
+
     json all_comments = json::array();
     int64_t next_cursor = 0;
     int page = 0;
@@ -256,14 +271,22 @@ json Crawler::crawl_comments(int64_t aid, const std::string& cookie) {
 
     while (true) {
         page++;
-        std::ostringstream url;
-        url << "https://api.bilibili.com/x/v2/reply/main"
-            << "?type=1&oid=" << aid
-            << "&mode=3&next=" << next_cursor;
+
+        // Wbi 签名参数
+        std::map<std::string, std::string> params;
+        params["type"] = "1";
+        params["oid"] = std::to_string(aid);
+        params["mode"] = "3";
+        params["next"] = std::to_string(next_cursor);
+
+        auto signed_params = wbi.sign_params(params);
+        std::string query = WbiSigner::map_to_query(signed_params);
+
+        std::string url = "https://api.bilibili.com/x/v2/reply/main?" + query;
 
         for (int retry = 0; retry < config_.max_retries; retry++) {
             try {
-                std::string body = http_get(url.str(), cookie);
+                std::string body = http_get(url, cookie);
                 json resp = json::parse(body);
 
                 if (resp["code"].get<int>() != 0) {
@@ -377,13 +400,22 @@ json Crawler::crawl_audio_url(const std::string& bvid, int64_t cid, const std::s
     // 每个视频开始时重置为直连模式
     reset_to_direct();
 
-    std::ostringstream url;
-    url << "https://api.bilibili.com/x/player/playurl"
-        << "?bvid=" << bvid
-        << "&cid=" << cid
-        << "&fnval=16&fnver=0&fourk=1";
+    // Wbi 签名
+    WbiSigner& wbi = WbiSigner::get_instance();
+    wbi.init();
 
-    std::string body = http_get(url.str(), cookie);
+    std::map<std::string, std::string> params;
+    params["bvid"] = bvid;
+    params["cid"] = std::to_string(cid);
+    params["fnval"] = "16";
+    params["fnver"] = "0";
+    params["fourk"] = "1";
+
+    auto signed_params = wbi.sign_params(params);
+    std::string query = WbiSigner::map_to_query(signed_params);
+
+    std::string url = "https://api.bilibili.com/x/player/playurl?" + query;
+    std::string body = http_get(url, cookie);
     json resp = json::parse(body);
 
     if (resp["code"].get<int>() != 0) {

@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>B站登录 - BiliMood</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        }
+        .card-glass {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .scan-line {
+            animation: scan 2s linear infinite;
+        }
+        @keyframes scan {
+            0%, 100% { top: 0; }
+            50% { top: calc(100% - 2px); }
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen">
+    <div id="app" class="container mx-auto px-4 py-8">
+        <!-- 头部导航 -->
+        <nav class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-white">
+                <span class="text-pink-500">Bili</span>Mood
+            </h1>
+            <button @click="goBack" class="text-gray-400 hover:text-white transition">
+                ← 返回首页
+            </button>
+        </nav>
+
+        <!-- 登录状态卡片 -->
+        <div class="max-w-md mx-auto">
+            <div class="card-glass rounded-xl p-6 mb-6">
+                <h2 class="text-xl font-semibold text-white mb-4 flex items-center">
+                    <svg class="w-6 h-6 mr-2 text-pink-500" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                    </svg>
+                    当前登录状态
+                </h2>
+                
+                <!-- 已登录状态 -->
+                <div v-if="loginStatus.valid && !needRefresh" class="space-y-3">
+                    <div class="flex items-center text-green-400">
+                        <span class="w-3 h-3 bg-green-400 rounded-full mr-2"></span>
+                        SESSDATA 有效
+                    </div>
+                    <p class="text-gray-400 text-sm">
+                        {{ loginStatus.message }}
+                    </p>
+                    <div class="bg-gray-800 rounded p-3 text-xs text-gray-400 break-all">
+                        {{ loginStatus.sessdata }}
+                    </div>
+                    <button @click="refreshCookie" 
+                            class="w-full mt-4 bg-pink-600 hover:bg-pink-700 text-white py-2 px-4 rounded-lg transition flex items-center justify-center">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        刷新凭证
+                    </button>
+                </div>
+
+                <!-- 需要刷新状态 -->
+                <div v-else-if="loginStatus.valid && needRefresh" class="space-y-3">
+                    <div class="flex items-center text-yellow-400">
+                        <span class="w-3 h-3 bg-yellow-400 rounded-full mr-2"></span>
+                        凭证需要刷新
+                    </div>
+                    <p class="text-gray-400 text-sm">
+                        {{ loginStatus.message }}
+                    </p>
+                    <button @click="refreshCookie" 
+                            class="w-full mt-4 bg-yellow-600 hover:bg-yellow-700 text-white py-2 px-4 rounded-lg transition flex items-center justify-center">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        立即刷新
+                    </button>
+                </div>
+
+                <!-- 未登录状态 -->
+                <div v-else class="space-y-3">
+                    <div class="flex items-center text-red-400">
+                        <span class="w-3 h-3 bg-red-400 rounded-full mr-2"></span>
+                        {{ loginStatus.message || '请登录B站账号' }}
+                    </div>
+                </div>
+            </div>
+
+            <!-- 二维码登录卡片 -->
+            <div class="card-glass rounded-xl p-6">
+                <h2 class="text-xl font-semibold text-white mb-4 flex items-center">
+                    <svg class="w-6 h-6 mr-2 text-pink-500" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M3 11h8V3H3v8zm2-6h4v4H5V5zm8-2v8h8V3h-8zm6 6h-4V5h4v4zM3 21h8v-8H3v8zm2-6h4v4H5v-4zm13 2h-2v2h2v2h-2v-2h-2v2h-2v-2h2v-2h-2v-2h2v2h2v-2h2v2zm0-2V13h2v2h-2zm0 4h2v2h-2v-2zm-4-4h2v2h-2v-2zm0 4h2v2h-2v-2z"/>
+                    </svg>
+                    B站扫码登录
+                </h2>
+
+                <!-- 加载状态 -->
+                <div v-if="loading" class="flex justify-center py-8">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500"></div>
+                </div>
+
+                <!-- 二维码显示 -->
+                <div v-else-if="qrCode && !loginSuccess" class="text-center">
+                    <div class="relative inline-block p-4 bg-white rounded-lg mb-4">
+                        <img :src="qrCode" alt="登录二维码" class="w-48 h-48">
+                        <!-- 扫描动画 -->
+                        <div v-if="polling" class="scan-line absolute left-0 right-0 h-1 bg-pink-500"></div>
+                    </div>
+                    
+                    <p class="text-gray-400 text-sm mb-2">
+                        {{ statusMessage }}
+                    </p>
+                    
+                    <div class="flex justify-center space-x-2">
+                        <button @click="startPolling" 
+                                :disabled="polling"
+                                class="bg-pink-600 hover:bg-pink-700 disabled:bg-gray-600 text-white py-2 px-4 rounded-lg transition">
+                            {{ polling ? '扫描中...' : '重新扫描' }}
+                        </button>
+                        <button @click="generateQRCode" 
+                                class="bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded-lg transition">
+                            刷新二维码
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 登录成功 -->
+                <div v-else-if="loginSuccess" class="text-center py-8">
+                    <div class="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-semibold text-white mb-2">登录成功!</h3>
+                    <p class="text-gray-400 mb-4">用户ID: {{ loginResult.mid }}</p>
+                    <button @click="checkStatus" 
+                            class="bg-pink-600 hover:bg-pink-700 text-white py-2 px-6 rounded-lg transition">
+                        开始使用
+                    </button>
+                </div>
+
+                <!-- 错误信息 -->
+                <div v-if="errorMessage" class="mt-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg">
+                    <p class="text-red-400 text-sm">{{ errorMessage }}</p>
+                </div>
+            </div>
+
+            <!-- 提示信息 -->
+            <div class="mt-6 text-center text-gray-500 text-sm">
+                <p>请使用B站APP扫描二维码登录</p>
+                <p class="mt-1">登录成功后凭证将自动保存</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+
+        const app = createApp({
+            setup() {
+                const loading = ref(false);
+                const qrCode = ref('');
+                const authCode = ref('');
+                const polling = ref(false);
+                const loginSuccess = ref(false);
+                const loginResult = ref({});
+                const errorMessage = ref('');
+                const statusMessage = ref('请使用B站APP扫描二维码');
+                const loginStatus = ref({ valid: false, message: '', needRefresh: false });
+
+                // 检查登录状态
+                const checkStatus = async () => {
+                    try {
+                        const res = await axios.get('/api/sessdata/check/');
+                        loginStatus.value = res.data.data;
+                        needRefresh.value = res.data.data.need_refresh;
+                    } catch (e) {
+                        loginStatus.value = { valid: false, message: '检查失败' };
+                    }
+                };
+
+                // 生成二维码
+                const generateQRCode = async () => {
+                    loading.value = true;
+                    errorMessage.value = '';
+                    
+                    try {
+                        const res = await axios.get('/api/sessdata/qrcode/');
+                        if (res.data.success) {
+                            qrCode.value = res.data.data.qr_image;
+                            authCode.value = res.data.data.auth_code;
+                            statusMessage.value = '请使用B站APP扫描二维码';
+                            startPolling();
+                        } else {
+                            errorMessage.value = res.data.message;
+                        }
+                    } catch (e) {
+                        errorMessage.value = e.response?.data?.message || '生成二维码失败';
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+                // 开始轮询
+                const startPolling = () => {
+                    if (!authCode.value) return;
+                    
+                    polling.value = true;
+                    pollLogin();
+                };
+
+                // 轮询登录状态
+                const pollLogin = async () => {
+                    if (!polling.value) return;
+
+                    try {
+                        const res = await axios.post('/api/sessdata/poll/', {
+                            auth_code: authCode.value
+                        });
+
+                        if (res.data.success) {
+                            loginSuccess.value = true;
+                            polling.value = false;
+                            loginResult.value = res.data.tokens;
+                            statusMessage.value = '登录成功!';
+                            
+                            // 刷新状态
+                            await checkStatus();
+                        } else if (res.data.status === 'waiting') {
+                            statusMessage.value = '等待扫码...';
+                            setTimeout(pollLogin, 2000);
+                        } else if (res.data.status === 'confirmed') {
+                            statusMessage.value = '已扫码，等待确认...';
+                            setTimeout(pollLogin, 2000);
+                        } else {
+                            errorMessage.value = res.data.message;
+                            polling.value = false;
+                        }
+                    } catch (e) {
+                        if (e.response?.status === 400) {
+                            errorMessage.value = e.response?.data?.message || '登录失败';
+                            polling.value = false;
+                        } else {
+                            setTimeout(pollLogin, 2000);
+                        }
+                    }
+                };
+
+                // 刷新凭证
+                const refreshCookie = async () => {
+                    try {
+                        const res = await axios.post('/api/sessdata/refresh/');
+                        if (res.data.success) {
+                            alert('凭证刷新成功!');
+                            await checkStatus();
+                        } else {
+                            errorMessage.value = res.data.message;
+                        }
+                    } catch (e) {
+                        errorMessage.value = e.response?.data?.message || '刷新失败';
+                    }
+                };
+
+                // 返回首页
+                const goBack = () => {
+                    window.location.href = 'index.html';
+                };
+
+                onMounted(async () => {
+                    await checkStatus();
+                    if (!loginStatus.value.valid || loginStatus.value.need_refresh) {
+                        await generateQRCode();
+                    }
+                });
+
+                return {
+                    loading,
+                    qrCode,
+                    polling,
+                    loginSuccess,
+                    loginResult,
+                    errorMessage,
+                    statusMessage,
+                    loginStatus,
+                    needRefresh: ref(false),
+                    checkStatus,
+                    generateQRCode,
+                    startPolling,
+                    refreshCookie,
+                    goBack
+                };
+            }
+        });
+
+        app.mount('#app');
+    </script>
+</body>
+</html>

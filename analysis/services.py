@@ -14,6 +14,72 @@ from django.utils import timezone
 from .sentiment_model import SentimentModel
 from .models import Video, Comment, Danmu, UserConfig
 
+# ============================================================
+# SESSDATA 管理
+# ============================================================
+
+def get_sessdata_from_db():
+    """
+    从数据库获取有效的 SESSDATA
+    
+    Returns:
+        str: SESSDATA cookie 字符串，如果无效则返回 None
+    """
+    try:
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        
+        # 查找有 bilibili 凭证的用户
+        user = User.objects.filter(
+            bilibili_mid__isnull=False,
+            sessdata__isnull=False
+        ).first()
+        
+        if not user or not user.sessdata:
+            return None
+        
+        # 验证 SESSDATA 是否有效
+        try:
+            from .sessdata_manager import SessdataManager
+            manager = SessdataManager(user)
+            result = manager.check_sessdata_valid()
+            
+            if result.get('valid') and not result.get('need_refresh'):
+                return f"SESSDATA={user.sessdata}"
+            
+            # 如果需要刷新，尝试自动刷新
+            if result.get('need_refresh'):
+                refresh_result = manager.refresh_sessdata()
+                if refresh_result['success']:
+                    # 刷新成功后重新获取
+                    user.refresh_from_db()
+                    return f"SESSDATA={user.sessdata}"
+        except Exception as e:
+            print(f"[get_sessdata_from_db] 验证 SESSDATA 失败: {e}")
+        
+        return None
+    except Exception as e:
+        print(f"[get_sessdata_from_db] 获取 SESSDATA 失败: {e}")
+        return None
+
+
+def ensure_valid_cookie():
+    """
+    确保获取到有效的 Cookie
+    
+    Returns:
+        str: 可用的 Cookie 字符串
+    """
+    # 1. 尝试从数据库获取
+    sessdata = get_sessdata_from_db()
+    if sessdata:
+        return sessdata
+    
+    # 2. 返回硬编码的默认值（作为 fallback）
+    print("[ensure_valid_cookie] 数据库中无可用 SESSDATA，使用默认配置")
+    return "SESSDATA=55d2ed48%2C1785846835%2Cd80a0%2A22CjDxZL1htFveMUpzPXZrxp6zwh1K5neWuRyhGlZxWZ1A3xBGw6NIs8AhnyqkO5tfmBgSVmhQTHVlNDNaMzlENjNqYjQwcGNPRzN5T05YcTN3SFRLT2ZvOW9sZHFvS295WmdRdW1YQXZzc01GMEdBek1YTGZTajNINW1jdmhRaUN4MWV6QnFLcGh3IIEC"
+
+
 # 视频处理锁，防止同一视频被并发分析
 _video_processing_locks = {}
 _locks_lock = threading.Lock()
@@ -1550,15 +1616,6 @@ def process_video(bvid, headers, cookie):
         # 记录原始爬取评论数
         video_obj.raw_comment_count = len(all_comments)
         video_obj.save(update_fields=['raw_comment_count'])
-
-        # 【新增】并行触发用户画像统计（爬取完成后立即开始）
-        # 这样情感分析还在进行时，统计任务就已经在后台计算了
-        try:
-            from .tasks import calculate_user_profile_stats
-            calculate_user_profile_stats.delay(bvid)
-            print(f"[并行] 用户画像统计任务已提交: {bvid}")
-        except Exception as profile_err:
-            print(f"[并行] 提交统计任务失败: {profile_err}")
 
         # 3. 数据清洗和过滤（评论）
         analysis_comments = []

@@ -346,6 +346,10 @@
                 <i class="fa-solid fa-expand"></i>
                 <span>Expand</span>
             </button>
+            <button onclick="openBilibiliLogin()" class="hover:text-pink-400 transition-colors flex items-center gap-1" title="扫码登录B站账号">
+                <i class="fa-brands fa-bilibili"></i>
+                <span>B站登录</span>
+            </button>
             <button onclick="login()" class="hover:text-pink-400 transition-colors flex items-center gap-1">
                 <i class="fa-solid fa-user"></i>
                 <span>Login</span>
@@ -815,6 +819,12 @@
             // 展开功能
             showToast('Expand feature coming soon', 'info');
         }
+
+        // === 打开B站扫码登录页面 ===
+        function openBilibiliLogin() {
+            ipcRenderer.send('open-bilibili-login-window');
+        }
+
         // === API 基础配置 ===
         const API_BASE = 'http://118.25.39.91:8000';
         
