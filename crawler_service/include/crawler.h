@@ -39,6 +39,9 @@ private:
     // 412 时刷新代理
     void rotate_proxy();
 
+    // 重置为直连模式（每个视频开始时调用）
+    void reset_to_direct();
+
     // HTTP GET，自动挂代理
     std::string http_get(const std::string& url, const std::string& cookie);
 

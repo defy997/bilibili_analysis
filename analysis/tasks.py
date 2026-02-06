@@ -1,11 +1,131 @@
 from celery import Celery, group, chain, shared_task
 from celery.result import AsyncResult
 import celery
+import json
+from concurrent.futures import ThreadPoolExecutor
+
 
 # 创建 Celery 应用实例（供其他模块导入）
 app = Celery('bilibili_analysis')
 app.config_from_object('django.conf:settings', namespace='CELERY')
 app.autodiscover_tasks()
+
+
+# ============================================================
+# 用户画像统计任务
+# ============================================================
+
+@shared_task(bind=True)
+def calculate_user_profile_stats(self, bvid):
+    """
+    并发计算用户画像统计数据
+
+    原来需要 4 次数据库查询，现在使用线程池并发执行：
+    1. 用户等级分布
+    2. VIP 类型分布
+    3. 地域分布 Top15
+    4. 高赞用户 Top10
+
+    结果存储到 Redis 缓存 (TTL: 1小时)
+    """
+    from .models import Comment, Video
+    from django.db.models import Count, Sum, Avg
+    import redis
+    import time
+
+    print(f"[UserProfile] 开始计算用户画像: bvid={bvid}")
+    start_time = time.time()
+
+    try:
+        # 获取视频信息
+        video = Video.objects.get(bvid=bvid)
+        comments = Comment.objects.filter(video_id=bvid)
+
+        # 使用线程池并发执行 4 个查询
+        def get_level_dist():
+            return list(comments.values('user_level').annotate(
+                count=Count('rpid')
+            ).order_by('user_level'))
+
+        def get_vip_dist():
+            return {
+                "normal": comments.filter(vip_type=0).count(),
+                "monthly_vip": comments.filter(vip_type=1).count(),
+                "annual_vip": comments.filter(vip_type=2).count()
+            }
+
+        def get_location_dist():
+            return list(comments.exclude(
+                location__isnull=True
+            ).exclude(
+                location=''
+            ).values('location').annotate(
+                count=Count('rpid')
+            ).order_by('-count')[:15])
+
+        def get_top_users():
+            return list(comments.values('mid', 'uname').annotate(
+                total_likes=Sum('like_count'),
+                comment_count=Count('rpid')
+            ).order_by('-total_likes')[:10])
+
+        # 并发执行 4 个查询
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            future_level = executor.submit(get_level_dist)
+            future_vip = executor.submit(get_vip_dist)
+            future_location = executor.submit(get_location_dist)
+            future_top = executor.submit(get_top_users)
+
+            level_distribution = future_level.result()
+            vip_distribution = future_vip.result()
+            location_distribution = future_location.result()
+            top_users = future_top.result()
+
+        # 计算汇总数据
+        total_users = comments.values('mid').distinct().count()
+        vip_total = vip_distribution['monthly_vip'] + vip_distribution['annual_vip']
+        vip_ratio = round(vip_total / total_users * 100, 1) if total_users > 0 else 0
+        avg_level = comments.aggregate(avg=Avg('user_level'))['avg']
+        avg_level = round(avg_level, 1) if avg_level else 0
+
+        result = {
+            "success": True,
+            "video_info": {
+                "bvid": video.bvid,
+                "title": video.title,
+            },
+            "overview_stats": {
+                "total_users": total_users,
+                "vip_ratio": vip_ratio,
+                "avg_level": avg_level,
+            },
+            "level_distribution": level_distribution,
+            "vip_distribution": vip_distribution,
+            "location_distribution": location_distribution,
+            "top_users": top_users,
+        }
+
+        # 存储到 Redis 缓存
+        try:
+            r = redis.Redis(host='localhost', port=6379, db=0, socket_timeout=2)
+            cache_key = f"user_profile:{bvid}"
+            r.setex(cache_key, 3600, json.dumps(result, ensure_ascii=False, default=str))
+            print(f"[UserProfile] 缓存已更新: {cache_key}")
+        except Exception as redis_err:
+            print(f"[UserProfile] Redis 缓存失败: {redis_err}")
+
+        elapsed = time.time() - start_time
+        print(f"[UserProfile] 计算完成: 耗时{elapsed:.2f}s, 用户数={total_users}")
+
+        return result
+
+    except Video.DoesNotExist:
+        return {"success": False, "error": "Video not found"}
+    except Exception as e:
+        print(f"[UserProfile] 计算失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
 
 
 @shared_task(bind=True)
@@ -222,9 +342,13 @@ def crawl_and_analyze_danmu(self, bvid, cid, headers, cookie):
             if isinstance(danmu, dict):
                 content = danmu.get('content', '')
                 video_time = danmu.get('video_time', 0.0)
+                send_time = danmu.get('send_time', None)
+                user_hash = danmu.get('user_hash', None)
             else:
                 content = danmu
                 video_time = 0.0
+                send_time = None
+                user_hash = None
             
             if not content:
                 continue
@@ -253,14 +377,18 @@ def crawl_and_analyze_danmu(self, bvid, cid, headers, cookie):
                     if isinstance(original_content, dict):
                         content_to_save = original_content.get('content', '')
                         video_time_to_save = original_content.get('video_time', 0.0)
+                        send_time_to_save = original_content.get('send_time', None)
+                        user_hash_to_save = original_content.get('user_hash', None)
                     else:
                         content_to_save = original_content
                         video_time_to_save = 0.0
-                    
+                        send_time_to_save = None
+                        user_hash_to_save = None
+
                     score = scores[idx]
                     sentiment = get_sentiment_label(score)
 
-                    result = save_danmaku(cid, content_to_save, score, sentiment, video_time_to_save)
+                    result = save_danmaku(cid, content_to_save, score, sentiment, video_time_to_save, send_time_to_save, user_hash_to_save)
                     if result:
                         danmu_count += 1
                         if sentiment == 'positive':
@@ -286,14 +414,18 @@ def crawl_and_analyze_danmu(self, bvid, cid, headers, cookie):
                 if isinstance(original_content, dict):
                     content_to_save = original_content.get('content', '')
                     video_time_to_save = original_content.get('video_time', 0.0)
+                    send_time_to_save = original_content.get('send_time', None)
+                    user_hash_to_save = original_content.get('user_hash', None)
                 else:
                     content_to_save = original_content
                     video_time_to_save = 0.0
-                
+                    send_time_to_save = None
+                    user_hash_to_save = None
+
                 score = scores[idx]
                 sentiment = get_sentiment_label(score)
 
-                result = save_danmaku(cid, content_to_save, score, sentiment, video_time_to_save)
+                result = save_danmaku(cid, content_to_save, score, sentiment, video_time_to_save, send_time_to_save, user_hash_to_save)
                 if result:
                     danmu_count += 1
                     if sentiment == 'positive':

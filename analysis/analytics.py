@@ -6,6 +6,89 @@ from django.db.models import Count, Avg, Sum, Q, Max, Min
 from django.db.models.functions import TruncHour, TruncDate
 from .models import Comment, Danmu, Video
 from datetime import datetime, timedelta
+import json
+
+
+def get_user_profile_from_cache(bvid):
+    """
+    从 Redis 缓存获取用户画像数据
+
+    Returns:
+        dict | None: 缓存的数据，如果不存在返回 None
+    """
+    try:
+        import redis
+        r = redis.Redis(host='localhost', port=6379, db=0, socket_timeout=2)
+        cache_key = f"user_profile:{bvid}"
+        data = r.get(cache_key)
+        if data:
+            return json.loads(data)
+    except Exception as e:
+        print(f"[Analytics] Redis 读取失败: {e}")
+    return None
+
+
+def get_user_profile_dashboard(bvid, use_cache=True):
+    """
+    获取用户画像仪表板数据（支持缓存加速）
+
+    Args:
+        bvid: 视频 BV 号
+        use_cache: 是否优先使用缓存 (默认 True)
+
+    Returns:
+        dict: 用户画像数据
+    """
+    # 1. 尝试从 Redis 缓存读取
+    if use_cache:
+        cached = get_user_profile_from_cache(bvid)
+        if cached:
+            print(f"[Analytics] 用户画像从缓存获取: {bvid}")
+            cached["from_cache"] = True
+            return cached
+
+    # 2. 缓存未命中，计算统计数据
+    print(f"[Analytics] 用户画像缓存未命中，开始计算: {bvid}")
+
+    try:
+        video = Video.objects.get(bvid=bvid)
+        comments = Comment.objects.filter(video_id=bvid)
+        total_users = comments.values('mid').distinct().count()
+
+        # 会员分布
+        vip = get_vip_distribution(bvid)
+        vip_total = vip['monthly_vip'] + vip['annual_vip']
+        vip_ratio = round(vip_total / total_users * 100, 1) if total_users > 0 else 0
+
+        # 平均用户等级
+        avg_level = comments.aggregate(avg=Avg('user_level'))['avg']
+        avg_level = round(avg_level, 1) if avg_level else 0
+
+        result = {
+            "success": True,
+            "video_info": {
+                "bvid": video.bvid,
+                "title": video.title,
+            },
+            "overview_stats": {
+                "total_users": total_users,
+                "vip_ratio": vip_ratio,
+                "avg_level": avg_level,
+            },
+            "level_distribution": get_user_level_distribution(bvid),
+            "vip_distribution": vip,
+            "location_distribution": get_location_distribution(bvid, limit=15),
+            "top_users": get_top_users_by_likes(bvid, limit=10),
+            "from_cache": False
+        }
+
+        return result
+
+    except Video.DoesNotExist:
+        return {
+            "success": False,
+            "error": "Video not found"
+        }
 
 
 def get_sentiment_distribution(bvid):
@@ -274,47 +357,6 @@ def get_danmu_stats(bvid):
             "positive": 0,
             "neutral": 0,
             "negative": 0
-        }
-
-
-def get_user_profile_dashboard(bvid):
-    """
-    获取用户画像仪表板数据
-    """
-    try:
-        video = Video.objects.get(bvid=bvid)
-        comments = Comment.objects.filter(video_id=bvid)
-        total_users = comments.values('mid').distinct().count()
-
-        # 会员分布
-        vip = get_vip_distribution(bvid)
-        vip_total = vip['monthly_vip'] + vip['annual_vip']
-        vip_ratio = round(vip_total / total_users * 100, 1) if total_users > 0 else 0
-
-        # 平均用户等级
-        avg_level = comments.aggregate(avg=Avg('user_level'))['avg']
-        avg_level = round(avg_level, 1) if avg_level else 0
-
-        return {
-            "success": True,
-            "video_info": {
-                "bvid": video.bvid,
-                "title": video.title,
-            },
-            "overview_stats": {
-                "total_users": total_users,
-                "vip_ratio": vip_ratio,
-                "avg_level": avg_level,
-            },
-            "level_distribution": get_user_level_distribution(bvid),
-            "vip_distribution": vip,
-            "location_distribution": get_location_distribution(bvid, limit=15),
-            "top_users": get_top_users_by_likes(bvid, limit=10),
-        }
-    except Video.DoesNotExist:
-        return {
-            "success": False,
-            "error": "Video not found"
         }
 
 
