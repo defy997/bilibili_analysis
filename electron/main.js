@@ -463,6 +463,11 @@ function createAnalysisWindow() {
         analysisWindow.show();
         analysisWindow.setAlwaysOnTop(true, 'pop-up-menu');
         analysisWindow.setVisibleOnAllWorkspaces(true);
+
+        // 开发环境下打开开发者工具
+        if (process.env.NODE_ENV === 'development') {
+            analysisWindow.webContents.openDevTools({ mode: 'detach' });
+        }
     });
 
     setTimeout(() => {
@@ -888,9 +893,32 @@ ipcMain.on('broadcast-login-status', (event, status) => {
 // 调试：打开开发者工具
 // ==========================================
 
-ipcMain.on('open-devtools', () => {
-    // 直接为 videoAudioWindow 打开开发者工具
-    if (videoAudioWindow && !videoAudioWindow.isDestroyed()) {
-        videoAudioWindow.webContents.openDevTools({ mode: 'detach' });
+ipcMain.on('open-devtools', (event, windowName = 'all') => {
+    // 为指定窗口或所有窗口打开开发者工具
+    const windows = [];
+
+    if (windowName === 'all' || windowName === 'main') {
+        if (mainWindow && !mainWindow.isDestroyed()) windows.push(mainWindow);
+    }
+    if (windowName === 'all' || windowName === 'analysis') {
+        if (analysisWindow && !analysisWindow.isDestroyed()) windows.push(analysisWindow);
+    }
+    if (windowName === 'all' || windowName === 'user') {
+        if (userProfileWindow && !userProfileWindow.isDestroyed()) windows.push(userProfileWindow);
+    }
+    if (windowName === 'all' || windowName === 'video') {
+        if (videoAudioWindow && !videoAudioWindow.isDestroyed()) windows.push(videoAudioWindow);
+    }
+
+    windows.forEach(win => {
+        try {
+            win.webContents.openDevTools({ mode: 'detach' });
+        } catch (err) {
+            console.error('打开开发者工具失败:', err);
+        }
+    });
+
+    if (windows.length === 0) {
+        console.log('没有找到指定的窗口');
     }
 });

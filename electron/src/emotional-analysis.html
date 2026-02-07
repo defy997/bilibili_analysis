@@ -219,6 +219,13 @@
             initCharts();
             listenForVideoChange();
             loadThemeFromConfig();
+
+            // 按 Ctrl+Shift+O 打开开发者工具调试
+            document.addEventListener('keydown', (e) => {
+                if (e.ctrlKey && e.shiftKey && e.key === 'O') {
+                    ipcRenderer.send('open-devtools', 'analysis');
+                }
+            });
         });
 
         // === 初始化图表 ===
