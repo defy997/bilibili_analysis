@@ -2,7 +2,7 @@ import json
 import requests
 from django.http import JsonResponse, HttpResponseNotAllowed
 from django.views.decorators.csrf import csrf_exempt
-from .services import process_video, check_need_refresh, crawl_video_info, crawl_audio_url, is_video_processing
+from .services import process_video, check_need_refresh, crawl_video_info, crawl_audio_url, is_video_processing, ensure_valid_cookie
 from .analytics import get_comprehensive_dashboard, get_user_profile_dashboard
 from .models import UserConfig, Video, Comment, Danmu, AudioSentiment
 from celery.result import AsyncResult
@@ -587,6 +587,9 @@ def video_audio_dashboard(request, bvid):
                 celery_available = True
             except Exception:
                 pass
+
+            # 获取有效的 Cookie
+            cookie = ensure_valid_cookie()
 
             if celery_available:
                 from .tasks import analyze_audio_task
