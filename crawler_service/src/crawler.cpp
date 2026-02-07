@@ -324,6 +324,8 @@ json Crawler::crawl_comments(int64_t aid, const std::string& cookie) {
                     comment["vip_type"] = vip.value("vipType", 0);
                     comment["vip_label"] = vip.value("label", json::object())
                                             .value("text", "");
+                    // 提取用户等级
+                    comment["user_level"] = member.value("level", 0);
                     auto reply_ctrl = r.value("reply_control", json::object());
                     comment["location"] = reply_ctrl.value("location", "");
                     all_comments.push_back(std::move(comment));

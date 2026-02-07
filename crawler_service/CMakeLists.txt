@@ -26,6 +26,13 @@ target_include_directories(crawler_service PRIVATE
 find_package(CURL REQUIRED)
 target_link_libraries(crawler_service PRIVATE CURL::libcurl)
 
+# Find OpenSSL for MD5
+find_package(OpenSSL REQUIRED)
+target_link_libraries(crawler_service PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+
+# 添加编译定义使用 OpenSSL
+target_compile_definitions(crawler_service PRIVATE USE_OPENSSL)
+
 # Platform-specific
 if(WIN32)
     target_link_libraries(crawler_service PRIVATE ws2_32)

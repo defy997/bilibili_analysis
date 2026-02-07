@@ -1449,6 +1449,13 @@ def save_comment(comment_data, video_obj, score, sentiment_label):
         vip_type = vip_info.get('vipType', 0)
         vip_label = vip_info.get('label', {}).get('text', '')
 
+        # 提取用户等级（新版B站API在member中，备用从mid获取）
+        member_info = comment_data.get('member', {})
+        user_level = member_info.get('level', 0)
+        if not user_level:
+            # 兼容旧版API结构
+            user_level = comment_data.get('user_level', 0)
+
         # 处理时间
         ctime_ts = comment_data.get('ctime')
         ctime_dt = None
@@ -1478,6 +1485,7 @@ def save_comment(comment_data, video_obj, score, sentiment_label):
                 'ctime': ctime_dt,
                 'vip_type': vip_type,
                 'vip_label': vip_label,
+                'user_level': user_level,
                 'parent_rpid': parent_rpid,
                 'sentiment_score': score,
                 'sentiment_label': sentiment_label

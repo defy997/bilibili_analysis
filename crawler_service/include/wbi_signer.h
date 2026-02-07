@@ -4,6 +4,10 @@
 #include <ctime>
 #include <mutex>
 #include <curl/curl.h>
+#include <iostream>
+#include <iomanip>
+#include <sstream>
+#include <openssl/md5.h>
 
 // ============================================================
 // Wbi 签名模块
@@ -46,14 +50,15 @@ public:
             fetch_wbi_keys();
         }
         
-        std::map<std::string, std::string> signed_params = params;
+        // 1. 生成 w_rid (基于原始参数，不含 wts 和 w_rid)
+        std::string w_rid = generate_wrid(params);
         
-        // 1. 添加时间戳
+        // 2. 添加时间戳
         int64_t wts = get_current_timestamp();
-        signed_params["wts"] = std::to_string(wts);
         
-        // 2. 生成 w_rid (MD5签名)
-        std::string w_rid = generate_wrid(signed_params);
+        // 3. 构建最终参数（先排序好的参数，再添加 wts 和 w_rid）
+        std::map<std::string, std::string> signed_params = params;
+        signed_params["wts"] = std::to_string(wts);
         signed_params["w_rid"] = w_rid;
         
         return signed_params;
@@ -205,25 +210,16 @@ private:
         return md5_hash(query);
     }
 
-    // MD5 哈希（C++11 不支持 std::md5，使用 libcurl 或手写实现）
+    // MD5 哈希（使用 OpenSSL）
     std::string md5_hash(const std::string& input) {
-        // 使用 OpenSSL 或其他 MD5 库
-        // 这里使用 command 调用openssl作为示例
-        FILE* pipe = popen(("echo -n \"" + input + "\" | md5sum | cut -d' ' -f1").c_str(), "r");
-        if (!pipe) return "";
+        unsigned char md5[MD5_DIGEST_LENGTH];
+        MD5(reinterpret_cast<const unsigned char*>(input.c_str()), input.length(), md5);
         
-        char buffer[128];
-        std::string result;
-        while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
-            result += buffer;
+        std::stringstream ss;
+        for (int i = 0; i < MD5_DIGEST_LENGTH; i++) {
+            ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(md5[i]);
         }
-        pclose(pipe);
-        
-        // 去除换行符
-        if (!result.empty() && result.back() == '\n') {
-            result.pop_back();
-        }
-        return result;
+        return ss.str();
     }
 
     // URL 编码
