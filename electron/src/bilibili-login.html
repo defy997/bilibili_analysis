@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>B站登录 - BiliMood</title>
+    <title>B站账号绑定 - BiliMood</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
@@ -36,129 +36,110 @@
                 ← 返回首页
             </button>
         </nav>
-
-        <!-- 登录状态卡片 -->
+        <!-- 主内容区 -->
         <div class="max-w-md mx-auto">
-            <div class="card-glass rounded-xl p-6 mb-6">
-                <h2 class="text-xl font-semibold text-white mb-4 flex items-center">
-                    <svg class="w-6 h-6 mr-2 text-pink-500" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            <!-- Bilimood 登录表单 -->
+            <div v-if="!bilimoodLoggedIn" class="card-glass rounded-xl p-6">
+                <h2 class="text-xl font-semibold text-white mb-2 flex items-center">
+                    <svg class="w-6 h-6 mr-2 text-pink-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                     </svg>
-                    当前登录状态
+                    登录 Bilimood
                 </h2>
-                
-                <!-- 已登录状态 -->
-                <div v-if="loginStatus.valid && !needRefresh" class="space-y-3">
-                    <div class="flex items-center text-green-400">
-                        <span class="w-3 h-3 bg-green-400 rounded-full mr-2"></span>
-                        SESSDATA 有效
+                <p class="text-gray-400 text-sm mb-6">请先登录 Bilimood 账号，再绑定 B站</p>
+                <form @submit.prevent="bilimoodLogin">
+                    <div class="mb-4">
+                        <label class="block text-gray-400 text-sm mb-2">用户名或邮箱</label>
+                        <input v-model="loginForm.username" type="text"
+                               class="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-pink-500"
+                               placeholder="请输入用户名或邮箱">
                     </div>
-                    <p class="text-gray-400 text-sm">
-                        {{ loginStatus.message }}
-                    </p>
-                    <div class="bg-gray-800 rounded p-3 text-xs text-gray-400 break-all">
-                        {{ loginStatus.sessdata }}
+                    <div class="mb-6">
+                        <label class="block text-gray-400 text-sm mb-2">密码</label>
+                        <input v-model="loginForm.password" type="password"
+                               class="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-pink-500"
+                               placeholder="请输入密码">
                     </div>
-                    <button @click="refreshCookie" 
-                            class="w-full mt-4 bg-pink-600 hover:bg-pink-700 text-white py-2 px-4 rounded-lg transition flex items-center justify-center">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                        </svg>
-                        刷新凭证
+                    <button type="submit" :disabled="loginLoading"
+                            class="w-full bg-pink-600 hover:bg-pink-700 disabled:bg-gray-600 text-white py-2 px-4 rounded-lg transition">
+                        {{ loginLoading ? '登录中...' : '登录' }}
                     </button>
-                </div>
-
-                <!-- 需要刷新状态 -->
-                <div v-else-if="loginStatus.valid && needRefresh" class="space-y-3">
-                    <div class="flex items-center text-yellow-400">
-                        <span class="w-3 h-3 bg-yellow-400 rounded-full mr-2"></span>
-                        凭证需要刷新
-                    </div>
-                    <p class="text-gray-400 text-sm">
-                        {{ loginStatus.message }}
-                    </p>
-                    <button @click="refreshCookie" 
-                            class="w-full mt-4 bg-yellow-600 hover:bg-yellow-700 text-white py-2 px-4 rounded-lg transition flex items-center justify-center">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                        </svg>
-                        立即刷新
-                    </button>
-                </div>
-
-                <!-- 未登录状态 -->
-                <div v-else class="space-y-3">
-                    <div class="flex items-center text-red-400">
-                        <span class="w-3 h-3 bg-red-400 rounded-full mr-2"></span>
-                        {{ loginStatus.message || '请登录B站账号' }}
-                    </div>
-                </div>
+                </form>
+                <p v-if="loginError" class="mt-4 text-red-400 text-sm text-center">{{ loginError }}</p>
             </div>
-
-            <!-- 二维码登录卡片 -->
-            <div class="card-glass rounded-xl p-6">
-                <h2 class="text-xl font-semibold text-white mb-4 flex items-center">
-                    <svg class="w-6 h-6 mr-2 text-pink-500" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M3 11h8V3H3v8zm2-6h4v4H5V5zm8-2v8h8V3h-8zm6 6h-4V5h4v4zM3 21h8v-8H3v8zm2-6h4v4H5v-4zm13 2h-2v2h2v2h-2v-2h-2v2h-2v-2h2v-2h-2v-2h2v2h2v-2h2v2zm0-2V13h2v2h-2zm0 4h2v2h-2v-2zm-4-4h2v2h-2v-2zm0 4h2v2h-2v-2z"/>
-                    </svg>
-                    B站扫码登录
-                </h2>
-
-                <!-- 加载状态 -->
-                <div v-if="loading" class="flex justify-center py-8">
-                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500"></div>
+            <!-- B站登录卡片 -->
+            <div v-else class="card-glass rounded-xl p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-semibold text-white flex items-center">
+                        <svg class="w-6 h-6 mr-2 text-pink-500" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M17.813 4h.027c.516 0 .743.378.747.75V7.3l-1.02-.468a1.233 1.233 0 00-1.265.275L13.5 9.563V5.25c0-.42.336-.75.75-.75h.016c.42 0 .75.337.75.75v7.688l1.812-1.856c.418-.426 1.2-.426 1.65 0l2.063 2.1c.213.213.33.5.33.806v1.518c0 .6-.48 1.1-1.08 1.1H8.55c-.6 0-1.08-.5-1.08-1.1v-3.9c0-.6.48-1.1 1.08-1.1h5.73c.6 0 1.08.5 1.08 1.1v2.85c0 .6-.48 1.1-1.08 1.1H6.51c-.6 0-1.08-.5-1.08-1.1V7.8c0-.6.48-1.1 1.08-1.1h2.28v-.75c0-.42.336-.75.75-.75h.027c.42 0 .75.337.75.75V6.5l.6.277v3.98c0 .6-.48 1.1-1.08 1.1H6.51c-.6 0-1.08-.5-1.08-1.1V5.25c0-.42.336-.75.75-.75h.027c.42 0 .75.337.75.75v2.25h1.2V5.25c0-.42.336-.75.75-.75h.027c.42 0 .75.337.75.75v3h1.2V5.25c0-.42.336-.75.75-.75h.027c.42 0 .75.337.75.75v1.5l1.02-.468a1.233 1.233 0 00.675-1.032V4.5c0-.42.336-.75.75-.75h.027c.42 0 .75.337.75.75v.75h.75c.42 0 .75.337.75.75v1.5l1.02-.468a1.233 1.233 0 00.675-1.032V4.5c0-.42.336-.75.75-.75H17.813z"/>
+                        </svg>
+                        绑定 B站账号
+                    </h2>
+                    <span class="text-green-400 text-sm">{{ currentUser }}</span>
                 </div>
 
-                <!-- 二维码显示 -->
-                <div v-else-if="qrCode && !loginSuccess" class="text-center">
+                <!-- 登录成功状态 -->
+                <div v-if="loginSuccess" class="text-center py-8">
+                    <div class="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-semibold text-white mb-2">绑定成功!</h3>
+                    <p class="text-gray-400 mb-4">用户ID: {{ loginResult.mid }}</p>
+                    <button @click="goBack"
+                            class="bg-pink-600 hover:bg-pink-700 text-white py-2 px-6 rounded-lg transition">
+                        返回首页
+                    </button>
+                </div>
+
+                <!-- 二维码状态 -->
+                <div v-else-if="qrCode" class="text-center">
                     <div class="relative inline-block p-4 bg-white rounded-lg mb-4">
                         <img :src="qrCode" alt="登录二维码" class="w-48 h-48">
-                        <!-- 扫描动画 -->
                         <div v-if="polling" class="scan-line absolute left-0 right-0 h-1 bg-pink-500"></div>
                     </div>
-                    
-                    <p class="text-gray-400 text-sm mb-2">
-                        {{ statusMessage }}
-                    </p>
-                    
-                    <div class="flex justify-center space-x-2">
-                        <button @click="startPolling" 
-                                :disabled="polling"
+                    <p class="text-gray-400 text-sm mb-4">{{ statusMessage }}</p>
+
+                    <!-- 状态信息 -->
+                    <div v-if="loginStatus.valid" class="mb-4 p-3 bg-green-500/20 rounded-lg">
+                        <p class="text-green-400 text-sm">当前 SESSDATA 有效</p>
+                    </div>
+
+                    <!-- 错误信息 -->
+                    <div v-if="errorMessage" class="p-3 bg-red-500/20 border border-red-500/50 rounded-lg mb-4">
+                        <p class="text-red-400 text-sm">{{ errorMessage }}</p>
+                    </div>
+
+                    <!-- 操作按钮 -->
+                    <div class="flex gap-2 justify-center">
+                        <button @click="startPolling" :disabled="!authCode || polling"
                                 class="bg-pink-600 hover:bg-pink-700 disabled:bg-gray-600 text-white py-2 px-4 rounded-lg transition">
-                            {{ polling ? '扫描中...' : '重新扫描' }}
+                            {{ polling ? '扫描中...' : '刷新状态' }}
                         </button>
-                        <button @click="generateQRCode" 
+                        <button @click="generateQRCode"
                                 class="bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded-lg transition">
                             刷新二维码
                         </button>
                     </div>
                 </div>
 
-                <!-- 登录成功 -->
-                <div v-else-if="loginSuccess" class="text-center py-8">
-                    <div class="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-semibold text-white mb-2">登录成功!</h3>
-                    <p class="text-gray-400 mb-4">用户ID: {{ loginResult.mid }}</p>
-                    <button @click="checkStatus" 
-                            class="bg-pink-600 hover:bg-pink-700 text-white py-2 px-6 rounded-lg transition">
-                        开始使用
-                    </button>
-                </div>
-
-                <!-- 错误信息 -->
-                <div v-if="errorMessage" class="mt-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg">
-                    <p class="text-red-400 text-sm">{{ errorMessage }}</p>
+                <!-- 加载状态 -->
+                <div v-else-if="loading" class="flex justify-center py-8">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500"></div>
                 </div>
             </div>
 
             <!-- 提示信息 -->
-            <div class="mt-6 text-center text-gray-500 text-sm">
-                <p>请使用B站APP扫描二维码登录</p>
-                <p class="mt-1">登录成功后凭证将自动保存</p>
+            <div class="mt-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                <h4 class="text-white font-medium mb-2">绑定说明</h4>
+                <ul class="text-gray-400 text-sm space-y-1">
+                    <li>1. 请先登录 Bilimood 账号</li>
+                    <li>2. 使用 B站 APP 扫描二维码</li>
+                    <li>3. 确认登录后将自动绑定</li>
+                    <li>4. 绑定成功后可用于爬取 B站数据</li>
+                </ul>
             </div>
         </div>
     </div>
@@ -171,6 +152,14 @@
 
         const app = createApp({
             setup() {
+                // Bilimood 登录状态
+                const bilimoodLoggedIn = ref(false);
+                const loginForm = ref({ username: '', password: '' });
+                const loginLoading = ref(false);
+                const loginError = ref('');
+                const currentUser = ref('');
+
+                // B站登录状态
                 const loading = ref(false);
                 const qrCode = ref('');
                 const authCode = ref('');
@@ -181,14 +170,52 @@
                 const statusMessage = ref('请使用B站APP扫描二维码');
                 const loginStatus = ref({ valid: false, message: '', needRefresh: false });
 
+                // Bilimood 登录
+                const bilimoodLogin = async () => {
+                    if (!loginForm.value.username || !loginForm.value.password) {
+                        loginError.value = '请填写用户名和密码';
+                        return;
+                    }
+
+                    loginLoading.value = true;
+                    loginError.value = '';
+
+                    try {
+                        const res = await axios.post('/api/auth/login/', {
+                            username: loginForm.value.username,
+                            password: loginForm.value.password
+                        });
+
+                        if (res.data.success) {
+                            bilimoodLoggedIn.value = true;
+                            currentUser.value = res.data.data.username;
+                            // 登录成功后自动生成 B站 二维码
+                            await generateQRCode();
+                        } else {
+                            loginError.value = res.data.message;
+                        }
+                    } catch (e) {
+                        loginError.value = e.response?.data?.message || '登录失败';
+                    } finally {
+                        loginLoading.value = false;
+                    }
+                };
+
                 // 检查登录状态
                 const checkStatus = async () => {
                     try {
-                        const res = await axios.get('/api/sessdata/check/');
-                        loginStatus.value = res.data.data;
-                        needRefresh.value = res.data.data.need_refresh;
+                        const res = await axios.get('/api/auth/check/');
+                        if (res.data.logged_in) {
+                            bilimoodLoggedIn.value = true;
+                            currentUser.value = res.data.data.username;
+                            return true;
+                        } else {
+                            bilimoodLoggedIn.value = false;
+                            return false;
+                        }
                     } catch (e) {
-                        loginStatus.value = { valid: false, message: '检查失败' };
+                        bilimoodLoggedIn.value = false;
+                        return false;
                     }
                 };
 
@@ -196,19 +223,30 @@
                 const generateQRCode = async () => {
                     loading.value = true;
                     errorMessage.value = '';
-                    
+                    loginSuccess.value = false;
+
                     try {
                         const res = await axios.get('/api/sessdata/qrcode/');
+
                         if (res.data.success) {
                             qrCode.value = res.data.data.qr_image;
                             authCode.value = res.data.data.auth_code;
                             statusMessage.value = '请使用B站APP扫描二维码';
                             startPolling();
+                        } else if (res.data.need_bilimood_login) {
+                            // 需要先登录 Bilimood
+                            bilimoodLoggedIn.value = false;
+                            loginError.value = '请先登录 Bilimood 账号';
                         } else {
                             errorMessage.value = res.data.message;
                         }
                     } catch (e) {
-                        errorMessage.value = e.response?.data?.message || '生成二维码失败';
+                        if (e.response?.status === 401) {
+                            bilimoodLoggedIn.value = false;
+                            loginError.value = '请先登录 Bilimood 账号';
+                        } else {
+                            errorMessage.value = e.response?.data?.message || '生成二维码失败';
+                        }
                     } finally {
                         loading.value = false;
                     }
@@ -217,7 +255,7 @@
                 // 开始轮询
                 const startPolling = () => {
                     if (!authCode.value) return;
-                    
+
                     polling.value = true;
                     pollLogin();
                 };
@@ -236,21 +274,29 @@
                             polling.value = false;
                             loginResult.value = res.data.tokens;
                             statusMessage.value = '登录成功!';
-                            
-                            // 刷新状态
-                            await checkStatus();
                         } else if (res.data.status === 'waiting') {
                             statusMessage.value = '等待扫码...';
                             setTimeout(pollLogin, 2000);
                         } else if (res.data.status === 'confirmed') {
                             statusMessage.value = '已扫码，等待确认...';
                             setTimeout(pollLogin, 2000);
+                        } else if (res.data.status === 'expired') {
+                            errorMessage.value = '二维码已过期，请刷新';
+                            polling.value = false;
+                        } else if (res.data.need_bilimood_login) {
+                            bilimoodLoggedIn.value = false;
+                            loginError.value = '请先登录 Bilimood 账号';
+                            polling.value = false;
                         } else {
                             errorMessage.value = res.data.message;
                             polling.value = false;
                         }
                     } catch (e) {
-                        if (e.response?.status === 400) {
+                        if (e.response?.status === 401) {
+                            bilimoodLoggedIn.value = false;
+                            loginError.value = '请先登录 Bilimood 账号';
+                            polling.value = false;
+                        } else if (e.response?.status === 400) {
                             errorMessage.value = e.response?.data?.message || '登录失败';
                             polling.value = false;
                         } else {
@@ -259,47 +305,73 @@
                     }
                 };
 
-                // 刷新凭证
-                const refreshCookie = async () => {
+                // 返回首页 - 关闭当前窗口
+                const goBack = () => {
+                    // 尝试关闭窗口
                     try {
-                        const res = await axios.post('/api/sessdata/refresh/');
-                        if (res.data.success) {
-                            alert('凭证刷新成功!');
-                            await checkStatus();
-                        } else {
-                            errorMessage.value = res.data.message;
+                        // 方式1: 如果是 Electron，使用 IPC 通信关闭窗口
+                        if (window.electronAPI && window.electronAPI.closeWindow) {
+                            window.electronAPI.closeWindow();
+                            return;
                         }
                     } catch (e) {
-                        errorMessage.value = e.response?.data?.message || '刷新失败';
+                        console.log('Electron API 不可用:', e);
                     }
-                };
 
-                // 返回首页
-                const goBack = () => {
-                    window.location.href = 'index.html';
+                    // 方式2: 使用 window.close() 关闭窗口
+                    try {
+                        window.close();
+
+                        // 如果 window.close() 没有效果（浏览器安全限制），
+                        // 延迟检查窗口是否已关闭
+                        setTimeout(() => {
+                            // 如果窗口还在，说明无法关闭，则清空页面内容
+                            if (!window.closed) {
+                                console.log('无法关闭窗口，清空页面内容');
+                                document.body.innerHTML = `
+                                    <div style="display: flex; align-items: center; justify-content: center; height: 100vh; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);">
+                                        <div style="text-align: center; color: white;">
+                                            <h2 style="font-size: 24px; margin-bottom: 16px;">绑定完成</h2>
+                                            <p style="color: #9ca3af; margin-bottom: 24px;">你可以关闭此标签页了</p>
+                                            <button onclick="window.close()" style="background: #ec4899; color: white; padding: 8px 24px; border-radius: 8px; border: none; cursor: pointer;">
+                                                关闭页面
+                                            </button>
+                                        </div>
+                                    </div>
+                                `;
+                            }
+                        }, 100);
+                    } catch (e) {
+                        console.error('关闭窗口失败:', e);
+                    }
                 };
 
                 onMounted(async () => {
                     await checkStatus();
-                    if (!loginStatus.value.valid || loginStatus.value.need_refresh) {
-                        await generateQRCode();
-                    }
                 });
 
                 return {
+                    // Bilimood 登录
+                    bilimoodLoggedIn,
+                    loginForm,
+                    loginLoading,
+                    loginError,
+                    currentUser,
+                    bilimoodLogin,
+
+                    // B站登录
                     loading,
                     qrCode,
+                    authCode,
                     polling,
                     loginSuccess,
                     loginResult,
                     errorMessage,
                     statusMessage,
                     loginStatus,
-                    needRefresh: ref(false),
-                    checkStatus,
                     generateQRCode,
                     startPolling,
-                    refreshCookie,
+                    pollLogin,
                     goBack
                 };
             }
