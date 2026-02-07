@@ -263,9 +263,12 @@ class SessdataManager:
                 'ts': int(time.time())
             }
             params['sign'] = get_sign(params)
-            
+
+            # 使用 form 表单格式发送请求
             url = "https://passport.bilibili.com/x/passport-tv-login/qrcode/auth_code"
-            response = requests.post(url, params=params, headers=HEADERS, timeout=10)
+            headers = dict(HEADERS)
+            headers['Content-Type'] = 'application/x-www-form-urlencoded'
+            response = requests.post(url, data=params, headers=headers, timeout=10)
             
             if response.status_code != 200:
                 return {
@@ -339,10 +342,12 @@ class SessdataManager:
                 'auth_code': auth_code
             }
             params['sign'] = get_sign(params)
-            
+
             poll_url = "https://passport.bilibili.com/x/passport-tv-login/qrcode/poll"
-            
-            response = requests.post(poll_url, params=params, headers=HEADERS, timeout=10)
+
+            headers = dict(HEADERS)
+            headers['Content-Type'] = 'application/x-www-form-urlencoded'
+            response = requests.post(poll_url, data=params, headers=headers, timeout=10)
             result = response.json()
             
             if result.get('code') == 0:
