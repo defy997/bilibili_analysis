@@ -1,7 +1,22 @@
-const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, session } = require('electron');
 app.isQuitting = false;
 const path = require('path');
 const WebSocket = require('ws');
+
+// 配置 session 以支持跨域 Cookie
+// 使用默认 session，并配置 cookie 设置
+app.on('ready', () => {
+    // 配置默认 session 的 cookie 设置
+    const defaultSession = session.defaultSession;
+    
+    // 设置 Cookie 的默认属性
+    defaultSession.cookies.setDefaults({
+        secure: false,  // 允许 HTTP Cookie
+        httpOnly: true
+    });
+    
+    console.log('✅ Electron session 配置完成');
+});
 
 // 设置控制台输出编码为UTF-8(解决Windows终端中文乱码)
 if (process.platform === 'win32') {
@@ -56,7 +71,9 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
-      enableRemoteModule: true
+      enableRemoteModule: true,
+      webSecurity: false,  // 允许跨域请求
+      partition: 'persist:main'  // 使用持久化的 partition 共享 cookie
     },
     // 悬浮窗口样式
     backgroundColor: '#00000000', // 完全透明背景
@@ -731,8 +748,53 @@ function closeVideoAudioWindow() {
 // ==========================================
 
 ipcMain.on('open-bilibili-login-window', () => {
-    createBilibiliLoginWindow();
+    checkBilimoodLoginAndOpen();
 });
+
+// 检查 Bilimood 登录状态，然后打开 B站登录窗口
+async function checkBilimoodLoginAndOpen() {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+        console.error('主窗口不存在');
+        createBilibiliLoginWindow();
+        return;
+    }
+
+    // 等待页面加载完成
+    if (!mainWindow.webContents.isLoading()) {
+        await checkLoginAndOpen();
+    } else {
+        mainWindow.webContents.once('did-stop-loading', async () => {
+            await checkLoginAndOpen();
+        });
+    }
+}
+
+async function checkLoginAndOpen() {
+    console.log('检查登录状态，缓存:', cachedBilimoodLoginStatus);
+
+    if (cachedBilimoodLoginStatus && cachedBilimoodLoginStatus.loggedIn) {
+        // 已登录，打开 B站登录窗口
+        createBilibiliLoginWindow();
+    } else {
+        // 未登录，显示提示
+        console.log('未登录，显示提示');
+        showLoginRequiredDialog();
+    }
+}
+
+// 显示需要登录的提示对话框
+function showLoginRequiredDialog() {
+    const { dialog } = require('electron');
+
+    dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        title: '提示',
+        message: '请先登录',
+        detail: '请先登录 Bilimood 账号，再绑定 B站账号\n\n你可以在首页右上角登录',
+        buttons: ['确定'],
+        defaultId: 0
+    });
+}
 
 function createBilibiliLoginWindow() {
     if (bilibiliLoginWindow && !bilibiliLoginWindow.isDestroyed()) {
@@ -763,7 +825,8 @@ function createBilibiliLoginWindow() {
             nodeIntegration: true,
             contextIsolation: false,
             enableRemoteModule: true,
-            webSecurity: false  // 允许跨域请求
+            webSecurity: false,  // 允许跨域请求
+            partition: 'persist:main'  // 使用持久化的 partition 共享 cookie
         },
         backgroundColor: '#1a1a2e',
         hasShadow: false,
@@ -808,10 +871,20 @@ ipcMain.on('broadcast-ui-settings', (event, settings) => {
 });
 
 // ==========================================
-// 登录状态广播（主窗口 → 所有子窗口）
+// 登录状态缓存（用于 B站登录窗口）
 // ==========================================
 
+let cachedBilimoodLoginStatus = { loggedIn: false, user: null };
+
 ipcMain.on('broadcast-login-status', (event, status) => {
+    // 缓存登录状态
+    cachedBilimoodLoginStatus = {
+        loggedIn: status.loggedIn,
+        user: status.user || null
+    };
+    console.log('登录状态已缓存:', cachedBilimoodLoginStatus);
+
+    // 广播到子窗口
     const windows = [analysisWindow, userProfileWindow, videoAudioWindow];
     windows.forEach(win => {
         if (win && !win.isDestroyed()) {

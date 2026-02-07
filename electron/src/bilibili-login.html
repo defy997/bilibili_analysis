@@ -38,35 +38,36 @@
         </nav>
         <!-- 主内容区 -->
         <div class="max-w-md mx-auto">
-            <!-- Bilimood 登录表单 -->
-            <div v-if="!bilimoodLoggedIn" class="card-glass rounded-xl p-6">
-                <h2 class="text-xl font-semibold text-white mb-2 flex items-center">
-                    <svg class="w-6 h-6 mr-2 text-pink-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-                    </svg>
-                    登录 Bilimood
-                </h2>
-                <p class="text-gray-400 text-sm mb-6">请先登录 Bilimood 账号，再绑定 B站</p>
-                <form @submit.prevent="bilimoodLogin">
-                    <div class="mb-4">
-                        <label class="block text-gray-400 text-sm mb-2">用户名或邮箱</label>
-                        <input v-model="loginForm.username" type="text"
-                               class="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-pink-500"
-                               placeholder="请输入用户名或邮箱">
-                    </div>
-                    <div class="mb-6">
-                        <label class="block text-gray-400 text-sm mb-2">密码</label>
-                        <input v-model="loginForm.password" type="password"
-                               class="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-pink-500"
-                               placeholder="请输入密码">
-                    </div>
-                    <button type="submit" :disabled="loginLoading"
-                            class="w-full bg-pink-600 hover:bg-pink-700 disabled:bg-gray-600 text-white py-2 px-4 rounded-lg transition">
-                        {{ loginLoading ? '登录中...' : '登录' }}
+            <!-- 调试信息面板 -->
+            <div class="mb-4 p-3 bg-gray-800/50 rounded-lg text-xs text-gray-400">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="font-bold text-white">调试信息</span>
+                    <button @click="forceLogin" class="text-pink-500 hover:text-pink-400">
+                        强制登录
                     </button>
-                </form>
-                <p v-if="loginError" class="mt-4 text-red-400 text-sm text-center">{{ loginError }}</p>
+                </div>
+                <div>登录状态: <span :class="bilimoodLoggedIn ? 'text-green-400' : 'text-red-400'">
+                    {{ bilimoodLoggedIn ? '✓ 已登录' : '✗ 未登录' }}
+                </span></div>
+                <div>用户名: {{ currentUser || '未设置' }}</div>
+                <div>缓存: {{ localStorage.getItem('bilimood_user') ? '有' : '无' }}</div>
             </div>
+
+            <!-- 未登录提示 -->
+            <div v-if="!bilimoodLoggedIn" class="card-glass rounded-xl p-6 text-center">
+                <div class="w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg class="w-8 h-8 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                </div>
+                <h2 class="text-xl font-semibold text-white mb-2">请先登录</h2>
+                <p class="text-gray-400 mb-6">请先登录 Bilimood 账号，再绑定 B站账号</p>
+                <button @click="goToLogin"
+                        class="bg-pink-600 hover:bg-pink-700 text-white py-2 px-6 rounded-lg transition">
+                    去登录
+                </button>
+            </div>
+
             <!-- B站登录卡片 -->
             <div v-else class="card-glass rounded-xl p-6">
                 <div class="flex items-center justify-between mb-4">
@@ -129,16 +130,29 @@
                 <div v-else-if="loading" class="flex justify-center py-8">
                     <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500"></div>
                 </div>
+
+                <!-- 错误状态 -->
+                <div v-else-if="errorMessage" class="text-center py-8">
+                    <div class="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </div>
+                    <p class="text-red-400 mb-4">{{ errorMessage }}</p>
+                    <button @click="generateQRCode"
+                            class="bg-pink-600 hover:bg-pink-700 text-white py-2 px-6 rounded-lg transition">
+                        重试
+                    </button>
+                </div>
             </div>
 
             <!-- 提示信息 -->
             <div class="mt-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
                 <h4 class="text-white font-medium mb-2">绑定说明</h4>
                 <ul class="text-gray-400 text-sm space-y-1">
-                    <li>1. 请先登录 Bilimood 账号</li>
-                    <li>2. 使用 B站 APP 扫描二维码</li>
-                    <li>3. 确认登录后将自动绑定</li>
-                    <li>4. 绑定成功后可用于爬取 B站数据</li>
+                    <li>1. 使用 B站 APP 扫描二维码</li>
+                    <li>2. 确认登录后将自动绑定</li>
+                    <li>3. 绑定成功后可用于爬取 B站数据</li>
                 </ul>
             </div>
         </div>
@@ -146,17 +160,15 @@
 
     <script>
         // 配置 axios 指向 Django 服务器
-        axios.defaults.baseURL = 'http://127.0.0.1:8000';
+        axios.defaults.baseURL = 'http://118.25.39.91:8000';
+        axios.defaults.withCredentials = true; // 携带 session cookie
 
         const { createApp, ref, onMounted } = Vue;
 
         const app = createApp({
             setup() {
-                // Bilimood 登录状态
+                // 登录状态
                 const bilimoodLoggedIn = ref(false);
-                const loginForm = ref({ username: '', password: '' });
-                const loginLoading = ref(false);
-                const loginError = ref('');
                 const currentUser = ref('');
 
                 // B站登录状态
@@ -167,56 +179,75 @@
                 const loginSuccess = ref(false);
                 const loginResult = ref({});
                 const errorMessage = ref('');
-                const statusMessage = ref('请使用B站APP扫描二维码');
+                const statusMessage = ref('');
                 const loginStatus = ref({ valid: false, message: '', needRefresh: false });
 
-                // Bilimood 登录
-                const bilimoodLogin = async () => {
-                    if (!loginForm.value.username || !loginForm.value.password) {
-                        loginError.value = '请填写用户名和密码';
-                        return;
-                    }
-
-                    loginLoading.value = true;
-                    loginError.value = '';
-
+                // 从 localStorage 恢复登录状态
+                const restoreLoginState = () => {
                     try {
-                        const res = await axios.post('/api/auth/login/', {
-                            username: loginForm.value.username,
-                            password: loginForm.value.password
-                        });
-
-                        if (res.data.success) {
-                            bilimoodLoggedIn.value = true;
-                            currentUser.value = res.data.data.username;
-                            // 登录成功后自动生成 B站 二维码
-                            await generateQRCode();
-                        } else {
-                            loginError.value = res.data.message;
+                        const cached = localStorage.getItem('bilimood_user');
+                        if (cached) {
+                            const userData = JSON.parse(cached);
+                            if (userData && userData.user_id) {
+                                bilimoodLoggedIn.value = true;
+                                currentUser.value = userData.username || '';
+                                return true;
+                            }
                         }
                     } catch (e) {
-                        loginError.value = e.response?.data?.message || '登录失败';
-                    } finally {
-                        loginLoading.value = false;
+                        console.error('恢复登录状态失败:', e);
+                    }
+                    return false;
+                };
+
+                // 保存登录状态到 localStorage
+                const saveLoginState = (username) => {
+                    try {
+                        localStorage.setItem('bilimood_user', JSON.stringify({
+                            user_id: 1,
+                            username: username,
+                            loginTime: Date.now()
+                        }));
+                    } catch (e) {
+                        console.error('保存登录状态失败:', e);
                     }
                 };
 
                 // 检查登录状态
                 const checkStatus = async () => {
                     try {
+                        console.log('开始检查登录状态...');
                         const res = await axios.get('/api/auth/check/');
-                        if (res.data.logged_in) {
+                        console.log('登录检查响应:', res.data);
+
+                        // 兼容多种响应格式
+                        const isLoggedIn = res.data.logged_in || res.data.loggedIn || false;
+                        const userData = res.data.data || res.data.user || null;
+
+                        if (isLoggedIn && userData) {
+                            const username = userData.username || '未知用户';
                             bilimoodLoggedIn.value = true;
-                            currentUser.value = res.data.data.username;
+                            currentUser.value = username;
+                            // 保存到 localStorage
+                            saveLoginState(username);
+                            console.log('✅ 登录状态已确认:', username);
                             return true;
                         } else {
-                            bilimoodLoggedIn.value = false;
-                            return false;
+                            console.log('⚠️ API 返回未登录，尝试从缓存恢复');
+                            // API 返回未登录，尝试从缓存恢复
+                            return restoreLoginState();
                         }
                     } catch (e) {
-                        bilimoodLoggedIn.value = false;
-                        return false;
+                        // API 调用失败，尝试从缓存恢复
+                        console.error('❌ API 调用失败:', e);
+                        console.warn('尝试使用缓存恢复登录状态');
+                        return restoreLoginState();
                     }
+                };
+
+                // 去登录页面
+                const goToLogin = () => {
+                    window.location.href = 'login.html';
                 };
 
                 // 生成二维码
@@ -224,6 +255,7 @@
                     loading.value = true;
                     errorMessage.value = '';
                     loginSuccess.value = false;
+                    statusMessage.value = '加载中...';
 
                     try {
                         const res = await axios.get('/api/sessdata/qrcode/');
@@ -234,18 +266,17 @@
                             statusMessage.value = '请使用B站APP扫描二维码';
                             startPolling();
                         } else if (res.data.need_bilimood_login) {
-                            // 需要先登录 Bilimood
-                            bilimoodLoggedIn.value = false;
-                            loginError.value = '请先登录 Bilimood 账号';
+                            // 显示错误但不重置登录状态
+                            errorMessage.value = '后端Session已失效: ' + (res.data.message || '请先登录');
                         } else {
                             errorMessage.value = res.data.message;
                         }
                     } catch (e) {
+                        // 显示错误但不重置登录状态
                         if (e.response?.status === 401) {
-                            bilimoodLoggedIn.value = false;
-                            loginError.value = '请先登录 Bilimood 账号';
+                            errorMessage.value = '后端Session已失效(401): 需要真实的后端登录';
                         } else {
-                            errorMessage.value = e.response?.data?.message || '生成二维码失败';
+                            errorMessage.value = e.response?.data?.message || ('生成二维码失败: ' + e.message);
                         }
                     } finally {
                         loading.value = false;
@@ -285,7 +316,6 @@
                             polling.value = false;
                         } else if (res.data.need_bilimood_login) {
                             bilimoodLoggedIn.value = false;
-                            loginError.value = '请先登录 Bilimood 账号';
                             polling.value = false;
                         } else {
                             errorMessage.value = res.data.message;
@@ -294,7 +324,7 @@
                     } catch (e) {
                         if (e.response?.status === 401) {
                             bilimoodLoggedIn.value = false;
-                            loginError.value = '请先登录 Bilimood 账号';
+                            errorMessage.value = '请先登录 Bilimood 账号';
                             polling.value = false;
                         } else if (e.response?.status === 400) {
                             errorMessage.value = e.response?.data?.message || '登录失败';
@@ -305,11 +335,10 @@
                     }
                 };
 
-                // 返回首页 - 关闭当前窗口
+                // 返回首页
                 const goBack = () => {
                     // 尝试关闭窗口
                     try {
-                        // 方式1: 如果是 Electron，使用 IPC 通信关闭窗口
                         if (window.electronAPI && window.electronAPI.closeWindow) {
                             window.electronAPI.closeWindow();
                             return;
@@ -318,16 +347,10 @@
                         console.log('Electron API 不可用:', e);
                     }
 
-                    // 方式2: 使用 window.close() 关闭窗口
                     try {
                         window.close();
-
-                        // 如果 window.close() 没有效果（浏览器安全限制），
-                        // 延迟检查窗口是否已关闭
                         setTimeout(() => {
-                            // 如果窗口还在，说明无法关闭，则清空页面内容
                             if (!window.closed) {
-                                console.log('无法关闭窗口，清空页面内容');
                                 document.body.innerHTML = `
                                     <div style="display: flex; align-items: center; justify-content: center; height: 100vh; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);">
                                         <div style="text-align: center; color: white;">
@@ -346,18 +369,44 @@
                     }
                 };
 
+                // 调试：检查登录状态和缓存
+                const debugLogin = () => {
+                    console.log('=== 调试信息 ===');
+                    console.log('bilimoodLoggedIn:', bilimoodLoggedIn.value);
+                    console.log('currentUser:', currentUser.value);
+                    console.log('localStorage:', localStorage.getItem('bilimood_user'));
+
+                    // 弹窗显示
+                    alert(`登录状态: ${bilimoodLoggedIn.value ? '已登录' : '未登录'}\n用户: ${currentUser.value}\n\n缓存: ${localStorage.getItem('bilimood_user') || '无'}`);
+                };
+
+                // 强制登录（跳过检查）
+                const forceLogin = () => {
+                    bilimoodLoggedIn.value = true;
+                    currentUser.value = 'defy';
+                    saveLoginState('defy');
+                    alert('已强制设置为登录状态，正在获取二维码...');
+                    generateQRCode();
+                };
+
                 onMounted(async () => {
-                    await checkStatus();
+                    const loggedIn = await checkStatus();
+                    console.log('检查登录状态结果:', loggedIn);
+                    if (loggedIn) {
+                        // 已登录，获取二维码
+                        generateQRCode();
+                    }
+                    // 未登录时显示提示，不自动获取二维码
                 });
 
                 return {
-                    // Bilimood 登录
+                    // 登录状态
                     bilimoodLoggedIn,
-                    loginForm,
-                    loginLoading,
-                    loginError,
                     currentUser,
-                    bilimoodLogin,
+                    goToLogin,
+                    debugLogin,
+                    forceLogin,
+                    localStorage,
 
                     // B站登录
                     loading,

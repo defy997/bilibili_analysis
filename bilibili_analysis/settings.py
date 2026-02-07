@@ -51,7 +51,14 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+# CORS 配置
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True  # 允许携带认证信息（cookie）
+# Session Cookie 配置（支持跨域）
+SESSION_COOKIE_SAMESITE = None  # 允许跨站点发送 cookie
+SESSION_COOKIE_SECURE = False   # HTTP 环境设为 False，HTTPS 环境设为 True
+SESSION_COOKIE_HTTPONLY = True  # 防止 JavaScript 访问 cookie（安全）
 ROOT_URLCONF = "bilibili_analysis.urls"
 
 TEMPLATES = [
