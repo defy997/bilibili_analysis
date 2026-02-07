@@ -8,6 +8,15 @@ app.config_from_object('django.conf:settings', namespace='CELERY')
 app.autodiscover_tasks()
 
 
+def get_valid_cookie():
+    """
+    获取有效的 B站 Cookie
+    优先从数据库获取，如果无效则返回默认 cookie
+    """
+    from .services import ensure_valid_cookie
+    return ensure_valid_cookie()
+
+
 @shared_task(bind=True)
 def analyze_sentiment_chunk(self, text_chunk):
     """单个 Worker 处理一个 chunk"""
@@ -17,14 +26,19 @@ def analyze_sentiment_chunk(self, text_chunk):
 
 
 @shared_task(bind=True)
-def analyze_audio_task(self, bvid, cookie):
+def analyze_audio_task(self, bvid, cookie=None):
     """
     异步音频情感分析任务
 
     :param bvid: 视频BV号
-    :param cookie: B站Cookie
+    :param cookie: B站Cookie（可选，如果不提供则自动获取）
     :return: timeline 数据
     """
+    # 如果没有提供 cookie，自动获取有效的 cookie
+    if cookie is None:
+        cookie = get_valid_cookie()
+        print(f"[analyze_audio_task] 自动获取到 cookie: {cookie[:30]}...")
+
     headers = {
         'authority': 'api.bilibili.com',
         'accept': 'application/json, text/plain, */*',
@@ -40,10 +54,16 @@ def analyze_audio_task(self, bvid, cookie):
 
 
 @shared_task(bind=True)
-def crawl_and_analyze_comments(self, bvid, aid, headers, cookie):
+def crawl_and_analyze_comments(self, bvid, aid, headers=None, cookie=None):
     """
     爬取并分析评论的任务 - 流水线模式
     边爬取边分析边保存，而不是全部爬完再处理
+
+    Args:
+        bvid: 视频BV号
+        aid: 视频AID
+        headers: 请求头（可选，自动生成）
+        cookie: B站Cookie（可选，自动获取）
 
     Returns:
         {
@@ -55,6 +75,22 @@ def crawl_and_analyze_comments(self, bvid, aid, headers, cookie):
             'neutral_count': int
         }
     """
+    # 如果没有提供 cookie，自动获取有效的 cookie
+    if cookie is None:
+        cookie = get_valid_cookie()
+        print(f"[crawl_and_analyze_comments] 自动获取到 cookie: {cookie[:30]}...")
+
+    # 如果没有提供 headers，自动生成
+    if headers is None:
+        headers = {
+            'authority': 'api.bilibili.com',
+            'accept': 'application/json, text/plain, */*',
+            'accept-language': 'zh-CN,zh;q=0.9',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'referer': 'https://www.bilibili.com/',
+            'cookie': cookie,
+        }
+
     from .services import (
         crawl_comments, clean_text, is_meaningful_text,
         analyze_sentiment, get_sentiment_label, save_comment,
@@ -173,10 +209,16 @@ def crawl_and_analyze_comments(self, bvid, aid, headers, cookie):
 
 
 @shared_task(bind=True)
-def crawl_and_analyze_danmu(self, bvid, cid, headers, cookie):
+def crawl_and_analyze_danmu(self, bvid, cid, headers=None, cookie=None):
     """
     爬取并分析弹幕的任务 - 流水线模式
     边爬取边分析边保存，而不是全部爬完再处理
+
+    Args:
+        bvid: 视频BV号
+        cid: 弹幕CID
+        headers: 请求头（可选，自动生成）
+        cookie: B站Cookie（可选，自动获取）
 
     Returns:
         {
@@ -188,6 +230,22 @@ def crawl_and_analyze_danmu(self, bvid, cid, headers, cookie):
             'neutral_count': int
         }
     """
+    # 如果没有提供 cookie，自动获取有效的 cookie
+    if cookie is None:
+        cookie = get_valid_cookie()
+        print(f"[crawl_and_analyze_danmu] 自动获取到 cookie: {cookie[:30]}...")
+
+    # 如果没有提供 headers，自动生成
+    if headers is None:
+        headers = {
+            'authority': 'api.bilibili.com',
+            'accept': 'application/json, text/plain, */*',
+            'accept-language': 'zh-CN,zh;q=0.9',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'referer': 'https://www.bilibili.com/',
+            'cookie': cookie,
+        }
+
     from .services import (
         crawl_danmaku, clean_text, is_meaningful_text,
         analyze_sentiment, get_sentiment_label, save_danmaku
@@ -214,8 +272,22 @@ def crawl_and_analyze_danmu(self, bvid, cid, headers, cookie):
         batch_size = 64  # 弹幕批量分析
         pending_texts = []
         pending_indices = []
+        # 用于存储 video_time（兼容新旧数据格式）
+        pending_video_times = []
 
-        for i, content in enumerate(danmaku_list):
+        for i, danmu in enumerate(danmaku_list):
+            # 兼容新旧数据格式：可能是字符串或字典
+            if isinstance(danmu, dict):
+                content = danmu.get('content', '')
+                video_time = danmu.get('video_time', 0.0)
+                send_time = danmu.get('send_time', None)
+                user_hash = danmu.get('user_hash', None)
+            else:
+                content = danmu
+                video_time = 0.0
+                send_time = None
+                user_hash = None
+            
             if not content:
                 continue
 
@@ -229,6 +301,7 @@ def crawl_and_analyze_danmu(self, bvid, cid, headers, cookie):
             # 收集到待分析批次
             pending_texts.append(cleaned)
             pending_indices.append(i)
+            pending_video_times.append(video_time)
 
             # 如果批次满了，进行分析和保存
             if len(pending_texts) >= batch_size:
@@ -238,10 +311,22 @@ def crawl_and_analyze_danmu(self, bvid, cid, headers, cookie):
                 # 逐条保存结果
                 for idx, original_idx in enumerate(pending_indices):
                     original_content = danmaku_list[original_idx]
+                    # 兼容新旧格式重新获取
+                    if isinstance(original_content, dict):
+                        content_to_save = original_content.get('content', '')
+                        video_time_to_save = original_content.get('video_time', 0.0)
+                        send_time_to_save = original_content.get('send_time', None)
+                        user_hash_to_save = original_content.get('user_hash', None)
+                    else:
+                        content_to_save = original_content
+                        video_time_to_save = 0.0
+                        send_time_to_save = None
+                        user_hash_to_save = None
+
                     score = scores[idx]
                     sentiment = get_sentiment_label(score)
 
-                    result = save_danmaku(cid, original_content, score, sentiment)
+                    result = save_danmaku(cid, content_to_save, score, sentiment, video_time_to_save, send_time_to_save, user_hash_to_save)
                     if result:
                         danmu_count += 1
                         if sentiment == 'positive':
@@ -254,6 +339,7 @@ def crawl_and_analyze_danmu(self, bvid, cid, headers, cookie):
                 # 清空批次
                 pending_texts = []
                 pending_indices = []
+                pending_video_times = []
 
                 print(f"[DanmuTask] 流水线处理进度: {i+1}/{len(danmaku_list)}")
 
@@ -262,10 +348,22 @@ def crawl_and_analyze_danmu(self, bvid, cid, headers, cookie):
             scores = analyze_sentiment(pending_texts)
             for idx, original_idx in enumerate(pending_indices):
                 original_content = danmaku_list[original_idx]
+                # 兼容新旧格式重新获取
+                if isinstance(original_content, dict):
+                    content_to_save = original_content.get('content', '')
+                    video_time_to_save = original_content.get('video_time', 0.0)
+                    send_time_to_save = original_content.get('send_time', None)
+                    user_hash_to_save = original_content.get('user_hash', None)
+                else:
+                    content_to_save = original_content
+                    video_time_to_save = 0.0
+                    send_time_to_save = None
+                    user_hash_to_save = None
+
                 score = scores[idx]
                 sentiment = get_sentiment_label(score)
 
-                result = save_danmaku(cid, original_content, score, sentiment)
+                result = save_danmaku(cid, content_to_save, score, sentiment, video_time_to_save, send_time_to_save, user_hash_to_save)
                 if result:
                     danmu_count += 1
                     if sentiment == 'positive':

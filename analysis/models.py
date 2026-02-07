@@ -181,6 +181,15 @@ class User(models.Model):
     is_active = models.BooleanField(default=True, verbose_name="是否激活")
     last_login = models.DateTimeField(null=True, blank=True, verbose_name="最后登录时间")
 
+    # === B站登录凭证 ===
+    bilibili_mid = models.BigIntegerField(null=True, blank=True, verbose_name="B站用户ID")
+    sessdata = models.TextField(null=True, blank=True, verbose_name="B站SESSDATA")
+    bili_jct = models.CharField(max_length=50, null=True, blank=True, verbose_name="B站BILI_JCT")
+    access_token = models.TextField(null=True, blank=True, verbose_name="B站Access Token")
+    refresh_token = models.TextField(null=True, blank=True, verbose_name="B站Refresh Token")
+    sessdata_expires_at = models.DateTimeField(null=True, blank=True, verbose_name="SESSDATA过期时间")
+    last_refreshed_at = models.DateTimeField(null=True, blank=True, verbose_name="最后刷新时间")
+
     # === 用户个人配置 ===
     # 数据过滤配置
     min_length = models.IntegerField(default=1, verbose_name="最小文本长度")

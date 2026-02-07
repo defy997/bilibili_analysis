@@ -14,7 +14,7 @@ from .tasks import (
 )
 
 # B站 Cookie（临时硬编码，后续从数据库读取）
-BILI_COOKIE = "SESSDATA=b946e8f1%2C1785116159%2C0eabf%2A11CjBctKZ6g7g6nHZ7Oy_m31LUSM7SgaxXkfPZNvsn78ZoqBybck-zwkKuFL761GGZRFQSVkhrVjM3M2s4MWRheHJESkxMU1FSLVBQd1N0T1VxSE95YVVXenI3T28wSHFXaF9jSTlycjZDNkRva0hWM01PREpNMjQtRUF4NHlHUlVhbXp0dlJqOU5RIIEC"
+BILI_COOKIE = "SESSDATA=55d2ed48%2C1785846835%2Cd80a0%2A22CjDxZL1htFveMUpzPXZrxp6zwh1K5neWuRyhGlZxWZ1A3xBGw6NIs8AhnyqkO5tfmBgSVmhQTHVlNDNaMzlENjNqYjQwcGNPRzN5T05YcTN3SFRLT2ZvOW9sZHFvS295WmdRdW1YQXZzc01GMEdBek1YTGZTajNINW1jdmhRaUN4MWV6QnFLcGh3IIEC"
 
 
 @csrf_exempt
@@ -86,13 +86,15 @@ def async_analyze_video(request):
             if not bvid:
                 return JsonResponse({"error": "BVID is required"}, status=400)
 
+            # 获取有效的 Cookie
+            cookie = ensure_valid_cookie()
             headers = {
                 'authority': 'api.bilibili.com',
                 'accept': 'application/json, text/plain, */*',
                 'accept-language': 'zh-CN,zh;q=0.9',
                 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'referer': 'https://www.bilibili.com/',
-                'cookie': BILI_COOKIE,
+                'cookie': cookie,
             }
 
             # 检查视频是否正在被处理
@@ -130,7 +132,7 @@ def async_analyze_video(request):
                 # 回退到同步分析
                 print(f"[AsyncAnalyze] Redis 不可用，回退同步分析: {bvid}")
                 try:
-                    result = process_video(bvid, headers, BILI_COOKIE)
+                    result = process_video(bvid, headers, cookie)
                     return JsonResponse({
                         "success": True,
                         "status": "completed",
@@ -145,7 +147,7 @@ def async_analyze_video(request):
             # 并行触发评论和弹幕分析
             # 1. 先获取视频信息
             try:
-                video_info = crawl_video_info(bvid, headers, BILI_COOKIE)
+                video_info = crawl_video_info(bvid, headers, cookie)
                 aid = video_info.get('aid')
                 cid = video_info.get('cid')
             except Exception as e:
@@ -160,9 +162,9 @@ def async_analyze_video(request):
 
             # 使用 group 并行执行三个任务
             parallel_tasks = group([
-                crawl_and_analyze_comments.s(bvid, aid, headers, BILI_COOKIE),
-                crawl_and_analyze_danmu.s(bvid, cid, headers, BILI_COOKIE),
-                analyze_audio_task.s(bvid, BILI_COOKIE)
+                crawl_and_analyze_comments.s(bvid, aid, headers, cookie),
+                crawl_and_analyze_danmu.s(bvid, cid, headers, cookie),
+                analyze_audio_task.s(bvid, cookie)
             ])
 
             # 异步提交
@@ -588,7 +590,7 @@ def video_audio_dashboard(request, bvid):
 
             if celery_available:
                 from .tasks import analyze_audio_task
-                task = analyze_audio_task.delay(bvid, BILI_COOKIE)
+                task = analyze_audio_task.delay(bvid, cookie)
                 return JsonResponse({
                     "success": True,
                     "status": "processing",
@@ -597,7 +599,7 @@ def video_audio_dashboard(request, bvid):
             else:
                 print("Redis 不可达，同步执行音频分析")
                 from .services import analyze_video_audio
-                result = analyze_video_audio(bvid, headers, BILI_COOKIE)
+                result = analyze_video_audio(bvid, headers, cookie)
                 return JsonResponse({
                     "success": True,
                     "status": "completed",
@@ -748,3 +750,177 @@ def save_config(request):
             }, status=500)
     else:
         return HttpResponseNotAllowed(['POST'])
+
+
+# ============================================================
+# B站 SESSDATA 管理接口
+# ============================================================
+
+@csrf_exempt
+def check_sessdata(request):
+    """检查 SESSDATA 是否有效"""
+    if request.method == 'GET':
+        try:
+            from .sessdata_manager import SessdataManager
+            
+            manager = SessdataManager()
+            result = manager.check_sessdata_valid()
+            
+            return JsonResponse({
+                "success": True,
+                "data": result
+            })
+        except Exception as e:
+            print(f"检查 SESSDATA 失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({
+                "success": False,
+                "message": str(e)
+            }, status=500)
+    else:
+        return HttpResponseNotAllowed(['GET'])
+
+
+@csrf_exempt
+def refresh_sessdata(request):
+    """刷新 SESSDATA"""
+    if request.method == 'POST':
+        try:
+            from .sessdata_manager import SessdataManager
+            
+            manager = SessdataManager()
+            result = manager.refresh_sessdata()
+            
+            if result['success']:
+                return JsonResponse({
+                    "success": True,
+                    "message": result['message'],
+                    "new_sessdata": result['new_sessdata'][:30] + "..." if result['new_sessdata'] else None
+                })
+            else:
+                return JsonResponse({
+                    "success": False,
+                    "message": result['message']
+                }, status=400)
+        except Exception as e:
+            print(f"刷新 SESSDATA 失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({
+                "success": False,
+                "message": str(e)
+            }, status=500)
+    else:
+        return HttpResponseNotAllowed(['POST'])
+
+
+@csrf_exempt
+def generate_qrcode(request):
+    """生成登录二维码"""
+    if request.method == 'GET':
+        try:
+            from .sessdata_manager import SessdataManager
+            
+            manager = SessdataManager()
+            result = manager.generate_qrcode()
+            
+            if result['success']:
+                return JsonResponse({
+                    "success": True,
+                    "data": {
+                        "qr_url": result['qr_url'],
+                        "auth_code": result['auth_code'],
+                        "qr_image": result['qr_image']
+                    }
+                })
+            else:
+                return JsonResponse({
+                    "success": False,
+                    "message": result['message']
+                }, status=400)
+        except Exception as e:
+            print(f"生成二维码失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({
+                "success": False,
+                "message": str(e)
+            }, status=500)
+    else:
+        return HttpResponseNotAllowed(['GET'])
+
+
+@csrf_exempt
+def poll_login(request):
+    """轮询登录状态"""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            auth_code = data.get('auth_code')
+            
+            if not auth_code:
+                return JsonResponse({
+                    "success": False,
+                    "message": "auth_code is required"
+                }, status=400)
+            
+            from .sessdata_manager import SessdataManager
+            
+            manager = SessdataManager()
+            result = manager.poll_login_status(auth_code)
+            
+            if result.get('success'):
+                return JsonResponse({
+                    "success": True,
+                    "message": result['message'],
+                    "tokens": {
+                        "mid": result['tokens'].get('mid'),
+                        "sessdata": result['tokens'].get('sessdata'),
+                        "expires_in": result['tokens'].get('expires_in')
+                    }
+                })
+            else:
+                return JsonResponse({
+                    "success": False,
+                    "message": result['message'],
+                    "status": result.get('status', 'unknown')
+                })
+        except Exception as e:
+            print(f"轮询登录状态失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({
+                "success": False,
+                "message": str(e)
+            }, status=500)
+    else:
+        return HttpResponseNotAllowed(['POST'])
+
+
+@csrf_exempt
+def get_cookie_header(request):
+    """获取当前 Cookie 请求头"""
+    if request.method == 'GET':
+        try:
+            from .sessdata_manager import SessdataManager
+            
+            manager = SessdataManager()
+            cookie = manager.get_cookie_header()
+            
+            return JsonResponse({
+                "success": True,
+                "data": {
+                    "cookie": cookie
+                }
+            })
+        except Exception as e:
+            print(f"获取 Cookie 失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({
+                "success": False,
+                "message": str(e)
+            }, status=500)
+    else:
+        return HttpResponseNotAllowed(['GET'])

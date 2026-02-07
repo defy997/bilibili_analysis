@@ -14,6 +14,72 @@ from django.utils import timezone
 from .sentiment_model import SentimentModel
 from .models import Video, Comment, Danmu, UserConfig
 
+# ============================================================
+# SESSDATA 管理
+# ============================================================
+
+def get_sessdata_from_db():
+    """
+    从数据库获取有效的 SESSDATA
+    
+    Returns:
+        str: SESSDATA cookie 字符串，如果无效则返回 None
+    """
+    try:
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        
+        # 查找有 bilibili 凭证的用户
+        user = User.objects.filter(
+            bilibili_mid__isnull=False,
+            sessdata__isnull=False
+        ).first()
+        
+        if not user or not user.sessdata:
+            return None
+        
+        # 验证 SESSDATA 是否有效
+        try:
+            from .sessdata_manager import SessdataManager
+            manager = SessdataManager(user)
+            result = manager.check_sessdata_valid()
+            
+            if result.get('valid') and not result.get('need_refresh'):
+                return f"SESSDATA={user.sessdata}"
+            
+            # 如果需要刷新，尝试自动刷新
+            if result.get('need_refresh'):
+                refresh_result = manager.refresh_sessdata()
+                if refresh_result['success']:
+                    # 刷新成功后重新获取
+                    user.refresh_from_db()
+                    return f"SESSDATA={user.sessdata}"
+        except Exception as e:
+            print(f"[get_sessdata_from_db] 验证 SESSDATA 失败: {e}")
+        
+        return None
+    except Exception as e:
+        print(f"[get_sessdata_from_db] 获取 SESSDATA 失败: {e}")
+        return None
+
+
+def ensure_valid_cookie():
+    """
+    确保获取到有效的 Cookie
+    
+    Returns:
+        str: 可用的 Cookie 字符串
+    """
+    # 1. 尝试从数据库获取
+    sessdata = get_sessdata_from_db()
+    if sessdata:
+        return sessdata
+    
+    # 2. 返回硬编码的默认值（作为 fallback）
+    print("[ensure_valid_cookie] 数据库中无可用 SESSDATA，使用默认配置")
+    return "SESSDATA=55d2ed48%2C1785846835%2Cd80a0%2A22CjDxZL1htFveMUpzPXZrxp6zwh1K5neWuRyhGlZxWZ1A3xBGw6NIs8AhnyqkO5tfmBgSVmhQTHVlNDNaMzlENjNqYjQwcGNPRzN5T05YcTN3SFRLT2ZvOW9sZHFvS295WmdRdW1YQXZzc01GMEdBek1YTGZTajNINW1jdmhRaUN4MWV6QnFLcGh3IIEC"
+
+
 # 视频处理锁，防止同一视频被并发分析
 _video_processing_locks = {}
 _locks_lock = threading.Lock()
@@ -1023,21 +1089,42 @@ class DataCleaningPipeline:
 CPP_CRAWLER_URL = 'http://localhost:8081'
 
 
-def _crawl_audio_url_python(bvid, cid, headers):
+def _crawl_audio_url_python(bvid, cid, headers, max_retries=3, retry_delay=5):
     """Python fallback: 获取B站音频流URL"""
+    import time
+    
     url = f"https://api.bilibili.com/x/player/playurl?bvid={bvid}&cid={cid}&fnval=16&fnver=0&fourk=1"
-    resp = requests.get(url, headers=headers)
-    data = resp.json()
-    if data['code'] != 0:
-        raise Exception(f"playurl API error: {data['message']}")
-    audio_list = data['data']['dash']['audio']
-    audio_list.sort(key=lambda x: x.get('bandwidth', 0), reverse=True)
-    best = audio_list[0]
-    return {
-        'audio_url': best['baseUrl'],
-        'codec': best.get('codecs', ''),
-        'bandwidth': best.get('bandwidth', 0)
-    }
+    
+    for attempt in range(max_retries):
+        try:
+            resp = requests.get(url, headers=headers, timeout=15)
+            data = resp.json()
+            
+            if data['code'] == 0:
+                audio_list = data['data']['dash']['audio']
+                audio_list.sort(key=lambda x: x.get('bandwidth', 0), reverse=True)
+                best = audio_list[0]
+                return {
+                    'audio_url': best['baseUrl'],
+                    'codec': best.get('codecs', ''),
+                    'bandwidth': best.get('bandwidth', 0)
+                }
+            elif 'request was banned' in data.get('message', ''):
+                # 被限制，等待后重试
+                if attempt < max_retries - 1:
+                    print(f"[playurl] 请求被限制，{retry_delay}秒后重试 ({attempt + 1}/{max_retries})...")
+                    time.sleep(retry_delay)
+                    continue
+            # 其他错误直接抛出
+            raise Exception(f"playurl API error: {data['message']}")
+        except requests.exceptions.Timeout:
+            if attempt < max_retries - 1:
+                print(f"[playurl] 请求超时，{retry_delay}秒后重试 ({attempt + 1}/{max_retries})...")
+                time.sleep(retry_delay)
+                continue
+            raise Exception("playurl API timeout")
+    
+    raise Exception(f"playurl API error: 达到最大重试次数 ({max_retries})")
 
 
 def crawl_audio_url(bvid, cid, headers, cookie):
@@ -1235,7 +1322,14 @@ def crawl_comments(aid, headers):
 def _crawl_danmaku_python(cid, headers):
     """
     爬取视频弹幕（Python 实现）
+    返回格式: [{
+        'content': str,
+        'video_time': float,    # 视频内出现时间（秒）
+        'send_time': int,       # 真实发送时间戳
+        'user_hash': str        # 用户Hash
+    }, ...]
     """
+    import datetime
     danmaku_list = []
     try:
         danmaku_api = f"https://api.bilibili.com/x/v1/dm/list.so?oid={cid}"
@@ -1248,7 +1342,30 @@ def _crawl_danmaku_python(cid, headers):
             for element in danmaku_elements:
                 text = element.get_text(strip=True)
                 if text:
-                    danmaku_list.append(text)
+                    # 从 p 属性中提取信息
+                    # p 格式: "时间,模式,字号,颜色,时间戳,弹幕池,用户hash,弹幕ID"
+                    p_attr = element.get('p', '')
+                    video_time = 0.0
+                    send_timestamp = None
+                    user_hash = None
+
+                    if p_attr:
+                        try:
+                            parts = p_attr.split(',')
+                            video_time = float(parts[0]) if parts[0] else 0.0
+                            send_timestamp = int(parts[4]) if len(parts) > 4 and parts[4] else None
+                            user_hash = parts[6] if len(parts) > 6 and parts[6] else None
+                        except (ValueError, IndexError):
+                            video_time = 0.0
+                            send_timestamp = None
+                            user_hash = None
+
+                    danmaku_list.append({
+                        'content': text,
+                        'video_time': video_time,
+                        'send_time': send_timestamp,
+                        'user_hash': user_hash
+                    })
 
         print(f"获取到 {len(danmaku_list)} 条弹幕")
     except Exception as e:
@@ -1372,10 +1489,22 @@ def save_comment(comment_data, video_obj, score, sentiment_label):
         return None
 
 
-def save_danmaku(cid, content, score, sentiment_label):
+def save_danmaku(cid, content, score, sentiment_label, video_time=0.0, send_time=None, user_hash=None):
     """
     保存单条弹幕到数据库（集成数据清洗和过滤）
+
+    Args:
+        cid: 视频CID
+        content: 弹幕内容
+        score: 情感得分
+        sentiment_label: 情感分类
+        video_time: 视频内出现时间（秒）
+        send_time: 真实发送时间（DateTimeField，可为None）
+        user_hash: 发送者Hash值
     """
+    import datetime
+    from django.utils import timezone
+
     try:
         # 数据清洗（用于展示的版本）
         cleaned_content = clean_text(content, for_analysis=False)
@@ -1385,9 +1514,21 @@ def save_danmaku(cid, content, score, sentiment_label):
             # 弹幕过滤不打印日志（数量太多）
             return None
 
+        # 转换 send_time 时间戳为 DateTimeField
+        send_time_dt = None
+        if send_time:
+            try:
+                naive_dt = datetime.datetime.fromtimestamp(send_time)
+                send_time_dt = timezone.make_aware(naive_dt)
+            except:
+                send_time_dt = None
+
         Danmu.objects.create(
             cid=cid,
             content=cleaned_content,
+            video_time=video_time,
+            send_time=send_time_dt,
+            user_hash=user_hash,
             sentiment_score=score,
             sentiment_label=sentiment_label
         )
@@ -1492,7 +1633,8 @@ def process_video(bvid, headers, cookie):
         analysis_danmu = []
         valid_danmu_indices = []
 
-        for i, content in enumerate(danmaku_list):
+        for i, danmaku in enumerate(danmaku_list):
+            content = danmaku.get('content', '') if isinstance(danmaku, dict) else str(danmaku)
             if content:
                 cleaned = clean_text(content, for_analysis=True)
                 if is_meaningful_text(cleaned):
@@ -1551,11 +1693,23 @@ def process_video(bvid, headers, cookie):
         danmu_count = 0
         base_idx = len(analysis_comments)
         for analysis_idx, original_idx in enumerate(valid_danmu_indices):
-            content = danmaku_list[original_idx]
+            danmu_item = danmaku_list[original_idx]
+            # 兼容新旧数据格式
+            if isinstance(danmu_item, dict):
+                content = danmu_item.get('content', '')
+                video_time = danmu_item.get('video_time', 0.0)
+                send_time = danmu_item.get('send_time', None)
+                user_hash = danmu_item.get('user_hash', None)
+            else:
+                content = danmu_item
+                video_time = 0.0
+                send_time = None
+                user_hash = None
+
             score_idx = base_idx + analysis_idx
             score = scores[score_idx] if score_idx < len(scores) else 0.5
             sentiment = get_sentiment_label(score)
-            result = save_danmaku(video_info['cid'], content, score, sentiment)
+            result = save_danmaku(video_info['cid'], content, score, sentiment, video_time, send_time, user_hash)
             if result:
                 danmu_count += 1
 

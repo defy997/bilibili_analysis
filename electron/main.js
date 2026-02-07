@@ -14,6 +14,7 @@ let mainWindow;
 let analysisWindow; // 情感分析窗口
 let userProfileWindow; // 用户画像窗口
 let videoAudioWindow; // 视频音频分析窗口
+let bilibiliLoginWindow; // B站扫码登录窗口
 let wss; // WebSocket服务器，用于与Chrome插件通信
 let tray = null; // 系统托盘
 let lastWindowPosition = null; // 记录上次主窗口位置以便还原
@@ -240,6 +241,9 @@ function createTray() {
         if (videoAudioWindow && !videoAudioWindow.isDestroyed()) {
           videoAudioWindow.destroy();
         }
+        if (bilibiliLoginWindow && !bilibiliLoginWindow.isDestroyed()) {
+          bilibiliLoginWindow.destroy();
+        }
 
         // 关闭WebSocket服务器
         if (wss) {
@@ -329,6 +333,9 @@ ipcMain.on('close-window', () => {
   }
   if (videoAudioWindow && !videoAudioWindow.isDestroyed()) {
     videoAudioWindow.destroy();
+  }
+  if (bilibiliLoginWindow && !bilibiliLoginWindow.isDestroyed()) {
+    bilibiliLoginWindow.destroy();
   }
 
   // 关闭WebSocket服务器
@@ -716,6 +723,73 @@ function closeVideoAudioWindow() {
     if (videoAudioWindow && !videoAudioWindow.isDestroyed()) {
         videoAudioWindow.hide();
     }
+}
+
+
+// ==========================================
+// B站扫码登录窗口
+// ==========================================
+
+ipcMain.on('open-bilibili-login-window', () => {
+    createBilibiliLoginWindow();
+});
+
+function createBilibiliLoginWindow() {
+    if (bilibiliLoginWindow && !bilibiliLoginWindow.isDestroyed()) {
+        bilibiliLoginWindow.show();
+        bilibiliLoginWindow.focus();
+        return;
+    }
+
+    const winWidth = 420;
+    const winHeight = 520;
+    const workArea = screen.getPrimaryDisplay().workArea;
+
+    // 居中显示
+    const x = Math.floor(workArea.x + (workArea.width - winWidth) / 2);
+    const y = Math.floor(workArea.y + (workArea.height - winHeight) / 2);
+
+    bilibiliLoginWindow = new BrowserWindow({
+        width: winWidth,
+        height: winHeight,
+        x: x,
+        y: y,
+        frame: false,
+        alwaysOnTop: true,
+        transparent: true,
+        resizable: false,
+        skipTaskbar: true,
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false,
+            enableRemoteModule: true
+        },
+        backgroundColor: '#1a1a2e',
+        hasShadow: false,
+        focusable: true,
+        show: false
+    });
+
+    bilibiliLoginWindow.loadFile('src/bilibili-login.html');
+
+    bilibiliLoginWindow.once('ready-to-show', () => {
+        bilibiliLoginWindow.show();
+        bilibiliLoginWindow.setAlwaysOnTop(true, 'pop-up-menu');
+    });
+
+    bilibiliLoginWindow.on('closed', () => {
+        bilibiliLoginWindow = null;
+    });
+
+    bilibiliLoginWindow.on('blur', () => {
+        try {
+            if (bilibiliLoginWindow && !bilibiliLoginWindow.isDestroyed()) {
+                bilibiliLoginWindow.setAlwaysOnTop(true, 'pop-up-menu');
+            }
+        } catch (err) {
+            console.error('blur handler error:', err);
+        }
+    });
 }
 
 

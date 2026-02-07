@@ -92,9 +92,7 @@ temp/
 tmp/
 .cache/
 .bashrc
-.bash_history
-
-# ===================
+.bash_history# ===================
 # 临时文件
 # ===================
 *.tmp

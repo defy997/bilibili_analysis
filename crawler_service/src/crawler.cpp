@@ -1,4 +1,5 @@
 #include "crawler.h"
+#include "wbi_signer.h"
 #include "pugixml.hpp"
 #include <curl/curl.h>
 #include <random>
@@ -91,13 +92,6 @@ std::string Crawler::get_proxy() {
 void Crawler::rotate_proxy() {
     std::lock_guard<std::mutex> lock(proxy_mutex_);
 
-    if (!current_proxy_.empty()) {
-        // 当前是代理 IP 被封 → 先回退本地 IP
-        std::cout << "Proxy " << current_proxy_ << " got 412, falling back to local IP" << std::endl;
-        current_proxy_.clear();
-        return;
-    }
-
     // 当前是本地 IP 被封 → 从代理池取新 IP
     try {
         std::string new_proxy = fetch_proxy();
@@ -105,6 +99,14 @@ void Crawler::rotate_proxy() {
         std::cout << "Local IP got 412, switched to proxy: " << current_proxy_ << std::endl;
     } catch (const std::exception& e) {
         std::cout << "Failed to get proxy: " << e.what() << ", staying on local IP" << std::endl;
+    }
+}
+
+void Crawler::reset_to_direct() {
+    std::lock_guard<std::mutex> lock(proxy_mutex_);
+    if (!current_proxy_.empty()) {
+        std::cout << "[Reset] Video finished, resetting to direct connection" << std::endl;
+        current_proxy_.clear();
     }
 }
 
@@ -215,7 +217,20 @@ void Crawler::backoff_delay(int retry) {
 // ============================================================
 
 json Crawler::crawl_video(const std::string& bvid, const std::string& cookie) {
-    std::string url = "https://api.bilibili.com/x/web-interface/view?bvid=" + bvid;
+    // 每个视频开始时重置为直连模式
+    reset_to_direct();
+
+    // Wbi 签名
+    WbiSigner& wbi = WbiSigner::get_instance();
+    wbi.init();
+
+    std::map<std::string, std::string> params;
+    params["bvid"] = bvid;
+
+    auto signed_params = wbi.sign_params(params);
+    std::string query = WbiSigner::map_to_query(signed_params);
+
+    std::string url = "https://api.bilibili.com/x/web-interface/view?" + query;
     std::string body = http_get(url, cookie);
     json resp = json::parse(body);
 
@@ -241,6 +256,13 @@ json Crawler::crawl_video(const std::string& bvid, const std::string& cookie) {
 // ============================================================
 
 json Crawler::crawl_comments(int64_t aid, const std::string& cookie) {
+    // 每个视频开始时重置为直连模式
+    reset_to_direct();
+
+    // Wbi 签名
+    WbiSigner& wbi = WbiSigner::get_instance();
+    wbi.init();
+
     json all_comments = json::array();
     int64_t next_cursor = 0;
     int page = 0;
@@ -249,14 +271,22 @@ json Crawler::crawl_comments(int64_t aid, const std::string& cookie) {
 
     while (true) {
         page++;
-        std::ostringstream url;
-        url << "https://api.bilibili.com/x/v2/reply/main"
-            << "?type=1&oid=" << aid
-            << "&mode=3&next=" << next_cursor;
+
+        // Wbi 签名参数
+        std::map<std::string, std::string> params;
+        params["type"] = "1";
+        params["oid"] = std::to_string(aid);
+        params["mode"] = "3";
+        params["next"] = std::to_string(next_cursor);
+
+        auto signed_params = wbi.sign_params(params);
+        std::string query = WbiSigner::map_to_query(signed_params);
+
+        std::string url = "https://api.bilibili.com/x/v2/reply/main?" + query;
 
         for (int retry = 0; retry < config_.max_retries; retry++) {
             try {
-                std::string body = http_get(url.str(), cookie);
+                std::string body = http_get(url, cookie);
                 json resp = json::parse(body);
 
                 if (resp["code"].get<int>() != 0) {
@@ -367,13 +397,25 @@ json Crawler::crawl_comments(int64_t aid, const std::string& cookie) {
 // ============================================================
 
 json Crawler::crawl_audio_url(const std::string& bvid, int64_t cid, const std::string& cookie) {
-    std::ostringstream url;
-    url << "https://api.bilibili.com/x/player/playurl"
-        << "?bvid=" << bvid
-        << "&cid=" << cid
-        << "&fnval=16&fnver=0&fourk=1";
+    // 每个视频开始时重置为直连模式
+    reset_to_direct();
 
-    std::string body = http_get(url.str(), cookie);
+    // Wbi 签名
+    WbiSigner& wbi = WbiSigner::get_instance();
+    wbi.init();
+
+    std::map<std::string, std::string> params;
+    params["bvid"] = bvid;
+    params["cid"] = std::to_string(cid);
+    params["fnval"] = "16";
+    params["fnver"] = "0";
+    params["fourk"] = "1";
+
+    auto signed_params = wbi.sign_params(params);
+    std::string query = WbiSigner::map_to_query(signed_params);
+
+    std::string url = "https://api.bilibili.com/x/player/playurl?" + query;
+    std::string body = http_get(url, cookie);
     json resp = json::parse(body);
 
     if (resp["code"].get<int>() != 0) {
@@ -412,6 +454,9 @@ json Crawler::crawl_audio_url(const std::string& bvid, int64_t cid, const std::s
 // ============================================================
 
 json Crawler::crawl_danmaku(int64_t cid, const std::string& cookie) {
+    // 每个视频开始时重置为直连模式
+    reset_to_direct();
+
     json danmaku_list = json::array();
 
     try {
@@ -453,7 +498,39 @@ json Crawler::crawl_danmaku(int64_t cid, const std::string& cookie) {
             if (start != std::string::npos && end != std::string::npos) {
                 std::string trimmed = text.substr(start, end - start + 1);
                 if (!trimmed.empty()) {
-                    danmaku_list.push_back(trimmed);
+                    // 从 p 属性中提取时间信息
+                    // p 格式: "时间,模式,字号,颜色,时间戳,弹幕池,用户hash,弹幕ID"
+                    std::string p_attr = node.attribute("p").as_string();
+                    double video_time = 0.0;
+                    int64_t send_timestamp = 0;
+                    std::string user_hash;
+
+                    if (!p_attr.empty()) {
+                        std::istringstream iss(p_attr);
+                        std::string part;
+                        int part_idx = 0;
+                        while (std::getline(iss, part, ',')) {
+                            if (part_idx == 0) {
+                                // 视频内时间
+                                video_time = std::stod(part);
+                            } else if (part_idx == 4) {
+                                // 发送时间戳
+                                send_timestamp = std::stoll(part);
+                            } else if (part_idx == 6) {
+                                // 用户Hash
+                                user_hash = part;
+                                break;
+                            }
+                            part_idx++;
+                        }
+                    }
+
+                    json danmaku_item;
+                    danmaku_item["content"] = trimmed;
+                    danmaku_item["video_time"] = video_time;
+                    danmaku_item["send_time"] = send_timestamp;
+                    danmaku_item["user_hash"] = user_hash;
+                    danmaku_list.push_back(danmaku_item);
                 }
             }
         }
