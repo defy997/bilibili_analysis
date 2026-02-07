@@ -8,6 +8,10 @@
 #include <iomanip>
 #include <sstream>
 #include <openssl/md5.h>
+#include "json.hpp"
+
+// 使用 nlohmann::json 简写
+using json = nlohmann::json;
 
 // ============================================================
 // Wbi 签名模块
@@ -137,36 +141,48 @@ private:
             return;
         }
 
-        // 解析 JSON 提取 img_id 和 sub_id
-        // 格式: https://i0.hdslb.com/bfs/wbi/7f7d6...1.png
-        //       https://i0.hdslb.com/bfs/wbi/6c1a8...png
-        size_t img_start = response.find("\"wbi_img\":");
-        if (img_start == std::string::npos) {
-            std::cout << "[Wbi] No wbi_img in response" << std::endl;
+        // 使用 nlohmann/json 解析响应（新版格式）
+        try {
+            auto response_json = json::parse(response);
+            auto data = response_json.value("data", json::object());
+            auto wbi_img = data.value("wbi_img", json::object());
+            
+            std::string img_url = wbi_img.value("img_url", "");
+            std::string sub_url = wbi_img.value("sub_url", "");
+            
+            if (img_url.empty() || sub_url.empty()) {
+                std::cout << "[Wbi] Empty wbi_img URLs, trying old format..." << std::endl;
+                // 兼容旧格式：直接包含 URL
+                std::string wbi_img_str = data.value("wbi_img", "");
+                if (!wbi_img_str.empty()) {
+                    // 旧格式可能是逗号分隔的 URL
+                    size_t comma = wbi_img_str.find(',');
+                    if (comma != std::string::npos) {
+                        img_url = wbi_img_str.substr(0, comma);
+                        sub_url = wbi_img_str.substr(comma + 1);
+                    } else {
+                        img_url = wbi_img_str;
+                        sub_url = "";
+                    }
+                }
+            }
+            
+            if (img_url.empty()) {
+                std::cout << "[Wbi] Failed to parse img URLs, response preview: " << response.substr(0, 200) << std::endl;
+                return;
+            }
+            
+            // 提取文件名（去除路径和扩展名）
+            img_key_ = extract_filename(img_url);
+            sub_key_ = extract_filename(sub_url);
+
+            last_fetch_time_ = get_current_timestamp();
+            
+            std::cout << "[Wbi] Keys fetched: img_key=" << img_key_.substr(0, 12) << "... sub_key=" << sub_key_.substr(0, 12) << "..." << std::endl;
+        } catch (const std::exception& e) {
+            std::cout << "[Wbi] JSON parse error: " << e.what() << std::endl;
             return;
         }
-
-        // 提取两个 URL
-        size_t url1_start = response.find("\"//", img_start);
-        size_t url1_end = response.find("\"", url1_start + 3);
-        size_t url2_start = response.find("\"//", url1_end);
-        size_t url2_end = response.find("\"", url2_start + 3);
-
-        if (url1_start == std::string::npos || url2_start == std::string::npos) {
-            std::cout << "[Wbi] Failed to parse img URLs" << std::endl;
-            return;
-        }
-
-        std::string url1 = "https:" + response.substr(url1_start + 2, url1_end - url1_start - 2);
-        std::string url2 = "https:" + response.substr(url2_start + 2, url2_end - url2_start - 2);
-
-        // 提取文件名（去除路径和扩展名）
-        img_key_ = extract_filename(url1);
-        sub_key_ = extract_filename(url2);
-
-        last_fetch_time_ = get_current_timestamp();
-        
-        std::cout << "[Wbi] Keys fetched: img_key=" << img_key_.substr(0, 12) << "... sub_key=" << sub_key_.substr(0, 12) << "..." << std::endl;
     }
 
     // 从 URL 提取文件名（不含扩展名）
