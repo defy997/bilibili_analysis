@@ -4,17 +4,8 @@ const path = require('path');
 const WebSocket = require('ws');
 
 // 配置 session 以支持跨域 Cookie
-// 使用默认 session，并配置 cookie 设置
+// 使用默认 session
 app.on('ready', () => {
-    // 配置默认 session 的 cookie 设置
-    const defaultSession = session.defaultSession;
-    
-    // 设置 Cookie 的默认属性
-    defaultSession.cookies.setDefaults({
-        secure: false,  // 允许 HTTP Cookie
-        httpOnly: true
-    });
-    
     console.log('✅ Electron session 配置完成');
 });
 
