@@ -250,14 +250,14 @@
                 backgroundColor: 'transparent',
                 tooltip: { trigger: 'item' },
                 legend: {
-                    bottom: '0%',
+                    bottom: '5%',
                     left: 'center',
                     textStyle: { color: '#fff' }
                 },
                 series: [{
                     type: 'pie',
                     radius: ['40%', '70%'],
-                    center: ['50%', '45%'],
+                    center: ['50%', '50%'],  // 修改为完全居中
                     itemStyle: { borderRadius: 8, borderColor: 'rgba(20,20,30,0.8)', borderWidth: 2 },
                     label: { show: false },
                     data: [
@@ -275,12 +275,12 @@
                 tooltip: { trigger: 'axis' },
                 legend: {
                     show: true,
-                    bottom: '0%',
+                    bottom: '3%',
                     left: 'center',
                     textStyle: { color: '#fff' },
                     data: ['User Count']
                 },
-                grid: { left: '3%', right: '4%', bottom: '10%', top: '8%', containLabel: true },
+                grid: { left: '8%', right: '8%', bottom: '15%', top: '12%', containLabel: true },  // 调整grid使图表居中
                 xAxis: {
                     type: 'category',
                     data: ['LV0', 'LV1', 'LV2', 'LV3', 'LV4', 'LV5', 'LV6'],

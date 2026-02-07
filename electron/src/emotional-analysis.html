@@ -703,9 +703,21 @@
         function updateDanmuHeatmap(heatmapData) {
             if (!heatmapData || heatmapData.length === 0) {
                 danmuHeatmapChart.setOption({
-                    xAxis: { data: ['暂无数据'] },
-                    series: [{ data: [0] }],
-                    visualMap: { show: false }
+                    title: {
+                        text: '暂无弹幕数据\n可能原因：视频未爬取弹幕或弹幕数据为空',
+                        left: 'center',
+                        top: 'center',
+                        textStyle: {
+                            color: '#fff',
+                            opacity: 0.4,
+                            fontSize: 14,
+                            fontWeight: 'normal',
+                            lineHeight: 20
+                        }
+                    },
+                    xAxis: { show: false },
+                    yAxis: { show: false },
+                    series: []
                 }, true); // true 表示不合并，完全替换
                 return;
             }
@@ -765,7 +777,15 @@
             const container = document.getElementById('top-comments');
 
             if (!comments || comments.length === 0) {
-                container.innerHTML = '<div class="text-white/40 text-center py-8">No comments available</div>';
+                container.innerHTML = `
+                    <div class="text-center py-12">
+                        <div class="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-4">
+                            <i class="fa-solid fa-comments text-2xl text-white/20"></i>
+                        </div>
+                        <div class="text-white/40 text-sm mb-2">暂无评论数据</div>
+                        <div class="text-white/20 text-xs">可能原因：视频未爬取评论或评论数据为空</div>
+                    </div>
+                `;
                 return;
             }
 
