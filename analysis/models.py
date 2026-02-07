@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.auth.models import AbstractUser
 
 # Create your models here.
 
@@ -172,14 +173,8 @@ class UserConfig(models.Model):
         }
 
 
-class User(models.Model):
-    """用户模型"""
-    username = models.CharField(max_length=50, unique=True, verbose_name="用户名")
-    email = models.EmailField(unique=True, verbose_name="邮箱")
-    password = models.CharField(max_length=255, verbose_name="密码(哈希)")
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="注册时间")
-    is_active = models.BooleanField(default=True, verbose_name="是否激活")
-    last_login = models.DateTimeField(null=True, blank=True, verbose_name="最后登录时间")
+class User(AbstractUser):
+    """用户模型（继承自 AbstractUser）"""
 
     # === B站登录凭证 ===
     bilibili_mid = models.BigIntegerField(null=True, blank=True, verbose_name="B站用户ID")

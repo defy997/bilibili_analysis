@@ -135,6 +135,9 @@ STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# 自定义用户模型
+AUTH_USER_MODEL = 'analysis.User'
+
 # Email settings (邮件配置)
 # 使用 SMTP 发送邮件
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
