@@ -762,7 +762,8 @@ function createBilibiliLoginWindow() {
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,
-            enableRemoteModule: true
+            enableRemoteModule: true,
+            webSecurity: false  // 允许跨域请求
         },
         backgroundColor: '#1a1a2e',
         hasShadow: false,

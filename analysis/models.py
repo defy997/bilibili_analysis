@@ -22,7 +22,7 @@ class Comment(models.Model):
     video = models.ForeignKey(Video, on_delete=models.CASCADE, related_name='comments', verbose_name="视频")
 
     # 用户信息
-    mid = models.BigIntegerField(verbose_name="用户UID")
+    mid = models.BigIntegerField(db_index=True, verbose_name="用户UID")
     uname = models.CharField(max_length=100, null=True, verbose_name="用户名")
 
     # 评论内容
@@ -185,10 +185,6 @@ class User(models.Model):
     bilibili_mid = models.BigIntegerField(null=True, blank=True, verbose_name="B站用户ID")
     sessdata = models.TextField(null=True, blank=True, verbose_name="B站SESSDATA")
     bili_jct = models.CharField(max_length=50, null=True, blank=True, verbose_name="B站BILI_JCT")
-    access_token = models.TextField(null=True, blank=True, verbose_name="B站Access Token")
-    refresh_token = models.TextField(null=True, blank=True, verbose_name="B站Refresh Token")
-    sessdata_expires_at = models.DateTimeField(null=True, blank=True, verbose_name="SESSDATA过期时间")
-    last_refreshed_at = models.DateTimeField(null=True, blank=True, verbose_name="最后刷新时间")
 
     # === 用户个人配置 ===
     # 数据过滤配置

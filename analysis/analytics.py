@@ -78,8 +78,11 @@ def get_sentiment_trend_by_time(bvid, interval='hour'):
 
 
 def get_user_level_distribution(bvid):
-    """获取用户等级分布"""
-    distribution = Comment.objects.filter(video_id=bvid).values('user_level').annotate(
+    """获取用户等级分布（优化版）"""
+    # 直接在数据库中分组统计，避免加载所有数据到内存
+    distribution = Comment.objects.filter(
+        video_id=bvid
+    ).values('user_level').annotate(
         count=Count('rpid')
     ).order_by('user_level')
 
@@ -87,14 +90,22 @@ def get_user_level_distribution(bvid):
 
 
 def get_vip_distribution(bvid):
-    """获取会员类型分布"""
+    """获取会员类型分布（优化版 - 单次聚合查询）"""
+    from django.db.models import Case, When, IntegerField
+
     comments = Comment.objects.filter(video_id=bvid)
 
-    # vip_type: 0=普通用户, 1=月度大会员, 2=年度大会员
+    # 使用条件聚合一次性获取所有统计
+    stats = comments.aggregate(
+        normal=Count('rpid', filter=Q(vip_type=0)),
+        monthly_vip=Count('rpid', filter=Q(vip_type=1)),
+        annual_vip=Count('rpid', filter=Q(vip_type=2))
+    )
+
     return {
-        "normal": comments.filter(vip_type=0).count(),
-        "monthly_vip": comments.filter(vip_type=1).count(),
-        "annual_vip": comments.filter(vip_type=2).count()
+        "normal": stats['normal'],
+        "monthly_vip": stats['monthly_vip'],
+        "annual_vip": stats['annual_vip']
     }
 
 
@@ -279,21 +290,27 @@ def get_danmu_stats(bvid):
 
 def get_user_profile_dashboard(bvid):
     """
-    获取用户画像仪表板数据
+    获取用户画像仪表板数据（优化版 - 减少数据库查询次数）
     """
     try:
         video = Video.objects.get(bvid=bvid)
-        comments = Comment.objects.filter(video_id=bvid)
-        total_users = comments.values('mid').distinct().count()
 
-        # 会员分布
-        vip = get_vip_distribution(bvid)
-        vip_total = vip['monthly_vip'] + vip['annual_vip']
+        # 使用单次聚合查询获取所有统计数据
+        aggregated = Comment.objects.filter(video_id=bvid).aggregate(
+            total_users=Count('mid', distinct=True),
+            avg_level=Avg('user_level'),
+            monthly_vip=Count('rpid', filter=Q(vip_type=1)),
+            annual_vip=Count('rpid', filter=Q(vip_type=2))
+        )
+
+        total_users = aggregated['total_users'] or 0
+        vip_total = (aggregated['monthly_vip'] or 0) + (aggregated['annual_vip'] or 0)
+        avg_level = round(aggregated['avg_level'] or 0, 1)
         vip_ratio = round(vip_total / total_users * 100, 1) if total_users > 0 else 0
 
-        # 平均用户等级
-        avg_level = comments.aggregate(avg=Avg('user_level'))['avg']
-        avg_level = round(avg_level, 1) if avg_level else 0
+        # 获取分布数据
+        level_dist = get_user_level_distribution(bvid)
+        vip_dist = get_vip_distribution(bvid)
 
         return {
             "success": True,
@@ -306,8 +323,8 @@ def get_user_profile_dashboard(bvid):
                 "vip_ratio": vip_ratio,
                 "avg_level": avg_level,
             },
-            "level_distribution": get_user_level_distribution(bvid),
-            "vip_distribution": vip,
+            "level_distribution": level_dist,
+            "vip_distribution": vip_dist,
             "location_distribution": get_location_distribution(bvid, limit=15),
             "top_users": get_top_users_by_likes(bvid, limit=10),
         }

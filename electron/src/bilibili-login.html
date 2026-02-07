@@ -164,6 +164,9 @@
     </div>
 
     <script>
+        // 配置 axios 指向 Django 服务器
+        axios.defaults.baseURL = 'http://127.0.0.1:8000';
+
         const { createApp, ref, onMounted } = Vue;
 
         const app = createApp({
