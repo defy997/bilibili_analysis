@@ -19,6 +19,7 @@ from Crypto.Hash import SHA256
 import binascii
 import urllib.parse
 import pytz
+import threading
 
 # B站公钥
 BILIBILI_PUBLIC_KEY = '''-----BEGIN PUBLIC KEY-----
@@ -41,8 +42,186 @@ APPKEY = "4409e2ce8ffd12b8"
 APPSEC = "59b43e04ad6965f34319062b478f83dd"
 
 
+# ============================================================
+# WBI 签名模块（移植自 C++ crawler_service）
+# ============================================================
+
+# 固定的打乱顺序索引表
+MIXIN_TABLE = [
+    46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35, 27, 43, 5, 49,
+    33, 9, 42, 19, 29, 28, 14, 39, 12, 38, 41, 13, 37, 48, 7, 16, 24, 55, 40,
+    61, 26, 17, 0, 1, 60, 51, 30, 4, 22, 25, 54, 21, 56, 59, 6, 63, 57, 62, 11,
+    36, 20, 34, 44, 52
+]
+
+
+class WbiSigner:
+    """WBI 签名器（单例模式）"""
+
+    _instance = None
+    _lock = threading.Lock()
+
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self):
+        if self._initialized:
+            return
+        self.img_key = ""
+        self.sub_key = ""
+        self.last_fetch_time = 0
+        self._initialized = True
+
+    def is_valid(self):
+        """检查密钥是否有效"""
+        return bool(self.img_key and self.sub_key)
+
+    def is_expired(self):
+        """检查密钥是否过期（6小时）"""
+        if not self.last_fetch_time:
+            return True
+        return (time.time() - self.last_fetch_time) > (6 * 3600)
+
+    def fetch_wbi_keys(self, sessdata=None):
+        """从 nav 接口获取 WBI 密钥"""
+        if sessdata is None:
+            # 尝试从 views 导入（避免循环导入）
+            try:
+                from .views import BILI_COOKIE
+                sessdata = BILI_COOKIE
+            except (ImportError, AttributeError):
+                # 如果无法导入，使用默认值
+                sessdata = "SESSDATA=55d2ed48%2C1785846835%2Cd80a0%2A22CjDxZL1htFveMUpzPXZrxp6zwh1K5neWuRyhGlZxWZ1A3xBGw6NIs8AhnyqkO5tfmBgSVmhQTHVlNDNaMzlENjNqYjQwcGNPRzN5T05YcTN3SFRLT2ZvOW9sZHFvS295WmdRdW1YQXZzc01GMEdBek1YTGZTajNINW1jdmhRaUN4MWV6QnFLcGh3IIEC"
+
+        url = "https://api.bilibili.com/x/web-interface/nav"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Referer': 'https://www.bilibili.com/',
+            'Cookie': sessdata or ''
+        }
+
+        try:
+            resp = requests.get(url, headers=headers, timeout=10)
+            if resp.status_code != 200:
+                print(f"[Wbi] Failed to fetch keys, HTTP {resp.status_code}")
+                return False
+
+            data = resp.json()
+            if data.get('code') != 0:
+                print(f"[Wbi] API error: {data.get('message')}")
+                return False
+
+            # 解析 wbi_img 字段（新版格式是对象）
+            wbi_img = data.get('data', {}).get('wbi_img', {})
+            if not wbi_img:
+                print("[Wbi] No wbi_img in response")
+                return False
+
+            # 新版格式: {"img_url": "...", "sub_url": "..."}
+            if isinstance(wbi_img, dict):
+                img_url = wbi_img.get('img_url', '')
+                sub_url = wbi_img.get('sub_url', '')
+                if img_url and sub_url:
+                    self.img_key = self._extract_filename(img_url)
+                    self.sub_key = self._extract_filename(sub_url)
+                    self.last_fetch_time = time.time()
+                    print(f"[Wbi] Keys fetched: img_key={self.img_key[:12]}... sub_key={self.sub_key[:12]}...")
+                    return True
+                else:
+                    print(f"[Wbi] Incomplete wbi_img data: {wbi_img}")
+                    return False
+            else:
+                # 旧版格式：直接是字符串
+                import re
+                urls = re.findall(r'https://[^"\']+', wbi_img)
+                if len(urls) >= 2:
+                    self.img_key = self._extract_filename(urls[0])
+                    self.sub_key = self._extract_filename(urls[1])
+                    self.last_fetch_time = time.time()
+                    print(f"[Wbi] Keys fetched: img_key={self.img_key[:12]}... sub_key={self.sub_key[:12]}...")
+                    return True
+                else:
+                    print(f"[Wbi] Failed to parse img URLs: {wbi_img}")
+                    return False
+
+        except Exception as e:
+            print(f"[Wbi] Exception: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def _extract_filename(self, url):
+        """从 URL 提取文件名（不含扩展名）"""
+        import os
+        filename = os.path.basename(url)
+        # 去除扩展名
+        if '.' in filename:
+            filename = filename.rsplit('.', 1)[0]
+        return filename
+
+    def get_mixin_key(self):
+        """生成 mixin key（核心算法）"""
+        if not self.is_valid():
+            self.fetch_wbi_keys()
+
+        s = self.img_key + self.sub_key
+        key = ''.join(s[MIXIN_TABLE[i]] for i in range(64) if MIXIN_TABLE[i] < len(s))
+        return key[:32]
+
+    def sign_params(self, params, sessdata=None):
+        """
+        生成带签名的请求参数
+
+        Args:
+            params: 原始参数字典
+            sessdata: 可选的 SESSDATA 用于获取密钥
+
+        Returns:
+            dict: 添加了 wts 和 w_rid 的参数
+        """
+        with threading.Lock():
+            if not self.is_valid() or self.is_expired():
+                self.fetch_wbi_keys(sessdata)
+
+            signed_params = dict(params)
+
+            # 1. 添加时间戳
+            wts = int(time.time())
+            signed_params['wts'] = str(wts)
+
+            # 2. 生成 w_rid (MD5签名)
+            w_rid = self._generate_wrid(signed_params)
+            signed_params['w_rid'] = w_rid
+
+            return signed_params
+
+    def _generate_wrid(self, params):
+        """生成 w_rid (MD5签名)"""
+        # 1. 按 key 的 ASCII 升序排序并拼接
+        sorted_items = sorted(params.items())
+        query = '&'.join(f"{k}={v}" for k, v in sorted_items)
+
+        # 2. 拼接 mixin key
+        mixin = self.get_mixin_key()
+        query += mixin
+
+        # 3. MD5 签名
+        return md5(query.encode('utf-8')).hexdigest()
+
+
+def get_wbi_signed_params(params, sessdata=None):
+    """便捷函数：获取 WBI 签名参数"""
+    signer = WbiSigner()
+    return signer.sign_params(params, sessdata)
+
+
 def get_sign(params):
-    """计算签名"""
+    """计算签名（旧版，已废弃，使用 WBI 签名）"""
     items = sorted(params.items())
     return md5(f"{urlencode(items)}{APPSEC}".encode('utf-8')).hexdigest()
 
@@ -251,45 +430,56 @@ class SessdataManager:
     
     def generate_qrcode(self):
         """
-        生成登录二维码
-        
+        生成登录二维码（用于前端显示）
+
         Returns:
-            dict: {'success': bool, 'qr_url': str, 'auth_code': str, 'qr_image': str}
+            dict: {'success': bool, 'qr_url': str, 'auth_code': str, 'qr_image': str, 'message': str}
         """
         try:
+            # 使用旧的 MD5 签名（登录阶段不需要 WBI 签名）
+            from .login import get_sign as login_get_sign
+            
             params = {
                 'appkey': APPKEY,
                 'local_id': 0,
                 'ts': int(time.time())
             }
-            params['sign'] = get_sign(params)
+            params['sign'] = login_get_sign(params)
 
-            # 使用 form 表单格式发送请求
             url = "https://passport.bilibili.com/x/passport-tv-login/qrcode/auth_code"
-            headers = dict(HEADERS)
-            headers['Content-Type'] = 'application/x-www-form-urlencoded'
-            response = requests.post(url, data=params, headers=headers, timeout=10)
-            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Referer': 'https://www.bilibili.com/',
+                'Origin': 'https://www.bilibili.com',
+                'Accept': 'application/json, text/plain, */*',
+                'Content-Type': 'application/x-www-form-urlencoded',
+            }
+
+            # 使用 params 作为 URL 参数（与 login.py 一致）
+            response = requests.post(url, params=params, headers=headers, timeout=10)
+
             if response.status_code != 200:
                 return {
                     'success': False,
                     'message': f'请求失败: {response.status_code}',
                     'qr_url': None,
-                    'auth_code': None
+                    'auth_code': None,
+                    'qr_image': None
                 }
-            
+
             data = response.json()
             if data.get('code') != 0:
                 return {
                     'success': False,
                     'message': f'API错误: {data.get("message")}',
                     'qr_url': None,
-                    'auth_code': None
+                    'auth_code': None,
+                    'qr_image': None
                 }
-            
+
             qr_url = data['data']['url']
             auth_code = data['data']['auth_code']
-            
+
             # 生成二维码图片
             qr = qrcode.QRCode(
                 version=1,
@@ -299,62 +489,72 @@ class SessdataManager:
             )
             qr.add_data(qr_url)
             qr.make(fit=True)
-            
+
             # 保存为 base64
             from io import BytesIO
             import base64
-            
+
             img = qr.make_image(fill_color="black", back_color="white")
             buffered = BytesIO()
             img.save(buffered, format="PNG")
             qr_image = buffered.getvalue()
             qr_image_base64 = f"data:image/png;base64,{base64.b64encode(qr_image).decode('utf-8')}"
-            
+
             return {
                 'success': True,
                 'qr_url': qr_url,
                 'auth_code': auth_code,
-                'qr_image': qr_image_base64
+                'qr_image': qr_image_base64,
+                'message': '请使用B站APP扫描二维码'
             }
         except Exception as e:
             return {
                 'success': False,
                 'message': f'生成二维码失败: {str(e)}',
                 'qr_url': None,
-                'auth_code': None
+                'auth_code': None,
+                'qr_image': None
             }
     
     def poll_login_status(self, auth_code):
         """
         轮询登录状态
-        
+
         Args:
             auth_code: 授权码
-            
+
         Returns:
             dict: {'success': bool, 'message': str, 'tokens': dict}
         """
         try:
+            # 使用旧的 MD5 签名（登录阶段不需要 WBI 签名）
+            from .login import get_sign as login_get_sign
+            
             params = {
                 'appkey': APPKEY,
                 'local_id': 0,
                 'ts': int(time.time()),
                 'auth_code': auth_code
             }
-            params['sign'] = get_sign(params)
+            params['sign'] = login_get_sign(params)
 
             poll_url = "https://passport.bilibili.com/x/passport-tv-login/qrcode/poll"
 
-            headers = dict(HEADERS)
-            headers['Content-Type'] = 'application/x-www-form-urlencoded'
-            response = requests.post(poll_url, data=params, headers=headers, timeout=10)
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Referer': 'https://www.bilibili.com/',
+                'Accept': 'application/json, text/plain, */*',
+            }
+
+            # 使用 params 作为 URL 参数（与 login.py 一致）
+            response = requests.post(poll_url, params=params, headers=headers, timeout=10)
             result = response.json()
-            
+
             if result.get('code') == 0:
                 data = result.get('data', {})
                 token_info = data.get('token_info', {})
                 cookie_info = data.get('cookie_info', {})
-                
+
                 # 提取 SESSDATA 和 bili_jct
                 sessdata = None
                 bili_jct = None
@@ -364,28 +564,23 @@ class SessdataManager:
                         sessdata = cookie.get('value')
                     elif name == 'bili_jct':
                         bili_jct = cookie.get('value')
-                
+
                 tokens = {
-                    'access_token': token_info.get('access_token'),
-                    'refresh_token': token_info.get('refresh_token'),
                     'sessdata': sessdata,
                     'bili_jct': bili_jct,
-                    'mid': data.get('mid'),
-                    'expires_in': token_info.get('expires_in')
+                    'mid': data.get('mid')
                 }
-                
-                # 保存到数据库
+
+                # 保存到数据库（不保存 refresh_token）
                 user = self._get_user()
                 if user:
                     user.bilibili_mid = data.get('mid')
                     user.sessdata = sessdata
                     user.bili_jct = bili_jct
-                    user.access_token = token_info.get('access_token')
-                    user.refresh_token = token_info.get('refresh_token')
                     user.sessdata_expires_at = timezone.now() + timedelta(days=30)
                     user.last_refreshed_at = timezone.now()
                     user.save()
-                
+
                 return {
                     'success': True,
                     'message': '登录成功',

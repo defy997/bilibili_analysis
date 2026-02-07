@@ -54,11 +54,21 @@ conda activate bilibili_env
 # 安装依赖
 pip install -r requirements.txt
 
+# 启动 Redis (Celery 消息队列)
+redis-server
+
+
+# 启动 Celery 任务队列 (4 个 worker 并行处理)
+celery -A bilibili_analysis worker -c 4 -l info
+
+# 或自动根据 CPU 核心数设置
+# celery -A bilibili_analysis worker -l info
+
 # 数据库迁移
 python manage.py makemigrations
 python manage.py migrate
 
-# 启动服务
+# 启动 Django 服务
 python manage.py runserver 0.0.0.0:8000
 ```
 
