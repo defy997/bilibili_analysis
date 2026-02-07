@@ -749,12 +749,19 @@
 
             danmuHeatmapChart.setOption({
                 xAxis: {
+                    type: 'category',
                     data: timeLabels,
                     axisLabel: {
                         interval: interval,
                         rotate: totalLabels > 15 ? 45 : 0,
                         fontSize: 10
                     }
+                },
+                yAxis: {
+                    type: 'value',
+                    axisLine: { show: false },
+                    splitLine: { lineStyle: { color: '#333' } },
+                    axisLabel: { color: '#888' }
                 },
                 visualMap: {
                     min: 0,
@@ -771,6 +778,7 @@
                 },
                 series: [{
                     data: counts,
+                    type: 'bar',
                     barWidth: '80%',
                     itemStyle: {
                         borderRadius: [4, 4, 0, 0]
