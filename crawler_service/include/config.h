@@ -7,8 +7,8 @@ struct Config {
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
     std::string referer = "https://www.bilibili.com/";
-    double min_delay = 0.5;
-    double max_delay = 1.5;
+    double min_delay = 1.0;  // 最小延迟（秒）
+    double max_delay = 3.0;  // 最大延迟（秒）
     int max_retries = 3;
 
     // 代理池配置

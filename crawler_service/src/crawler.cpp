@@ -128,6 +128,11 @@ std::string Crawler::http_get(const std::string& url, const std::string& cookie)
     headers = curl_slist_append(headers, "accept: application/json, text/plain, */*");
     headers = curl_slist_append(headers, "accept-language: zh-CN,zh;q=0.9");
     headers = curl_slist_append(headers, "origin: https://www.bilibili.com");
+    headers = curl_slist_append(headers, "sec-fetch-dest: empty");
+    headers = curl_slist_append(headers, "sec-fetch-mode: cors");
+    headers = curl_slist_append(headers, "sec-fetch-site: same-site");
+    // 设备指纹（关键！）
+    headers = curl_slist_append(headers, "buvid3: XY1234567890ABCDEF");
     std::string ua_header = "user-agent: " + config_.user_agent;
     headers = curl_slist_append(headers, ua_header.c_str());
     std::string ref_header = "referer: " + config_.referer;
