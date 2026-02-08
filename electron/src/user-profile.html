@@ -250,28 +250,28 @@
                 }]
             });
             // 会员类型分布 - 饼图
-vipChart = echarts.init(document.getElementById('vip-chart'));
-vipChart.setOption({
-    backgroundColor: 'transparent',
-    tooltip: { trigger: 'item' },
-    legend: {
-        bottom: '5%', // 稍微下移，给饼图腾出空间
-        left: 'center',
-        itemGap: 20,   // 图例项之间的间距
-        textStyle: { color: '#fff', fontSize: 12 }
-    },
-    series: [{
-        type: 'pie',
-        radius: ['40%', '70%'], // 稍微调大半径，让视觉更饱满
-        center: ['50%', '45%'], // 保持 50% 水平绝对居中
-        avoidLabelOverlap: false,
-        itemStyle: { 
-            borderRadius: 10, 
-            borderColor: 'rgba(20,20,30,0.8)', 
-            borderWidth: 2 
+        vipChart = echarts.init(document.getElementById('vip-chart'));
+        vipChart.setOption({
+        backgroundColor: 'transparent',
+        tooltip: { trigger: 'item' },
+        legend: {
+            bottom: '5%', // 稍微下移，给饼图腾出空间
+            left: 'center',
+            itemGap: 20,   // 图例项之间的间距
+            textStyle: { color: '#fff', fontSize: 12 }
         },
-        label: { show: false },
-        emphasis: {
+        series: [{
+            type: 'pie',
+            radius: ['40%', '70%'], // 稍微调大半径，让视觉更饱满
+            center: ['50%', '45%'], // 保持 50% 水平绝对居中
+            avoidLabelOverlap: false,
+            itemStyle: { 
+                borderRadius: 10, 
+                borderColor: 'rgba(20,20,30,0.8)', 
+                borderWidth: 2 
+            },
+            label: { show: false },
+            emphasis: {
             label: {
                 show: true,
                 fontSize: 14,
@@ -286,51 +286,68 @@ vipChart.setOption({
         ]
     }]
 });
-            // 用户等级分布 - 柱状图
+            // 用户等级分布 - 优化后的柱状图
             levelChart = echarts.init(document.getElementById('level-chart'));
             levelChart.setOption({
                 backgroundColor: 'transparent',
-                tooltip: { trigger: 'axis' },
-                legend: {
-                    show: false
-                },
-                grid: { left: '15%', right: '15%', bottom: '18%', top: '12%', containLabel: false },  // 更平衡的边距设置
-                xAxis: {
-                    type: 'category',
-                    data: ['LV0', 'LV1', 'LV2', 'LV3', 'LV4', 'LV5', 'LV6'],
-                    axisLine: { lineStyle: { color: '#444' } },
-                    axisLabel: { color: '#888', fontSize: 11 },
-                    name: '用户等级',
-                    nameLocation: 'middle',
-                    nameGap: 30,
-                    nameTextStyle: { color: '#888', fontSize: 12 }
-                },
-                yAxis: {
-                    type: 'value',
-                    name: '用户数量',
-                    axisLine: { show: false },
-                    splitLine: { lineStyle: { color: '#333' } },
-                    axisLabel: { color: '#888' }
-                },
-                series: [{
-                    name: 'User Count',
-                    data: Array(7).fill(0),
-                    type: 'bar',
-                    itemStyle: {
-                        color: (params) => {
-                            const colors = ['#64748b', '#94a3b8', '#38bdf8', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444'];
-                            return colors[params.dataIndex] || '#3b82f6';
-                        },
-                        borderRadius: [4, 4, 0, 0]
-                    },
-                    label: {
-                        show: true,
-                        position: 'top',
-                        color: '#888',
-                        fontSize: 10
-                    }
-                }]
-            });
+                tooltip: { 
+                trigger: 'axis',
+                axisPointer: { type: 'shadow' } 
+            },
+            grid: { 
+                left: '5%', 
+                right: '5%', 
+                bottom: '15%', 
+                top: '15%', 
+                containLabel: true 
+    },
+    xAxis: {
+        type: 'category',
+        data: ['LV0', 'LV1', 'LV2', 'LV3', 'LV4', 'LV5', 'LV6'],
+        axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
+        axisLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 11, margin: 15 },
+        axisTick: { show: false }
+    },
+    yAxis: {
+        type: 'value',
+        name: '用户数量',
+        nameTextStyle: { color: 'rgba(255,255,255,0.4)', fontSize: 10, align: 'right' },
+        axisLine: { show: false },
+        splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)', type: 'dashed' } }, // 弱化网格线
+        axisLabel: { color: 'rgba(255,255,255,0.4)', fontSize: 10 }
+    },
+    series: [{
+        name: 'User Count',
+        type: 'bar',
+        barWidth: '45%',
+        data: Array(7).fill(0),
+        itemStyle: {
+            // 使用更现代的渐变色
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: '#60a5fa' }, // 顶部浅蓝色
+                { offset: 1, color: '#1d4ed8' }  // 底部深蓝色
+            ]),
+            borderRadius: [4, 4, 0, 0]
+        },
+        label: {
+            show: true,
+            position: 'top',
+            distance: 10,
+            color: '#fff',
+            fontSize: 11,
+            fontWeight: 'bold'
+        },
+        // 增加鼠标悬停高亮效果
+        emphasis: {
+            itemStyle: {
+                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                    { offset: 0, color: '#93c5fd' },
+                    { offset: 1, color: '#2563eb' }
+                ])
+            }
+        }
+    }]
+});
         }
 
         function listenForVideoChange() {
