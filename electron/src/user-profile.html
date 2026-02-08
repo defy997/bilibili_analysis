@@ -273,6 +273,13 @@
                     ]
                 }]
             });
+            setTimeout(() => {
+                vipChart.resize();
+            }, 200); 
+            // 监听窗口缩放，防止图表错位
+            window.addEventListener('resize', () => {
+                vipChart && vipChart.resize();
+            });
 
             // 用户等级分布 - 柱状图
             levelChart = echarts.init(document.getElementById('level-chart'));
@@ -463,7 +470,7 @@
                 grid: { left: 90, right: 100, bottom: '10%', top: '10%', containLabel: true },
                 yAxis: { data: provinces },
                 series: [{ data: values }]
-            });
+            }, { notMerge: true });
         }
 
         function updateVipChart(vipData) {
