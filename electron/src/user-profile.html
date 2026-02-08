@@ -249,38 +249,43 @@
                     }
                 }]
             });
-
             // 会员类型分布 - 饼图
-            vipChart = echarts.init(document.getElementById('vip-chart'));
-            vipChart.setOption({
-                backgroundColor: 'transparent',
-                tooltip: { trigger: 'item' },
-                legend: {
-                    bottom: '10%',
-                    left: 'center',
-                    textStyle: { color: '#fff', fontSize: 12 }
-                },
-                series: [{
-                    type: 'pie',
-                    radius: ['38%', '68%'],
-                    center: ['50%', '40%'],  // 向上移动以平衡底部图例
-                    itemStyle: { borderRadius: 8, borderColor: 'rgba(20,20,30,0.8)', borderWidth: 2 },
-                    label: { show: false },
-                    data: [
-                        { value: 0, name: 'Normal', itemStyle: { color: '#94a3b8' } },
-                        { value: 0, name: 'Monthly VIP', itemStyle: { color: '#f59e0b' } },
-                        { value: 0, name: 'Annual VIP', itemStyle: { color: '#ef4444' } }
-                    ]
-                }]
-            });
-            setTimeout(() => {
-                vipChart.resize();
-            }, 200); 
-            // 监听窗口缩放，防止图表错位
-            window.addEventListener('resize', () => {
-                vipChart && vipChart.resize();
-            });
-
+vipChart = echarts.init(document.getElementById('vip-chart'));
+vipChart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'item' },
+    legend: {
+        bottom: '5%', // 稍微下移，给饼图腾出空间
+        left: 'center',
+        itemGap: 20,   // 图例项之间的间距
+        textStyle: { color: '#fff', fontSize: 12 }
+    },
+    series: [{
+        type: 'pie',
+        radius: ['40%', '70%'], // 稍微调大半径，让视觉更饱满
+        center: ['50%', '45%'], // 保持 50% 水平绝对居中
+        avoidLabelOverlap: false,
+        itemStyle: { 
+            borderRadius: 10, 
+            borderColor: 'rgba(20,20,30,0.8)', 
+            borderWidth: 2 
+        },
+        label: { show: false },
+        emphasis: {
+            label: {
+                show: true,
+                fontSize: 14,
+                fontWeight: 'bold',
+                color: '#fff'
+            }
+        },
+        data: [
+            { value: 0, name: 'Normal', itemStyle: { color: '#94a3b8' } },
+            { value: 0, name: 'Monthly VIP', itemStyle: { color: '#f59e0b' } },
+            { value: 0, name: 'Annual VIP', itemStyle: { color: '#ef4444' } }
+        ]
+    }]
+});
             // 用户等级分布 - 柱状图
             levelChart = echarts.init(document.getElementById('level-chart'));
             levelChart.setOption({
@@ -474,18 +479,25 @@
         }
 
         function updateVipChart(vipData) {
-            if (!vipData) return;
+    if (!vipData) return;
 
-            vipChart.setOption({
-                series: [{
-                    data: [
-                        { value: vipData.normal, name: 'Normal', itemStyle: { color: '#94a3b8' } },
-                        { value: vipData.monthly_vip, name: 'Monthly VIP', itemStyle: { color: '#f59e0b' } },
-                        { value: vipData.annual_vip, name: 'Annual VIP', itemStyle: { color: '#ef4444' } }
-                    ]
-                }]
-            });
-        }
+    vipChart.setOption({
+        series: [{
+            data: [
+                { value: vipData.normal, name: 'Normal', itemStyle: { color: '#94a3b8' } },
+                { value: vipData.monthly_vip, name: 'Monthly VIP', itemStyle: { color: '#f59e0b' } },
+                { value: vipData.annual_vip, name: 'Annual VIP', itemStyle: { color: '#ef4444' } }
+            ]
+        }]
+    });
+
+    // 重点：数据加载并渲染后，延迟一瞬间强制重置尺寸以实现居中
+    setTimeout(() => {
+        vipChart.resize({
+            animation: { duration: 500 }
+        });
+    }, 100);
+}
 
         function updateLevelChart(levelData) {
             if (!levelData || levelData.length === 0) return;
