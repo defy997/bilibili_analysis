@@ -211,12 +211,12 @@
             locationChart.setOption({
                 backgroundColor: 'transparent',
                 tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-                grid: { left: 90, right: 100, bottom: '10%', top: '10%', containLabel: true },
+                grid: { left: 80, right: 100, bottom: '10%', top: '10%', containLabel: true },
                 xAxis: {
                     type: 'value',
                     axisLine: { show: false },
                     splitLine: { lineStyle: { color: '#333' } },
-                    axisLabel: { show: false }  // 隐藏x轴刻度标签，因为柱状图右侧已显示数值
+                    axisLabel: { show: false }
                 },
                 yAxis: {
                     type: 'category',
@@ -225,15 +225,15 @@
                     axisLabel: { 
                         color: '#ccc', 
                         fontSize: 12,
-                        interval: 0,  // 确保显示所有标签
-                        fontFamily: 'Microsoft YaHei, PingFang SC, sans-serif'  // 确保中文字体能正确渲染
+                        interval: 0,
+                        fontFamily: 'Microsoft YaHei, PingFang SC, sans-serif'
                     },
                     inverse: true
                 },
                 series: [{
                     type: 'bar',
                     data: [],
-                    barWidth: '60%',  // 确保柱子宽度足够
+                    barWidth: '60%',
                     itemStyle: {
                         color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
                             { offset: 0, color: '#3b82f6' },
@@ -249,105 +249,87 @@
                     }
                 }]
             });
+
             // 会员类型分布 - 饼图
-        vipChart = echarts.init(document.getElementById('vip-chart'));
-        vipChart.setOption({
-        backgroundColor: 'transparent',
-        tooltip: { trigger: 'item' },
-        legend: {
-            bottom: '5%', // 稍微下移，给饼图腾出空间
-            left: 'center',
-            itemGap: 20,   // 图例项之间的间距
-            textStyle: { color: '#fff', fontSize: 12 }
-        },
-        series: [{
-            type: 'pie',
-            radius: ['40%', '70%'], // 稍微调大半径，让视觉更饱满
-            center: ['50%', '45%'], // 保持 50% 水平绝对居中
-            avoidLabelOverlap: false,
-            itemStyle: { 
-                borderRadius: 10, 
-                borderColor: 'rgba(20,20,30,0.8)', 
-                borderWidth: 2 
-            },
-            label: { show: false },
-            emphasis: {
-            label: {
-                show: true,
-                fontSize: 14,
-                fontWeight: 'bold',
-                color: '#fff'
-            }
-        },
-        data: [
-            { value: 0, name: 'Normal', itemStyle: { color: '#94a3b8' } },
-            { value: 0, name: 'Monthly VIP', itemStyle: { color: '#f59e0b' } },
-            { value: 0, name: 'Annual VIP', itemStyle: { color: '#ef4444' } }
-        ]
-    }]
-});
-            // 用户等级分布 - 优化后的柱状图
+            vipChart = echarts.init(document.getElementById('vip-chart'));
+            vipChart.setOption({
+                backgroundColor: 'transparent',
+                tooltip: { trigger: 'item' },
+                legend: {
+                    bottom: '10%',
+                    left: 'center',
+                    textStyle: { color: '#fff', fontSize: 12 }
+                },
+                series: [{
+                    type: 'pie',
+                    radius: ['38%', '68%'],
+                    center: ['50%', '40%'],
+                    itemStyle: { borderRadius: 8, borderColor: 'rgba(20,20,30,0.8)', borderWidth: 2 },
+                    label: { show: false },
+                    data: [
+                        { value: 0, name: 'Normal', itemStyle: { color: '#94a3b8' } },
+                        { value: 0, name: 'Monthly VIP', itemStyle: { color: '#f59e0b' } },
+                        { value: 0, name: 'Annual VIP', itemStyle: { color: '#ef4444' } }
+                    ]
+                }]
+            });
+
+            // 用户等级分布 - 柱状图
             levelChart = echarts.init(document.getElementById('level-chart'));
             levelChart.setOption({
                 backgroundColor: 'transparent',
-                tooltip: { 
-                trigger: 'axis',
-                axisPointer: { type: 'shadow' } 
-            },
-            grid: { 
-                left: '5%', 
-                right: '5%', 
-                bottom: '15%', 
-                top: '15%', 
-                containLabel: true 
-    },
-    xAxis: {
-        type: 'category',
-        data: ['LV0', 'LV1', 'LV2', 'LV3', 'LV4', 'LV5', 'LV6'],
-        axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
-        axisLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 11, margin: 15 },
-        axisTick: { show: false }
-    },
-    yAxis: {
-        type: 'value',
-        name: '用户数量',
-        nameTextStyle: { color: 'rgba(255,255,255,0.4)', fontSize: 10, align: 'right' },
-        axisLine: { show: false },
-        splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)', type: 'dashed' } }, // 弱化网格线
-        axisLabel: { color: 'rgba(255,255,255,0.4)', fontSize: 10 }
-    },
-    series: [{
-        name: 'User Count',
-        type: 'bar',
-        barWidth: '45%',
-        data: Array(7).fill(0),
-        itemStyle: {
-            // 使用更现代的渐变色
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                { offset: 0, color: '#60a5fa' }, // 顶部浅蓝色
-                { offset: 1, color: '#1d4ed8' }  // 底部深蓝色
-            ]),
-            borderRadius: [4, 4, 0, 0]
-        },
-        label: {
-            show: true,
-            position: 'top',
-            distance: 10,
-            color: '#fff',
-            fontSize: 11,
-            fontWeight: 'bold'
-        },
-        // 增加鼠标悬停高亮效果
-        emphasis: {
-            itemStyle: {
-                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                    { offset: 0, color: '#93c5fd' },
-                    { offset: 1, color: '#2563eb' }
-                ])
-            }
-        }
-    }]
-});
+                tooltip: { trigger: 'axis' },
+                legend: { show: false },
+                grid: { 
+                    left: '10%', 
+                    right: '10%', 
+                    bottom: '25%', 
+                    top: '15%', 
+                    containLabel: true 
+                },
+                xAxis: {
+                    type: 'category',
+                    data: ['LV0', 'LV1', 'LV2', 'LV3', 'LV4', 'LV5', 'LV6'],
+                    axisLabel: { 
+                        show: true,
+                        interval: 0,
+                        rotate: 35,
+                        color: 'rgba(255,255,255,0.7)', 
+                        fontSize: 11,
+                        margin: 15
+                    },
+                    axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
+                    axisTick: { show: false }
+                },
+                yAxis: {
+                    type: 'value',
+                    name: '数量',
+                    nameTextStyle: { color: 'rgba(255,255,255,0.4)', fontSize: 10, padding: [0, 0, 0, 30] },
+                    splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)', type: 'dashed' } },
+                    axisLabel: { color: 'rgba(255,255,255,0.4)', fontSize: 10 }
+                },
+                series: [{
+                    name: 'User Count',
+                    type: 'bar',
+                    barWidth: '40%',
+                    data: Array(7).fill(0),
+                    itemStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: '#3b82f6' },
+                            { offset: 1, color: '#1d4ed8' }
+                        ]),
+                        borderRadius: [4, 4, 0, 0]
+                    },
+                    label: {
+                        show: true,
+                        position: 'top',
+                        color: '#fff',
+                        fontSize: 10,
+                        fontWeight: 'bold',
+                        distance: 5
+                    }
+                }]
+            });
         }
 
         function listenForVideoChange() {
@@ -372,7 +354,6 @@
                 showLoading(false);
 
                 if (data.success) {
-                    // 检查数据是否为空
                     if (!data.overview_stats || data.overview_stats.total_users === 0) {
                         showNoData();
                     } else {
@@ -449,23 +430,22 @@
         }
 
         function updateUI(data) {
-            // 概览统计
             const stats = data.overview_stats;
             document.getElementById('total-users').innerText = stats.total_users;
             document.getElementById('vip-ratio').innerText = stats.vip_ratio + '%';
             document.getElementById('avg-level').innerText = stats.avg_level;
 
-            // IP 地域分布
             updateLocationChart(data.location_distribution);
-
-            // 会员类型分布
             updateVipChart(data.vip_distribution);
-
-            // 用户等级分布
             updateLevelChart(data.level_distribution);
-
-            // 高赞用户 Top10
             updateTopUsers(data.top_users);
+
+            setTimeout(() => {
+                levelChart?.resize();
+                vipChart?.resize();
+                locationChart?.resize();
+                console.log('Charts resized for new data');
+            }, 300);
         }
 
         function updateLocationChart(locationData) {
@@ -489,32 +469,25 @@
 
             locationChart.setOption({
                 title: { show: false },
-                grid: { left: 90, right: 100, bottom: '10%', top: '10%', containLabel: true },
+                grid: { left: 80, right: 100, bottom: '10%', top: '10%', containLabel: true },
                 yAxis: { data: provinces },
                 series: [{ data: values }]
             }, { notMerge: true });
         }
 
         function updateVipChart(vipData) {
-    if (!vipData) return;
+            if (!vipData) return;
 
-    vipChart.setOption({
-        series: [{
-            data: [
-                { value: vipData.normal, name: 'Normal', itemStyle: { color: '#94a3b8' } },
-                { value: vipData.monthly_vip, name: 'Monthly VIP', itemStyle: { color: '#f59e0b' } },
-                { value: vipData.annual_vip, name: 'Annual VIP', itemStyle: { color: '#ef4444' } }
-            ]
-        }]
-    });
-
-    // 重点：数据加载并渲染后，延迟一瞬间强制重置尺寸以实现居中
-    setTimeout(() => {
-        vipChart.resize({
-            animation: { duration: 500 }
-        });
-    }, 100);
-}
+            vipChart.setOption({
+                series: [{
+                    data: [
+                        { value: vipData.normal, name: 'Normal', itemStyle: { color: '#94a3b8' } },
+                        { value: vipData.monthly_vip, name: 'Monthly VIP', itemStyle: { color: '#f59e0b' } },
+                        { value: vipData.annual_vip, name: 'Annual VIP', itemStyle: { color: '#ef4444' } }
+                    ]
+                }]
+            });
+        }
 
         function updateLevelChart(levelData) {
             if (!levelData || levelData.length === 0) return;
@@ -577,7 +550,7 @@
             }
         }
 
-        // === Theme support ===
+        // Theme support
         function applyTheme(bgColor, opacity) {
             const hex = bgColor.replace('#', '');
             const r = parseInt(hex.substring(0, 2), 16);
@@ -618,10 +591,9 @@
             levelChart?.resize();
         });
 
-        // === 登录状态同步 ===
+        // Login status sync
         let isLoggedIn = false;
 
-        // 监听登录状态同步
         ipcRenderer.on('sync-login-status', (event, status) => {
             isLoggedIn = status.loggedIn;
             console.log('登录状态同步:', isLoggedIn);
