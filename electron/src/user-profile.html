@@ -211,18 +211,18 @@
             locationChart.setOption({
                 backgroundColor: 'transparent',
                 tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-                grid: { left: '3%', right: '10%', bottom: '3%', top: '3%', containLabel: true },
+                grid: { left: '20%', right: '15%', bottom: '10%', top: '10%', containLabel: false },
                 xAxis: {
                     type: 'value',
                     axisLine: { show: false },
                     splitLine: { lineStyle: { color: '#333' } },
-                    axisLabel: { color: '#888' }
+                    axisLabel: { color: '#888', fontSize: 11 }
                 },
                 yAxis: {
                     type: 'category',
                     data: [],
                     axisLine: { lineStyle: { color: '#444' } },
-                    axisLabel: { color: '#ccc' },
+                    axisLabel: { color: '#ccc', fontSize: 12 },
                     inverse: true
                 },
                 series: [{
@@ -250,14 +250,14 @@
                 backgroundColor: 'transparent',
                 tooltip: { trigger: 'item' },
                 legend: {
-                    bottom: '5%',
+                    bottom: '10%',
                     left: 'center',
-                    textStyle: { color: '#fff' }
+                    textStyle: { color: '#fff', fontSize: 12 }
                 },
                 series: [{
                     type: 'pie',
-                    radius: ['40%', '70%'],
-                    center: ['50%', '50%'],  // 修改为完全居中
+                    radius: ['38%', '68%'],
+                    center: ['50%', '40%'],  // 向上移动以平衡底部图例
                     itemStyle: { borderRadius: 8, borderColor: 'rgba(20,20,30,0.8)', borderWidth: 2 },
                     label: { show: false },
                     data: [
@@ -274,21 +274,17 @@
                 backgroundColor: 'transparent',
                 tooltip: { trigger: 'axis' },
                 legend: {
-                    show: true,
-                    bottom: '3%',
-                    left: 'center',
-                    textStyle: { color: '#fff' },
-                    data: ['User Count']
+                    show: false
                 },
-                grid: { left: '8%', right: '8%', bottom: '15%', top: '12%', containLabel: true },  // 调整grid使图表居中
+                grid: { left: '15%', right: '15%', bottom: '18%', top: '12%', containLabel: false },  // 更平衡的边距设置
                 xAxis: {
                     type: 'category',
                     data: ['LV0', 'LV1', 'LV2', 'LV3', 'LV4', 'LV5', 'LV6'],
                     axisLine: { lineStyle: { color: '#444' } },
-                    axisLabel: { color: '#888' },
+                    axisLabel: { color: '#888', fontSize: 11 },
                     name: '用户等级',
                     nameLocation: 'middle',
-                    nameGap: 25,
+                    nameGap: 30,
                     nameTextStyle: { color: '#888', fontSize: 12 }
                 },
                 yAxis: {
