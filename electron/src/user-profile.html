@@ -286,68 +286,64 @@
         ]
     }]
 });
-            // 用户等级分布 - 优化后的柱状图
-            levelChart = echarts.init(document.getElementById('level-chart'));
-            levelChart.setOption({
-                backgroundColor: 'transparent',
-                tooltip: { 
-                trigger: 'axis',
-                axisPointer: { type: 'shadow' } 
-            },
-            grid: { 
-                left: '5%', 
-                right: '5%', 
-                bottom: '15%', 
-                top: '15%', 
-                containLabel: true 
+           // 用户等级分布 - 优化间距和显示
+levelChart = echarts.init(document.getElementById('level-chart'));
+levelChart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'axis' },
+    // 1. 扩大左右边距，给坐标轴留出伸缩空间
+    grid: { 
+        left: '8%', 
+        right: '8%', 
+        bottom: '15%', 
+        top: '15%', 
+        containLabel: true 
     },
     xAxis: {
         type: 'category',
         data: ['LV0', 'LV1', 'LV2', 'LV3', 'LV4', 'LV5', 'LV6'],
+        // 2. 强制显示所有标签，不自动隐藏
+        axisLabel: { 
+            show: true,
+            interval: 0, // 设为 0 强制显示所有标签
+            color: 'rgba(255,255,255,0.6)', 
+            fontSize: 10,
+            margin: 12
+        },
         axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
-        axisLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 11, margin: 15 },
         axisTick: { show: false }
     },
     yAxis: {
         type: 'value',
-        name: '用户数量',
-        nameTextStyle: { color: 'rgba(255,255,255,0.4)', fontSize: 10, align: 'right' },
-        axisLine: { show: false },
-        splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)', type: 'dashed' } }, // 弱化网格线
+        name: '数量',
+        nameTextStyle: { color: 'rgba(255,255,255,0.4)', fontSize: 10 },
+        splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)', type: 'dashed' } },
         axisLabel: { color: 'rgba(255,255,255,0.4)', fontSize: 10 }
     },
     series: [{
         name: 'User Count',
         type: 'bar',
-        barWidth: '45%',
+        // 3. 调小柱子宽度，视觉上会显得间距更大
+        barWidth: '40%', 
         data: Array(7).fill(0),
         itemStyle: {
-            // 使用更现代的渐变色
             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                { offset: 0, color: '#60a5fa' }, // 顶部浅蓝色
-                { offset: 1, color: '#1d4ed8' }  // 底部深蓝色
+                { offset: 0, color: '#3b82f6' },
+                { offset: 1, color: '#1d4ed8' }
             ]),
             borderRadius: [4, 4, 0, 0]
         },
         label: {
             show: true,
             position: 'top',
-            distance: 10,
             color: '#fff',
-            fontSize: 11,
-            fontWeight: 'bold'
-        },
-        // 增加鼠标悬停高亮效果
-        emphasis: {
-            itemStyle: {
-                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                    { offset: 0, color: '#93c5fd' },
-                    { offset: 1, color: '#2563eb' }
-                ])
-            }
+            fontSize: 10,
+            fontWeight: 'bold',
+            offset: [0, -5] // 数值标签向上偏移，避免压到柱子
         }
     }]
 });
+            
         }
 
         function listenForVideoChange() {
