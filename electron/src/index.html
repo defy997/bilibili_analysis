@@ -219,6 +219,22 @@
         .center-circle-history-btn {
             position: absolute;
             bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .center-circle-online-btn {
+            position: absolute;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .center-circle-history-btn {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
         }
 
         #radar-chart {
@@ -438,8 +454,13 @@
                         --
                     </div>
                 </div>
+                <!-- 在线分析按钮 -->
+                <button onclick="startOnlineAnalysis()" id="online-analysis-btn" class="center-circle-online-btn no-drag px-4 py-2 bg-white/10 hover:bg-white/20 rounded-full text-xs text-white/60 hover:text-white transition-all flex items-center gap-2">
+                    <i class="fa-solid fa-bolt"></i>
+                    <span>在线分析</span>
+                </button>
                 <!-- 历史记录按钮 -->
-                <button onclick="openVideoHistory()" class="center-circle-history-btn no-drag px-4 py-2 bg-white/10 hover:bg-white/20 rounded-full text-xs text-white/60 hover:text-white transition-all flex items-center gap-2">
+                <button onclick="openVideoHistory()" id="history-btn" class="center-circle-history-btn no-drag px-4 py-2 bg-white/10 hover:bg-white/20 rounded-full text-xs text-white/60 hover:text-white transition-all flex items-center gap-2">
                     <i class="fa-solid fa-history"></i>
                     <span>历史</span>
                 </button>
@@ -649,6 +670,7 @@
                 </div>
             </div>
         </div>
+
         <div id="loginPanel" class="absolute inset-0 z-50 items-center justify-center p-4 hidden">
             <div class="absolute inset-0 bg-black/60 backdrop-blur-md" onclick="toggleLogin(false)"></div>
             
@@ -791,6 +813,7 @@
         let currentBvId = null;
         let currentVideoTitle = null;
         let radarChart = null;
+        let currentAnalysisMode = 'history'; // 'history' 或 'online'
 
         // === Toast 提示函数 ===
         function showToast(message, type = 'info', duration = 3000) {
@@ -1394,6 +1417,8 @@
             loadConfig();
             checkLoginStatus();
             initRadarChart();
+            // 初始化按钮状态（默认历史按钮常亮）
+            updateButtonStates('history');
         });
 
         // === 初始化雷达图 ===
@@ -1622,9 +1647,77 @@
             }
         }
 
+        // === 更新按钮状态 ===
+        function updateButtonStates(mode) {
+            currentAnalysisMode = mode;
+            const historyBtn = document.getElementById('history-btn');
+            const onlineBtn = document.getElementById('online-analysis-btn');
+
+            if (mode === 'history') {
+                // 历史按钮常亮（高亮），在线分析按钮暗淡
+                historyBtn.classList.add('bg-pink-500/30', 'text-white');
+                historyBtn.classList.remove('bg-white/10', 'text-white/60');
+                onlineBtn.classList.remove('bg-yellow-500/30', 'text-white');
+                onlineBtn.classList.add('bg-white/10', 'text-white/60');
+            } else {
+                // 在线分析按钮常亮（高亮），历史按钮暗淡
+                onlineBtn.classList.add('bg-yellow-500/30', 'text-white');
+                onlineBtn.classList.remove('bg-white/10', 'text-white/60');
+                historyBtn.classList.remove('bg-pink-500/30', 'text-white');
+                historyBtn.classList.add('bg-white/10', 'text-white/60');
+            }
+        }
+
+        // === 开始在线分析（分析当前选中的视频）===
+        async function startOnlineAnalysis() {
+            if (!currentBvId || currentBvId === '--') {
+                showToast('请先选择一个视频', 'warning');
+                return;
+            }
+
+            // 切换到在线分析模式
+            updateButtonStates('online');
+
+            // 调用后端 API 重新分析当前视频
+            try {
+                showToast('正在重新分析当前视频...', 'info');
+
+                const response = await fetch(`${API_BASE}/api/video/async-analyze/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bvid: currentBvId })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    if (result.status === 'processing') {
+                        showToast('正在分析视频，请稍候...', 'info');
+                    } else {
+                        showToast('分析完成', 'success');
+                    }
+
+                    // 向主进程发送信号，通知所有模块刷新数据
+                    ipcRenderer.send('main-video-change', { 
+                        bvId: currentBvId, 
+                        title: currentVideoTitle || currentBvId,
+                        forceRefresh: true
+                    });
+                } else {
+                    showToast(result.message || '分析失败', 'error');
+                }
+            } catch (error) {
+                console.error('在线分析失败:', error);
+                showToast('分析失败: ' + error.message, 'error');
+            }
+        }
+
         // === 从历史记录选择视频 ===
         async function selectVideoFromHistory(bvId, title) {
             closeVideoHistory();
+
+            // 更新按钮状态为历史模式
+            updateButtonStates('history');
 
             // 更新中心圆圈显示
             updateCenterVideoInfo(bvId, title);

@@ -463,6 +463,10 @@ function createAnalysisWindow() {
         analysisWindow.show();
         analysisWindow.setAlwaysOnTop(true, 'pop-up-menu');
         analysisWindow.setVisibleOnAllWorkspaces(true);
+        // 发送当前正在观看的视频ID
+        if (currentBvId) {
+            analysisWindow.webContents.send('video-change', currentBvId);
+        }
 
         // 开发环境下打开开发者工具
         if (process.env.NODE_ENV === 'development') {
@@ -470,10 +474,15 @@ function createAnalysisWindow() {
         }
     });
 
+    // 兜底：如果 ready-to-show 迟迟不触发，3秒后强制显示并发送视频ID
     setTimeout(() => {
         if (analysisWindow && !analysisWindow.isDestroyed() && !analysisWindow.isVisible()) {
             analysisWindow.show();
             analysisWindow.setAlwaysOnTop(true, 'pop-up-menu');
+            // 发送当前正在观看的视频ID
+            if (currentBvId) {
+                analysisWindow.webContents.send('video-change', currentBvId);
+            }
         }
     }, 3000);
 
