@@ -1218,9 +1218,36 @@
             document.getElementById('share-count').innerText = '--';
             document.getElementById('comment-count').innerText = '--';
             document.getElementById('video-score').innerText = '--';
-            // 更新中心圆圈提示
-            updateCenterVideoInfo('--', '等待接收视频数据...');
-            showToast('已切换到在线分析模式，等待接收数据', 'info');
+            // 更新中心圆圈提示（只清空BV号，保留标题提示）
+            document.getElementById('current-video-bvid').innerText = '等待接收视频数据...';
+        });
+
+        // 监听视频切换信号（来自浏览器扩展）
+        ipcRenderer.on('video-change', (event, data) => {
+            console.log('[Index] 收到视频切换信号:', data);
+
+            // 处理数据格式：可能是 { bvId, title } 或只有 bvId
+            let bvId, title;
+            if (typeof data === 'object' && data !== null) {
+                bvId = data.bvId;
+                title = data.title;
+            } else {
+                bvId = data;
+                title = null;
+            }
+
+            // 更新当前视频信息
+            currentBvId = bvId;
+            if (title) {
+                currentVideoTitle = title;
+                document.getElementById('current-video-title').innerText = title;
+            }
+            document.getElementById('current-video-bvid').innerText = bvId || '--';
+
+            // 加载视频统计数据
+            if (bvId) {
+                loadVideoStatsForRadar(bvId);
+            }
         });
 
         // === 用户认证功能 ===

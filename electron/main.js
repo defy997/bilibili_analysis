@@ -160,22 +160,27 @@ function createWebSocketServer() {
 
                 if (message.type === 'VIDEO_CHANGE') {
                     currentBvId = message.bvId; // 保存当前视频ID
-                    console.log('视频切换:', currentBvId);
+                    const videoTitle = message.title || '未知标题';
+                    console.log('视频切换:', currentBvId, videoTitle);
+
+                    // 构建视频数据
+                    const videoData = { bvId: currentBvId, title: videoTitle };
+
                     // 向主窗口发送信号
                     if (mainWindow && !mainWindow.isDestroyed()) {
-                        mainWindow.webContents.send('video-change', message.bvId);
+                        mainWindow.webContents.send('video-change', videoData);
                     }
                     // 向分析窗口发送信号
                     if (analysisWindow && !analysisWindow.isDestroyed()) {
-                        analysisWindow.webContents.send('video-change', message.bvId);
+                        analysisWindow.webContents.send('video-change', videoData);
                     }
                     // 向用户画像窗口发送信号
                     if (userProfileWindow && !userProfileWindow.isDestroyed()) {
-                        userProfileWindow.webContents.send('video-change', message.bvId);
+                        userProfileWindow.webContents.send('video-change', videoData);
                     }
                     // 向视频音频分析窗口发送信号
                     if (videoAudioWindow && !videoAudioWindow.isDestroyed()) {
-                        videoAudioWindow.webContents.send('video-change', message.bvId);
+                        videoAudioWindow.webContents.send('video-change', videoData);
                     }
                 }
             } catch (error) {
@@ -946,14 +951,14 @@ ipcMain.on('main-video-change', (event, data) => {
 
     // 如果是强制刷新模式，直接发送信号给前端
     if (forceRefresh) {
-        broadcastVideoChange(bvId);
+        broadcastVideoChange(bvId, title);
         return;
     }
 
     // 根据分析模式决定是否发送信号
     if (analysisMode === 'online') {
         // 在线模式：发送信号给前端渲染
-        broadcastVideoChange(bvId);
+        broadcastVideoChange(bvId, title);
     } else {
         // 历史模式：浏览器扩展的请求存入数据库，不渲染到前端
         console.log('[Main] 历史模式：视频数据已存入后台，前端不渲染');
@@ -963,17 +968,19 @@ ipcMain.on('main-video-change', (event, data) => {
 // ==========================================
 // 广播视频切换信号到所有窗口
 // ==========================================
-function broadcastVideoChange(bvId) {
+function broadcastVideoChange(bvId, title) {
+    const videoData = { bvId, title: title || '未知标题' };
+
     // 更新主窗口显示
     if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('video-change', bvId);
+        mainWindow.webContents.send('video-change', videoData);
     }
 
     // 广播到所有子窗口
     const windows = [analysisWindow, userProfileWindow, videoAudioWindow];
     windows.forEach(win => {
         if (win && !win.isDestroyed()) {
-            win.webContents.send('video-change', bvId);
+            win.webContents.send('video-change', videoData);
             console.log(`[Main] 已发送 video-change 到 ${win === analysisWindow ? 'analysis' : win === userProfileWindow ? 'user-profile' : 'video-audio'}`);
         }
     });
