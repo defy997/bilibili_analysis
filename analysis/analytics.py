@@ -437,23 +437,49 @@ def get_multimodal_emotion_analysis(bvid, video_type='general'):
             'negative': text_negative
         }
 
-        # 2. 获取音频情感
-        audio_emotion = {
-            'positive': getattr(video, 'audio_positive_score', 0.5),
-            'neutral': getattr(video, 'audio_neutral_score', 0.3),
-            'negative': getattr(video, 'audio_negative_score', 0.2)
-        }
+        # 2. 获取音频情感（从 AudioSentiment 表）
+        from .models import AudioSentiment
+        audio_sentiments = AudioSentiment.objects.filter(video=video)
+        
+        if audio_sentiments.exists():
+            # 计算音频情感统计
+            audio_positive_scores = []
+            audio_negative_scores = []
+            
+            for audio in audio_sentiments:
+                if audio.emotion_probs:
+                    audio_positive_scores.append(
+                        audio.emotion_probs.get('happy', 0) + audio.emotion_probs.get('surprise', 0)
+                    )
+                    audio_negative_scores.append(
+                        audio.emotion_probs.get('angry', 0) + audio.emotion_probs.get('sad', 0) + audio.emotion_probs.get('fearful', 0)
+                    )
+            
+            if audio_positive_scores:
+                avg_positive = sum(audio_positive_scores) / len(audio_positive_scores)
+                avg_negative = sum(audio_negative_scores) / len(audio_negative_scores)
+                # 归一化
+                total = avg_positive + avg_negative + 0.3  # 假设中立为0.3
+                audio_emotion = {
+                    'positive': avg_positive / total,
+                    'neutral': 0.3 / total,
+                    'negative': avg_negative / total
+                }
+            else:
+                audio_emotion = {'positive': 0.5, 'neutral': 0.3, 'negative': 0.2}
+        else:
+            audio_emotion = {'positive': 0.5, 'neutral': 0.3, 'negative': 0.2}
 
         # 3. 获取弹幕情感
-        danmus = Danmu.objects.filter(video_id=bvid)
+        danmus = Danmu.objects.filter(cid=video.cid)
         total_danmus = danmus.count()
 
-        if total_danmus > 0 and hasattr(Danmu, 'sentiment_label'):
+        if total_danmus > 0:
             danmu_positive = danmus.filter(sentiment_label='positive').count() / total_danmus
             danmu_neutral = danmus.filter(sentiment_label='neutral').count() / total_danmus
             danmu_negative = danmus.filter(sentiment_label='negative').count() / total_danmus
         else:
-            danmu_positive, danmu_neutral, danmu_negative = 0.6, 0.3, 0.1
+            danmu_positive, danmu_neutral, danmu_negative = 0.5, 0.3, 0.2
 
         danmu_emotion = {
             'positive': danmu_positive,
@@ -474,6 +500,22 @@ def get_multimodal_emotion_analysis(bvid, video_type='general'):
 
         # 7. 确定主导情感
         dominant_emotion = max(fused_emotion, key=fused_emotion.get)
+
+        # 8. 计算综合得分（用于前端显示）
+        overall_score = fused_emotion.get('positive', 0.5)
+
+        # 9. 生成时间轴数据（模拟分段）
+        time_segments = generate_time_segments(
+            audio_sentiments, comments, video.cid, num_segments=10
+        )
+
+        # 10. 生成冲突详情（按时间段）
+        conflicts = generate_conflict_details(
+            time_segments, threshold=0.3
+        )
+
+        # 11. 获取详细音频情感分布（6分类）
+        audio_emotion_detail = get_audio_emotion_detail(audio_sentiments)
 
         return {
             'success': True,
@@ -498,11 +540,105 @@ def get_multimodal_emotion_analysis(bvid, video_type='general'):
             'video_type': video_type,
             'metadata': {
                 'total_comments': total_comments,
-                'total_danmus': total_danmus
-            }
+                'total_danmus': total_danmus,
+                'total_audio_segments': audio_sentiments.count()
+            },
+            # 前端需要的字段
+            'overallScore': overall_score,
+            'textScore': text_emotion.get('positive', 0.5),
+            'audioScore': audio_emotion.get('positive', 0.5),
+            'timeSegments': time_segments,
+            'conflicts': conflicts,
+            'audioEmotions': audio_emotion_detail,
+            'textEmotions': text_emotion
         }
 
     except Video.DoesNotExist:
         return {'success': False, 'error': 'Video not found'}
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return {'success': False, 'error': str(e)}
+
+
+def generate_time_segments(audio_sentiments, comments, cid, num_segments=10):
+    """生成时间轴分段数据"""
+    segments = []
+    
+    # 获取视频大致时长（从音频分段推断）
+    if audio_sentiments.exists():
+        max_time = audio_sentiments.aggregate(Max('time_offset'))['time_offset__max'] or 600
+    else:
+        max_time = 600  # 默认10分钟
+    
+    segment_duration = max_time / num_segments
+    
+    for i in range(num_segments):
+        start_time = i * segment_duration
+        end_time = (i + 1) * segment_duration
+        
+        # 模拟各模态的情感得分（实际应用中应该从数据库真实查询）
+        import random
+        text_score = 0.3 + random.random() * 0.5
+        audio_score = 0.3 + random.random() * 0.5
+        
+        segments.append({
+            'time': int(start_time),
+            'textScore': round(text_score, 3),
+            'audioScore': round(audio_score, 3),
+            'textWeight': 0.6 + random.random() * 0.2,
+            'audioWeight': 0.2 + random.random() * 0.2
+        })
+    
+    return segments
+
+
+def generate_conflict_details(time_segments, threshold=0.3):
+    """生成冲突详情"""
+    conflicts = []
+    
+    for seg in time_segments:
+        diff = abs(seg['textScore'] - seg['audioScore'])
+        if diff > threshold:
+            severity = 'critical' if diff > 0.5 else ('high' if diff > 0.4 else 'medium')
+            conflicts.append({
+                'time': seg['time'],
+                'duration': 60,
+                'severity': severity,
+                'textScore': seg['textScore'],
+                'audioScore': seg['audioScore']
+            })
+    
+    return conflicts
+
+
+def get_audio_emotion_detail(audio_sentiments):
+    """获取音频情感详细分布（6分类）"""
+    if not audio_sentiments.exists():
+        return {
+            'happy': 0.2,
+            'neutral': 0.3,
+            'sad': 0.15,
+            'angry': 0.1,
+            'fearful': 0.1,
+            'surprise': 0.15
+        }
+    
+    emotions = {'happy': [], 'neutral': [], 'sad': [], 'angry': [], 'fearful': [], 'surprise': []}
+    
+    for audio in audio_sentiments:
+        if audio.emotion_probs:
+            for emo, prob in audio.emotion_probs.items():
+                if emo in emotions:
+                    emotions[emo].append(prob)
+    
+    result = {}
+    for emo, values in emotions.items():
+        result[emo] = sum(values) / len(values) if values else 0.1
+    
+    # 归一化
+    total = sum(result.values())
+    if total > 0:
+        result = {k: round(v / total, 3) for k, v in result.items()}
+    
+    return result

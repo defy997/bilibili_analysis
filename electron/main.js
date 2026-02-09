@@ -20,11 +20,13 @@ let mainWindow;
 let analysisWindow; // 情感分析窗口
 let userProfileWindow; // 用户画像窗口
 let videoAudioWindow; // 视频音频分析窗口
+let overallReportsWindow; // 多模态情感分析报告窗口
 let bilibiliLoginWindow; // B站扫码登录窗口
 let wss; // WebSocket服务器，用于与Chrome插件通信
 let tray = null; // 系统托盘
 let lastWindowPosition = null; // 记录上次主窗口位置以便还原
 let currentBvId = null; // 当前正在观看的视频BV号
+let currentVideoTitle = null; // 当前视频标题
 let analysisMode = 'online'; // 当前分析模式: 'online' (在线) 或 'history' (历史)
 
 function createWindow() {
@@ -160,6 +162,7 @@ function createWebSocketServer() {
 
                 if (message.type === 'VIDEO_CHANGE') {
                     currentBvId = message.bvId; // 保存当前视频ID
+                    currentVideoTitle = message.title || '未知标题';
                     const videoTitle = message.title || '未知标题';
                     console.log('视频切换:', currentBvId, videoTitle);
 
@@ -256,6 +259,9 @@ function createTray() {
         }
         if (videoAudioWindow && !videoAudioWindow.isDestroyed()) {
           videoAudioWindow.destroy();
+        }
+        if (overallReportsWindow && !overallReportsWindow.isDestroyed()) {
+          overallReportsWindow.destroy();
         }
         if (bilibiliLoginWindow && !bilibiliLoginWindow.isDestroyed()) {
           bilibiliLoginWindow.destroy();
@@ -375,6 +381,36 @@ ipcMain.on('toggle-window', () => {
     } else {
       mainWindow.show();
     }
+  }
+});
+
+ipcMain.on('go-back', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+    mainWindow.focus();
+  }
+});
+
+ipcMain.on('close-module', (event, moduleName) => {
+  // 关闭指定模块窗口
+  const targetModule = moduleName || 'overall-reports';
+  
+  if (targetModule === 'analysis' || targetModule === 'emotional') {
+    closeAnalysisWindow();
+  }
+  if (targetModule === 'user-profile' || targetModule === 'user') {
+    closeUserProfileWindow();
+  }
+  if (targetModule === 'video-audio' || targetModule === 'video') {
+    closeVideoAudioWindow();
+  }
+  if (targetModule === 'overall-reports' || targetModule === 'compare') {
+    closeOverallReportsWindow();
+  }
+  
+  // 通知主窗口更新状态
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('module-closed', targetModule);
   }
 });
 
@@ -752,6 +788,130 @@ function createVideoAudioWindow() {
 function closeVideoAudioWindow() {
     if (videoAudioWindow && !videoAudioWindow.isDestroyed()) {
         videoAudioWindow.hide();
+    }
+}
+
+
+// ==========================================
+// 多模态情感分析报告窗口
+// ==========================================
+
+ipcMain.on('toggle-overall-reports-window', () => {
+    if (overallReportsWindow && !overallReportsWindow.isDestroyed()) {
+        if (overallReportsWindow.isVisible()) {
+            overallReportsWindow.hide();
+        } else {
+            overallReportsWindow.show();
+            overallReportsWindow.focus();
+            // 发送当前视频数据
+            if (currentBvId) {
+                const videoData = { bvId: currentBvId, title: currentVideoTitle };
+                overallReportsWindow.webContents.send('video-change', videoData);
+            }
+        }
+    } else {
+        createOverallReportsWindow();
+    }
+});
+
+ipcMain.on('close-overall-reports-window', () => {
+    closeOverallReportsWindow();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('overall-reports-window-closed');
+    }
+});
+
+ipcMain.on('open-overall-reports-window', () => {
+    createOverallReportsWindow();
+});
+
+function createOverallReportsWindow() {
+    if (overallReportsWindow && !overallReportsWindow.isDestroyed()) {
+        overallReportsWindow.show();
+        overallReportsWindow.focus();
+        return;
+    }
+
+    const winWidth = 600;
+    const winHeight = 750;
+    const workArea = screen.getPrimaryDisplay().workArea;
+
+    let x = workArea.x + workArea.width - winWidth - 50;
+    let y = workArea.y + 50;
+
+    // 如果有其他窗口位置，依次排列
+    if (analysisWindow && !analysisWindow.isDestroyed()) {
+        const bounds = analysisWindow.getBounds();
+        x = bounds.x - winWidth - 20;
+        y = bounds.y;
+    }
+
+    overallReportsWindow = new BrowserWindow({
+        width: winWidth,
+        height: winHeight,
+        x: x,
+        y: y,
+        frame: false,
+        alwaysOnTop: true,
+        transparent: true,
+        resizable: false,
+        skipTaskbar: true,
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false,
+            enableRemoteModule: true
+        },
+        backgroundColor: '#00000000',
+        hasShadow: false,
+        focusable: true,
+        show: false
+    });
+
+    overallReportsWindow.loadFile('src/overall-reports.html');
+
+    overallReportsWindow.once('ready-to-show', () => {
+        overallReportsWindow.show();
+        overallReportsWindow.setAlwaysOnTop(true, 'pop-up-menu');
+        overallReportsWindow.setVisibleOnAllWorkspaces(true);
+        // 发送当前视频数据
+        if (currentBvId) {
+            const videoData = { bvId: currentBvId, title: currentVideoTitle };
+            overallReportsWindow.webContents.send('video-change', videoData);
+        }
+    });
+
+    // 兜底：3秒后强制显示
+    setTimeout(() => {
+        if (overallReportsWindow && !overallReportsWindow.isDestroyed() && !overallReportsWindow.isVisible()) {
+            overallReportsWindow.show();
+            overallReportsWindow.setAlwaysOnTop(true, 'pop-up-menu');
+            if (currentBvId) {
+                overallReportsWindow.webContents.send('video-change', { bvId: currentBvId, title: currentVideoTitle });
+            }
+        }
+    }, 3000);
+
+    overallReportsWindow.on('closed', () => {
+        overallReportsWindow = null;
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('overall-reports-window-closed');
+        }
+    });
+
+    overallReportsWindow.on('blur', () => {
+        try {
+            if (overallReportsWindow && !overallReportsWindow.isDestroyed()) {
+                overallReportsWindow.setAlwaysOnTop(true, 'pop-up-menu');
+            }
+        } catch (err) {
+            console.error('blur handler error:', err);
+        }
+    });
+}
+
+function closeOverallReportsWindow() {
+    if (overallReportsWindow && !overallReportsWindow.isDestroyed()) {
+        overallReportsWindow.hide();
     }
 }
 

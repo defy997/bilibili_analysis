@@ -930,6 +930,9 @@
                 if (moduleName === 'video') {
                     ipcRenderer.send('close-video-audio-window');
                 }
+                if (moduleName === 'compare') {
+                    ipcRenderer.send('close-overall-reports-window');
+                }
             } else {
                 // 如果未激活，则开启模块
                 element.classList.add('active');
@@ -942,6 +945,9 @@
                 }
                 if (moduleName === 'video') {
                     ipcRenderer.send('toggle-video-audio-window');
+                }
+                if (moduleName === 'compare') {
+                    ipcRenderer.send('toggle-overall-reports-window');
                 }
             }
         }
