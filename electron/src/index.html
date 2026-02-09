@@ -1591,6 +1591,12 @@
 
         // === 打开视频历史弹窗 ===
         async function openVideoHistory() {
+            // 切换到历史模式
+            updateButtonStates('history');
+
+            // 通知主进程切换到历史模式
+            ipcRenderer.send('set-analysis-mode', 'history');
+
             const modal = document.getElementById('video-history-modal');
             modal.classList.add('show');
 
@@ -1668,62 +1674,26 @@
             }
         }
 
-        // === 开始在线分析（分析当前选中的视频）===
-        async function startOnlineAnalysis() {
-            if (!currentBvId || currentBvId === '--') {
-                showToast('请先选择一个视频', 'warning');
-                return;
-            }
-
+        // === 开始在线分析 ===
+        function startOnlineAnalysis() {
             // 切换到在线分析模式
             updateButtonStates('online');
 
-            // 调用后端 API 重新分析当前视频
-            try {
-                showToast('正在重新分析当前视频...', 'info');
+            // 通知主进程切换到在线模式
+            ipcRenderer.send('set-analysis-mode', 'online');
 
-                const response = await fetch(`${API_BASE}/api/video/async-analyze/`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ bvid: currentBvId })
-                });
-
-                const result = await response.json();
-
-                if (result.success) {
-                    if (result.status === 'processing') {
-                        showToast('正在分析视频，请稍候...', 'info');
-                    } else {
-                        showToast('分析完成', 'success');
-                    }
-
-                    // 向主进程发送信号，通知所有模块刷新数据
-                    ipcRenderer.send('main-video-change', { 
-                        bvId: currentBvId, 
-                        title: currentVideoTitle || currentBvId,
-                        forceRefresh: true
-                    });
-                } else {
-                    showToast(result.message || '分析失败', 'error');
-                }
-            } catch (error) {
-                console.error('在线分析失败:', error);
-                showToast('分析失败: ' + error.message, 'error');
-            }
+            showToast('已切换到在线分析模式', 'info');
         }
 
         // === 从历史记录选择视频 ===
         async function selectVideoFromHistory(bvId, title) {
             closeVideoHistory();
 
-            // 更新按钮状态为历史模式
-            updateButtonStates('history');
-
             // 更新中心圆圈显示
             updateCenterVideoInfo(bvId, title);
 
-            // 向主进程发送视频切换信号，主进程会转发给所有子窗口
-            ipcRenderer.send('main-video-change', { bvId: bvId, title: title });
+            // 向主进程发送视频切换信号（带 forceRefresh 强制刷新历史数据）
+            ipcRenderer.send('main-video-change', { bvId: bvId, title: title, forceRefresh: true });
 
             showToast(`已切换到: ${title || bvId}`, 'success');
         }

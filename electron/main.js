@@ -25,6 +25,7 @@ let wss; // WebSocket服务器，用于与Chrome插件通信
 let tray = null; // 系统托盘
 let lastWindowPosition = null; // 记录上次主窗口位置以便还原
 let currentBvId = null; // 当前正在观看的视频BV号
+let analysisMode = 'online'; // 当前分析模式: 'online' (在线) 或 'history' (历史)
 
 function createWindow() {
   // 获取屏幕工作区和鼠标位置，用于定位悬浮窗口（默认靠近当前鼠标/活动窗口）
@@ -937,17 +938,37 @@ ipcMain.on('open-devtools', (event, windowName = 'all') => {
 // ==========================================
 
 ipcMain.on('main-video-change', (event, data) => {
-    const { bvId, title } = data;
-    
+    const { bvId, title, forceRefresh } = data;
+
     // 更新当前视频ID
     currentBvId = bvId;
-    console.log('[Main] 收到视频切换信号:', bvId, title);
-    
+    console.log('[Main] 收到视频切换信号:', bvId, title, 'forceRefresh:', forceRefresh);
+
+    // 如果是强制刷新模式，直接发送信号给前端
+    if (forceRefresh) {
+        broadcastVideoChange(bvId);
+        return;
+    }
+
+    // 根据分析模式决定是否发送信号
+    if (analysisMode === 'online') {
+        // 在线模式：发送信号给前端渲染
+        broadcastVideoChange(bvId);
+    } else {
+        // 历史模式：浏览器扩展的请求存入数据库，不渲染到前端
+        console.log('[Main] 历史模式：视频数据已存入后台，前端不渲染');
+    }
+});
+
+// ==========================================
+// 广播视频切换信号到所有窗口
+// ==========================================
+function broadcastVideoChange(bvId) {
     // 更新主窗口显示
     if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('video-change', bvId);
     }
-    
+
     // 广播到所有子窗口
     const windows = [analysisWindow, userProfileWindow, videoAudioWindow];
     windows.forEach(win => {
@@ -956,4 +977,19 @@ ipcMain.on('main-video-change', (event, data) => {
             console.log(`[Main] 已发送 video-change 到 ${win === analysisWindow ? 'analysis' : win === userProfileWindow ? 'user-profile' : 'video-audio'}`);
         }
     });
+}
+
+// ==========================================
+// 监听前端发来的模式切换信号
+// ==========================================
+ipcMain.on('set-analysis-mode', (event, mode) => {
+    if (mode === 'online' || mode === 'history') {
+        analysisMode = mode;
+        console.log('[Main] 分析模式已切换为:', analysisMode);
+
+        // 如果切换到在线模式，刷新当前视频
+        if (mode === 'online' && currentBvId) {
+            broadcastVideoChange(currentBvId);
+        }
+    }
 });
