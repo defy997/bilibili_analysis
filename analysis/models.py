@@ -100,6 +100,25 @@ class AudioSentiment(models.Model):
         return f"AudioSentiment({self.video_id}, t={self.time_offset}s)"
 
 
+class SubtitleSentiment(models.Model):
+    """字幕情感分析模型"""
+    video = models.ForeignKey(Video, on_delete=models.CASCADE, related_name='subtitle_sentiments')
+    subtitle_id = models.CharField(max_length=50, verbose_name="字幕段ID")
+    time_offset = models.FloatField(verbose_name="视频内时间偏移(秒)")
+    duration = models.FloatField(default=0, verbose_name="字幕持续时长(秒)")
+    content = models.TextField(verbose_name="字幕内容")
+    sentiment_score = models.FloatField(default=0.5, verbose_name="情感得分")
+    sentiment_label = models.CharField(max_length=10, default="neutral")
+    emotion_probs = models.JSONField(default=dict, verbose_name="各情感概率分布")
+
+    class Meta:
+        db_table = 'subtitle_sentiments'
+        ordering = ['time_offset']
+
+    def __str__(self):
+        return f"SubtitleSentiment({self.video_id}, t={self.time_offset}s)"
+
+
 class UserConfig(models.Model):
     """用户配置表（单例模式，只有一条记录）"""
     # 数据过滤配置

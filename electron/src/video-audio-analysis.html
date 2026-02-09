@@ -124,13 +124,27 @@
                 <p id="audio-timeline-placeholder" class="text-white/30 text-xs text-center mt-2">Data will be populated after emotion2vec analysis</p>
             </div>
 
-            <!-- Subtitle sentiment area (placeholder) -->
+            <!-- Subtitle sentiment area -->
             <div class="glass-panel rounded-2xl p-6 mb-6">
-                <h4 class="text-sm font-bold uppercase tracking-wider text-white/60 mb-4">Subtitle Sentiment</h4>
-                <div class="text-white/30 text-center py-8">
-                    <i class="fa-solid fa-closed-captioning text-3xl mb-3 block"></i>
-                    <p class="text-sm">Subtitle analysis coming soon</p>
-                    <p class="text-xs mt-1">Pending subtitle API integration</p>
+                <div class="flex items-center justify-between mb-4">
+                    <h4 class="text-sm font-bold uppercase tracking-wider text-white/60">
+                        <i class="fa-solid fa-closed-captioning mr-2"></i>Subtitle Sentiment
+                    </h4>
+                    <button id="analyze-subtitle-btn" onclick="triggerSubtitleAnalysis()" 
+                            class="hidden px-3 py-1 bg-cyan-500 hover:bg-cyan-600 text-white text-xs rounded-lg transition-colors">
+                        <i class="fa-solid fa-play mr-1"></i>Analyze
+                    </button>
+                </div>
+                <div id="subtitle-content" class="w-full h-48">
+                    <div id="subtitle-placeholder" class="w-full h-full flex items-center justify-center">
+                        <div class="text-center">
+                            <i class="fa-solid fa-closed-captioning text-3xl mb-3 text-white/30"></i>
+                            <p class="text-white/40 text-sm" id="subtitle-status-text">Waiting for subtitle data...</p>
+                            <p class="text-white/30 text-xs mt-1" id="subtitle-hint-text"></p>
+                        </div>
+                    </div>
+                    <div id="subtitle-chart" class="hidden w-full h-full"></div>
+                    <div id="subtitle-timeline" class="hidden w-full h-32 mt-2"></div>
                 </div>
             </div>
 
@@ -184,7 +198,10 @@
 
         let audioTimelineChart = null;
         let comparisonChart = null;
+        let subtitleChart = null;
+        let subtitleTimelineChart = null;
         let currentBvId = null;
+        let currentVideoTitle = null;
 
         // === Init ===
         document.addEventListener('DOMContentLoaded', () => {
@@ -224,7 +241,7 @@
             audioTimelineChart.setOption({
                 backgroundColor: 'transparent',
                 tooltip: { trigger: 'axis' },
-                grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
+                grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', },
                 xAxis: {
                     type: 'category',
                     name: 'Time (s)',
@@ -265,7 +282,7 @@
                 legend: {
                     bottom: '0%',
                     textStyle: { color: '#fff' },
-                    data: ['Audio', 'Comments', 'Danmu']
+                    data: ['Audio', 'Comments', 'Danmu', 'Subtitle']
                 },
                 grid: { left: '3%', right: '4%', bottom: '15%', top: '5%', containLabel: true },
                 xAxis: {
@@ -298,25 +315,90 @@
                         type: 'bar',
                         data: [0, 0, 0],
                         itemStyle: { color: '#22d3ee', borderRadius: [4, 4, 0, 0] }
+                    },
+                    {
+                        name: 'Subtitle',
+                        type: 'bar',
+                        data: [0, 0, 0],
+                        itemStyle: { color: '#fbbf24', borderRadius: [4, 4, 0, 0] }
                     }
                 ]
+            });
+
+            // Subtitle chart
+            subtitleChart = echarts.init(document.getElementById('subtitle-chart'));
+            subtitleChart.setOption({
+                backgroundColor: 'transparent',
+                tooltip: { trigger: 'axis' },
+                grid: { left: '3%', right: '4%', bottom: '15%', top: '10%', containLabel: true },
+                xAxis: {
+                    type: 'category',
+                    name: 'Time',
+                    data: [],
+                    axisLine: { lineStyle: { color: '#444' } },
+                    axisLabel: { color: '#888', fontSize: 10 }
+                },
+                yAxis: {
+                    type: 'value',
+                    name: 'Score',
+                    min: 0,
+                    max: 1,
+                    axisLine: { show: false },
+                    splitLine: { lineStyle: { color: '#333' } },
+                    axisLabel: { color: '#888' }
+                },
+                series: [{
+                    name: 'Subtitle',
+                    type: 'line',
+                    data: [],
+                    smooth: true,
+                    lineStyle: { color: '#22d3ee', width: 2 },
+                    itemStyle: { color: '#22d3ee' },
+                    areaStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: 'rgba(34, 211, 238, 0.3)' },
+                            { offset: 1, color: 'rgba(34, 211, 238, 0.05)' }
+                        ])
+                    }
+                }]
             });
         }
 
         // === Listen for video change ===
         function listenForVideoChange() {
-            ipcRenderer.on('video-change', (event, bvId) => {
-                console.log('Video change:', bvId);
-                currentBvId = bvId;
-                loadData(bvId);
+            ipcRenderer.on('video-change', (event, data) => {
+                console.log('Video change:', data);
+                let bvId, title;
+                if (typeof data === 'object' && data !== null) {
+                    bvId = data.bvId;
+                    title = data.title;
+                } else {
+                    bvId = data;
+                    title = null;
+                }
+                
+                if (bvId && bvId !== '--') {
+                    currentBvId = bvId;
+                    currentVideoTitle = title;
+                    updateVideoTitle(bvId, title);
+                    loadData(bvId);
+                    loadSubtitleData(bvId);
+                }
             });
+        }
+
+        function updateVideoTitle(bvId, title) {
+            document.getElementById('video-bvid').textContent = bvId || '--';
+            if (title) {
+                document.getElementById('video-title').textContent = title;
+            }
         }
 
         // === Load data ===
         async function loadData(bvId) {
             try {
                 showLoading(true);
-                console.log('Loading data for:', bvId);
+                console.log('Loading audio data for:', bvId);
 
                 // 1. 先尝试触发异步分析（评论和弹幕）
                 try {
@@ -342,11 +424,14 @@
                 // 2. 调用 audio dashboard API
                 const response = await fetch(`http://118.25.39.91:8000/api/video/audio-dashboard/${bvId}/`);
                 const data = await response.json();
-                console.log('API Response:', JSON.stringify(data, null, 2));
+                console.log('Audio API Response:', JSON.stringify(data, null, 2));
                 showLoading(false);
 
                 if (data.success) {
                     updateUI(data);
+                } else if (data.error && data.error.includes('not found')) {
+                    // 视频不存在，显示提示
+                    showNoVideoError(data);
                 } else {
                     console.error('Data load failed:', data.error);
                     showDebugInfo(data);
@@ -355,6 +440,46 @@
                 showLoading(false);
                 console.error('Load failed:', error);
             }
+        }
+
+        // === 显示视频不存在错误 ===
+        function showNoVideoError(data) {
+            const statusText = document.getElementById('audio-status');
+            const hint = data.hint || '请先切换到在线分析模式获取视频数据';
+            
+            statusText.textContent = 'No Data';
+            statusText.className = 'text-sm font-semibold text-yellow-400';
+            
+            // 显示错误提示
+            const subtitleStatus = document.getElementById('subtitle-status-text');
+            const subtitleHint = document.getElementById('subtitle-hint-text');
+            if (subtitleStatus) {
+                subtitleStatus.textContent = 'Video data not found';
+                subtitleStatus.className = 'text-white/40 text-sm';
+            }
+            if (subtitleHint) {
+                subtitleHint.textContent = hint;
+            }
+            
+            // 更新比较图表为空数据
+            if (comparisonChart) {
+                comparisonChart.setOption({
+                    series: [
+                        { name: 'Audio', data: [0, 0, 0] },
+                        { name: 'Comments', data: [0, 0, 0] },
+                        { name: 'Danmu', data: [0, 0, 0] },
+                        { name: 'Subtitle', data: [0, 0, 0] }
+                    ]
+                });
+            }
+            
+            // 更新统计卡片
+            document.getElementById('audio-avg').textContent = '--';
+            document.getElementById('comment-avg').textContent = '--';
+            document.getElementById('danmu-avg').textContent = '--';
+            
+            // 显示提示信息
+            showToast('Please switch to online analysis mode', 'warning');
         }
 
         // === 轮询分析任务状态 ===
@@ -535,11 +660,16 @@
             // Comparison bar chart (distribution)
             const dist = data.distribution;
             if (dist) {
+                // 保存分布数据供字幕对比使用
+                window.audioDist = dist.audio || [0, 0, 0];
+                window.commentDist = dist.comments || [0, 0, 0];
+                window.danmuDist = dist.danmu || [0, 0, 0];
+                
                 comparisonChart.setOption({
                     series: [
-                        { name: 'Audio',    data: dist.audio    || [0, 0, 0] },
-                        { name: 'Comments', data: dist.comments || [0, 0, 0] },
-                        { name: 'Danmu',    data: dist.danmu    || [0, 0, 0] },
+                        { name: 'Audio', data: window.audioDist },
+                        { name: 'Comments', data: window.commentDist },
+                        { name: 'Danmu', data: window.danmuDist }
                     ]
                 });
                 // Force resize
@@ -675,12 +805,139 @@
         function refreshData() {
             if (currentBvId) {
                 triggerAnalysis(true);
+                loadSubtitleData(currentBvId, true);
             }
+        }
+
+        // === 字幕分析功能 ===
+        async function loadSubtitleData(bvId, forceRefresh = false) {
+            try {
+                console.log('Loading subtitle data for:', bvId);
+                const statusText = document.getElementById('subtitle-status-text');
+                const hintText = document.getElementById('subtitle-hint-text');
+                const analyzeBtn = document.getElementById('analyze-subtitle-btn');
+                
+                if (statusText) statusText.textContent = 'Loading...';
+
+                const response = await fetch(`http://118.25.39.91:8000/api/video/subtitle-dashboard/${bvId}/`);
+                const data = await response.json();
+                console.log('Subtitle API Response:', JSON.stringify(data, null, 2));
+
+                if (data.success) {
+                    if (data.status === 'no_subtitles' || data.status === 'ready') {
+                        // 没有字幕或需要分析
+                        if (statusText) statusText.textContent = data.message || 'No subtitles available';
+                        if (hintText) hintText.textContent = data.hint || '';
+                        
+                        if (data.status === 'ready' && !forceRefresh) {
+                            // 显示分析按钮
+                            if (analyzeBtn) analyzeBtn.classList.remove('hidden');
+                        }
+                    } else if (data.status === 'analyzed') {
+                        // 有字幕数据，显示
+                        updateSubtitleUI(data);
+                        if (analyzeBtn) analyzeBtn.classList.add('hidden');
+                    }
+                }
+            } catch (error) {
+                console.error('Load subtitle failed:', error);
+                const statusText = document.getElementById('subtitle-status-text');
+                if (statusText) statusText.textContent = 'Load failed';
+            }
+        }
+
+        function updateSubtitleUI(data) {
+            const timeline = data.timeline || [];
+            const stats = data.statistics || {};
+            
+            // 隐藏 placeholder，显示图表
+            document.getElementById('subtitle-placeholder').classList.add('hidden');
+            document.getElementById('subtitle-chart').classList.remove('hidden');
+            
+            if (timeline.length > 0) {
+                const times = timeline.map(t => formatTime(t.time));
+                const scores = timeline.map(t => t.score);
+                
+                subtitleChart.setOption({
+                    tooltip: {
+                        trigger: 'axis',
+                        formatter: function(params) {
+                            const idx = params[0].dataIndex;
+                            const content = timeline[idx]?.content || '';
+                            return `<b>${params[0].axisValue}</b><br/>Score: ${params[0].value.toFixed(3)}<br/>${content.substring(0, 50)}`;
+                        }
+                    },
+                    xAxis: { data: times },
+                    series: [{ data: scores }]
+                });
+                
+                // 显示状态
+                const statusText = document.getElementById('subtitle-status-text');
+                const hintText = document.getElementById('subtitle-hint-text');
+                if (statusText) {
+                    statusText.textContent = `${stats.total_subtitles || timeline.length} subtitles analyzed`;
+                    statusText.className = 'text-cyan-400 text-sm';
+                }
+                if (hintText) hintText.textContent = `Avg: ${stats.avg_sentiment || '--'}`;
+                
+                // 更新比较图表
+                if (data.distribution) {
+                    comparisonChart.setOption({
+                        series: [
+                            { name: 'Audio', data: window.audioDist || [0, 0, 0] },
+                            { name: 'Comments', data: window.commentDist || [0, 0, 0] },
+                            { name: 'Danmu', data: window.danmuDist || [0, 0, 0] },
+                            { name: 'Subtitle', data: [
+                                data.distribution.positive || 0,
+                                data.distribution.neutral || 0,
+                                data.distribution.negative || 0
+                            ]}
+                        ]
+                    });
+                }
+            }
+        }
+
+        async function triggerSubtitleAnalysis() {
+            if (!currentBvId) return;
+            
+            const analyzeBtn = document.getElementById('analyze-subtitle-btn');
+            analyzeBtn.disabled = true;
+            analyzeBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Analyzing...';
+            
+            try {
+                const response = await fetch(`http://118.25.39.91:8000/api/video/subtitle-dashboard/${currentBvId}/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('Subtitle analysis completed!', 'success');
+                    loadSubtitleData(currentBvId);
+                } else {
+                    showToast(data.error || 'Analysis failed', 'error');
+                }
+            } catch (error) {
+                console.error('Subtitle analysis error:', error);
+                showToast('Analysis failed', 'error');
+            } finally {
+                analyzeBtn.disabled = false;
+                analyzeBtn.innerHTML = '<i class="fa-solid fa-play mr-1"></i>Analyze';
+            }
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
         }
 
         window.addEventListener('resize', () => {
             audioTimelineChart?.resize();
             comparisonChart?.resize();
+            subtitleChart?.resize();
         });
 
         // === 登录状态同步 ===

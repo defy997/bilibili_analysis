@@ -37,6 +37,7 @@ urlpatterns = [
     path("api/video/user-profile/<str:bvid>/", user_profile_dashboard, name="user_profile_dashboard"),
     path("api/video/audio-dashboard/<str:bvid>/", video_audio_dashboard, name="video_audio_dashboard"),
     path("api/video/audio-task/<str:task_id>/", audio_task_status, name="audio_task_status"),
+    path("api/video/subtitle-dashboard/<str:bvid>/", subtitle_dashboard, name="subtitle_dashboard"),
     path("api/video/multimodal-emotion/<str:bvid>/", multimodal_emotion_analysis, name="multimodal_emotion"),
 
     # 配置接口
