@@ -922,3 +922,29 @@ ipcMain.on('open-devtools', (event, windowName = 'all') => {
         console.log('没有找到指定的窗口');
     }
 });
+
+// ==========================================
+// 监听主窗口发送的视频切换信号
+// ==========================================
+
+ipcMain.on('main-video-change', (event, data) => {
+    const { bvId, title } = data;
+    
+    // 更新当前视频ID
+    currentBvId = bvId;
+    console.log('[Main] 收到视频切换信号:', bvId, title);
+    
+    // 更新主窗口显示
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('video-change', bvId);
+    }
+    
+    // 广播到所有子窗口
+    const windows = [analysisWindow, userProfileWindow, videoAudioWindow];
+    windows.forEach(win => {
+        if (win && !win.isDestroyed()) {
+            win.webContents.send('video-change', bvId);
+            console.log(`[Main] 已发送 video-change 到 ${win === analysisWindow ? 'analysis' : win === userProfileWindow ? 'user-profile' : 'video-audio'}`);
+        }
+    });
+});
