@@ -396,3 +396,113 @@ def get_comprehensive_dashboard(bvid):
             "success": False,
             "error": "Video not found"
         }
+
+
+# ==================== 多模态情感融合分析 ====================
+
+def get_multimodal_emotion_analysis(bvid, video_type='general'):
+    """
+    获取多模态情感分析结果
+    融合音频、文本（评论）、弹幕的情感分析
+
+    Args:
+        bvid: 视频BV号
+        video_type: 视频类型 ('music', 'tutorial', 'vlog', 'game', 'general')
+
+    Returns:
+        dict: 包含融合情感、注意力权重、冲突检测等信息
+    """
+    from .multimodal_attention import (
+        adaptive_attention_fusion,
+        detect_emotion_conflict
+    )
+
+    try:
+        video = Video.objects.get(bvid=bvid)
+
+        # 1. 获取文本情感（评论）
+        comments = Comment.objects.filter(video_id=bvid)
+        total_comments = comments.count()
+
+        if total_comments > 0:
+            text_positive = comments.filter(sentiment_label='positive').count() / total_comments
+            text_neutral = comments.filter(sentiment_label='neutral').count() / total_comments
+            text_negative = comments.filter(sentiment_label='negative').count() / total_comments
+        else:
+            text_positive = text_neutral = text_negative = 0.33
+
+        text_emotion = {
+            'positive': text_positive,
+            'neutral': text_neutral,
+            'negative': text_negative
+        }
+
+        # 2. 获取音频情感
+        audio_emotion = {
+            'positive': getattr(video, 'audio_positive_score', 0.5),
+            'neutral': getattr(video, 'audio_neutral_score', 0.3),
+            'negative': getattr(video, 'audio_negative_score', 0.2)
+        }
+
+        # 3. 获取弹幕情感
+        danmus = Danmu.objects.filter(video_id=bvid)
+        total_danmus = danmus.count()
+
+        if total_danmus > 0 and hasattr(Danmu, 'sentiment_label'):
+            danmu_positive = danmus.filter(sentiment_label='positive').count() / total_danmus
+            danmu_neutral = danmus.filter(sentiment_label='neutral').count() / total_danmus
+            danmu_negative = danmus.filter(sentiment_label='negative').count() / total_danmus
+        else:
+            danmu_positive, danmu_neutral, danmu_negative = 0.6, 0.3, 0.1
+
+        danmu_emotion = {
+            'positive': danmu_positive,
+            'neutral': danmu_neutral,
+            'negative': danmu_negative
+        }
+
+        # 4. 使用自适应注意力融合
+        fused_emotion, attention_weights = adaptive_attention_fusion(
+            audio_emotion, text_emotion, danmu_emotion, video_type=video_type
+        )
+
+        # 5. 检测情感冲突
+        conflict_info = detect_emotion_conflict(audio_emotion, text_emotion, danmu_emotion)
+
+        # 6. 计算情感强度
+        emotion_strength = max(fused_emotion.values()) - min(fused_emotion.values())
+
+        # 7. 确定主导情感
+        dominant_emotion = max(fused_emotion, key=fused_emotion.get)
+
+        return {
+            'success': True,
+            'fused_emotion': {
+                'positive': round(fused_emotion['positive'], 3),
+                'neutral': round(fused_emotion['neutral'], 3),
+                'negative': round(fused_emotion['negative'], 3)
+            },
+            'attention_weights': {
+                'audio': round(attention_weights['audio'], 3),
+                'text': round(attention_weights['text'], 3),
+                'danmu': round(attention_weights['danmu'], 3)
+            },
+            'individual_emotions': {
+                'audio': audio_emotion,
+                'text': text_emotion,
+                'danmu': danmu_emotion
+            },
+            'dominant_emotion': dominant_emotion,
+            'emotion_strength': round(emotion_strength, 3),
+            'conflict_info': conflict_info,
+            'video_type': video_type,
+            'metadata': {
+                'total_comments': total_comments,
+                'total_danmus': total_danmus
+            }
+        }
+
+    except Video.DoesNotExist:
+        return {'success': False, 'error': 'Video not found'}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}

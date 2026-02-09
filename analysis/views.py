@@ -981,3 +981,27 @@ def video_history(request):
             }, status=500)
     else:
         return HttpResponseNotAllowed(['GET'])
+
+
+# ==================== 多模态情感分析 API ====================
+
+def multimodal_emotion_analysis(request, bvid):
+    """
+    多模态情感分析 API
+    GET /api/video/multimodal-emotion/<bvid>/
+    """
+    if request.method == 'GET':
+        from .analytics import get_multimodal_emotion_analysis
+
+        # 获取视频类型参数（可选）
+        video_type = request.GET.get('type', 'general')
+
+        # 执行多模态分析
+        result = get_multimodal_emotion_analysis(bvid, video_type=video_type)
+
+        if result['success']:
+            return JsonResponse(result)
+        else:
+            return JsonResponse(result, status=404)
+    else:
+        return HttpResponseNotAllowed(['GET'])

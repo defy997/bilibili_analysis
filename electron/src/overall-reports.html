@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Overall Reports - 多模态情感分析</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: transparent;
+        }
+        .glass-panel {
+            background: rgba(20, 20, 30, 0.6);
+            -webkit-backdrop-filter: blur(20px);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .drag-area {
+            -webkit-app-region: drag;
+            cursor: grab;
+        }
+        .drag-area:active {
+            cursor: grabbing;
+        }
+        .no-drag {
+            -webkit-app-region: no-drag;
+        }
+        .stat-card {
+            transition: all 0.3s ease;
+        }
+        .stat-card:hover {
+            transform: translateY(-2px);
+            background: rgba(255, 255, 255, 0.15);
+        }
+        .conflict-badge {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .overflow-y-auto::-webkit-scrollbar {
+            width: 8px;
+        }
+        .overflow-y-auto::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+        }
+        .overflow-y-auto::-webkit-scrollbar-thumb {
+            background: rgba(59, 130, 246, 0.3);
+            border-radius: 4px;
+        }
+        .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+            background: rgba(59, 130, 246, 0.5);
+        }
+    </style>
+</head>
+<body class="h-full w-full text-white overflow-hidden">
+
+    <div class="h-full w-full flex flex-col">
+
+        <!-- 顶部标题栏 -->
+        <div class="h-12 flex items-center justify-between px-4 border-b border-white/10 bg-gradient-to-r from-purple-500/10 to-blue-500/10 flex-shrink-0 drag-area select-none">
+            <div class="flex items-center gap-3">
+                <button onclick="goBack()" class="text-white/60 hover:text-white transition-colors no-drag" title="返回" aria-label="返回">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </button>
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
+                        <i class="fa-solid fa-brain"></i>
+                    </div>
+                    <span class="font-bold tracking-wide">Overall Reports - 多模态情感分析</span>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 no-drag text-xs">
+                <button onclick="refreshData()" class="text-white/60 hover:text-white transition-colors" title="刷新数据" aria-label="刷新数据">
+                    <i class="fa-solid fa-rotate-right"></i>
+                </button>
+                <button onclick="closeModule()" class="text-white/60 hover:text-blue-400 transition-colors" title="关闭" aria-label="关闭">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- 主内容区域 -->
+        <div class="flex-1 w-full p-6 overflow-y-auto">
+
+            <!-- 加载中提示 -->
+            <div id="loading-indicator" class="hidden glass-panel rounded-2xl p-8 mb-6 text-center">
+                <div class="flex flex-col items-center gap-4">
+                    <div class="animate-spin rounded-full h-12 w-12 border-4 border-purple-500 border-t-transparent"></div>
+                    <div class="text-lg font-semibold">加载多模态情感分析...</div>
+                    <div class="text-sm text-white/60">正在融合音频、文本、弹幕情感</div>
+                </div>
+            </div>
+
+            <!-- 错误提示 -->
+            <div id="error-indicator" class="hidden glass-panel rounded-2xl p-8 mb-6 text-center">
+                <div class="flex flex-col items-center gap-4">
+                    <div class="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center text-red-400">
+                        <i class="fa-solid fa-triangle-exclamation text-2xl"></i>
+                    </div>
+                    <div class="text-lg font-semibold">加载失败</div>
+                    <div class="text-sm text-white/60" id="error-message">请检查网络连接</div>
+                    <button onclick="refreshData()" class="px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 rounded-lg text-blue-400 transition-colors">
+                        <i class="fa-solid fa-rotate-right mr-2"></i>重试
+                    </button>
+                </div>
+            </div>
+
+            <!-- 数据内容区域 -->
+            <div id="data-content" class="hidden">
+
+                <!-- 综合情感得分卡片 -->
+                <div class="grid grid-cols-3 gap-4 mb-6">
+                    <div class="stat-card glass-panel rounded-2xl p-4 border-l-4 border-green-500">
+                        <div class="flex items-center gap-2 mb-2">
+                            <div class="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center text-green-400">
+                                <i class="fa-solid fa-face-smile"></i>
+                            </div>
+                            <span class="text-xs text-white/60 uppercase">积极情感</span>
+                        </div>
+                        <div class="text-3xl font-bold text-green-400" id="positive-score">0%</div>
+                        <div class="text-xs text-white/40 mt-1">Positive Emotion</div>
+                    </div>
+
+                    <div class="stat-card glass-panel rounded-2xl p-4 border-l-4 border-gray-500">
+                        <div class="flex items-center gap-2 mb-2">
+                            <div class="w-8 h-8 rounded-full bg-gray-500/20 flex items-center justify-center text-gray-400">
+                                <i class="fa-solid fa-face-meh"></i>
+                            </div>
+                            <span class="text-xs text-white/60 uppercase">中性情感</span>
+                        </div>
+                        <div class="text-3xl font-bold text-gray-400" id="neutral-score">0%</div>
+                        <div class="text-xs text-white/40 mt-1">Neutral Emotion</div>
+                    </div>
+
+                    <div class="stat-card glass-panel rounded-2xl p-4 border-l-4 border-red-500">
+                        <div class="flex items-center gap-2 mb-2">
+                            <div class="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center text-red-400">
+                                <i class="fa-solid fa-face-frown"></i>
+                            </div>
+                            <span class="text-xs text-white/60 uppercase">消极情感</span>
+                        </div>
+                        <div class="text-3xl font-bold text-red-400" id="negative-score">0%</div>
+                        <div class="text-xs text-white/40 mt-1">Negative Emotion</div>
+                    </div>
+                </div>
+
+                <!-- 第一行：注意力权重 + 情感强度 -->
+                <div class="grid grid-cols-2 gap-6 mb-6">
+                    <!-- 注意力权重雷达图 -->
+                    <div class="glass-panel rounded-2xl p-6">
+                        <h4 class="text-sm font-bold uppercase tracking-wider text-white/60 mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-crosshairs"></i>
+                            注意力权重分布
+                        </h4>
+                        <div id="attention-radar" class="w-full h-64"></div>
+                    </div>
+
+                    <!-- 各模态情感对比 -->
+                    <div class="glass-panel rounded-2xl p-6">
+                        <h4 class="text-sm font-bold uppercase tracking-wider text-white/60 mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-layer-group"></i>
+                            各模态情感对比
+                        </h4>
+                        <div id="modality-comparison" class="w-full h-64"></div>
+                    </div>
+                </div>
+
+                <!-- 第二行：情感一致性 + 冲突检测 -->
+                <div class="grid grid-cols-2 gap-6 mb-6">
+                    <!-- 情感一致性分析 -->
+                    <div class="glass-panel rounded-2xl p-6">
+                        <h4 class="text-sm font-bold uppercase tracking-wider text-white/60 mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-chart-pie"></i>
+                            情感一致性分析
+                        </h4>
+                        <div id="consistency-gauge" class="w-full h-64"></div>
+                    </div>
+
+                    <!-- 情感冲突检测 -->
+                    <div class="glass-panel rounded-2xl p-6">
+                        <h4 class="text-sm font-bold uppercase tracking-wider text-white/60 mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                            情感冲突检测
+                        </h4>
+                        <div id="conflict-list" class="space-y-3 max-h-64 overflow-y-auto">
+                            <!-- 动态填充 -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 详细信息面板 -->
+                <div class="glass-panel rounded-2xl p-6">
+                    <h4 class="text-sm font-bold uppercase tracking-wider text-white/60 mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-info-circle"></i>
+                        详细分析信息
+                    </h4>
+                    <div class="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                            <span class="text-white/60">主导情感：</span>
+                            <span class="font-semibold" id="dominant-emotion">-</span>
+                        </div>
+                        <div>
+                            <span class="text-white/60">情感强度：</span>
+                            <span class="font-semibold" id="emotion-strength">-</span>
+                        </div>
+                        <div>
+                            <span class="text-white/60">视频类型：</span>
+                            <span class="font-semibold" id="video-type">-</span>
+                        </div>
+                        <div>
+                            <span class="text-white/60">一致性得分：</span>
+                            <span class="font-semibold" id="consistency-score">-</span>
+                        </div>
+                        <div>
+                            <span class="text-white/60">评论数量：</span>
+                            <span class="font-semibold" id="total-comments">-</span>
+                        </div>
+                        <div>
+                            <span class="text-white/60">弹幕数量：</span>
+                            <span class="font-semibold" id="total-danmus">-</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+
+        let attentionRadarChart = null;
+        let modalityComparisonChart = null;
+        let consistencyGaugeChart = null;
+        let currentBvId = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            listenForVideoChange();
+            loadThemeFromConfig();
+        });
+
+        function initCharts() {
+            // 注意力权重雷达图
+            attentionRadarChart = echarts.init(document.getElementById('attention-radar'));
+            attentionRadarChart.setOption({
+                backgroundColor: 'transparent',
+                tooltip: {},
+                radar: {
+                    indicator: [
+                        { name: '音频权重', max: 1 },
+                        { name: '文本权重', max: 1 },
+                        { name: '弹幕权重', max: 1 }
+                    ],
+                    splitArea: {
+                        areaStyle: {
+                            color: ['rgba(59, 130, 246, 0.05)', 'rgba(59, 130, 246, 0.1)']
+                        }
+                    },
+                    axisLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.2)' } },
+                    splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.1)' } }
+                },
+                series: [{
+                    type: 'radar',
+                    data: [{
+                        value: [0, 0, 0],
+                        name: '注意力权重',
+                        areaStyle: {
+                            color: 'rgba(168, 85, 247, 0.3)'
+                        },
+                        lineStyle: {
+                            color: '#a855f7',
+                            width: 2
+                        }
+                    }]
+                }]
+            });
+
+            // 各模态情感对比柱状图
+            modalityComparisonChart = echarts.init(document.getElementById('modality-comparison'));
+            modalityComparisonChart.setOption({
+                backgroundColor: 'transparent',
+                tooltip: { trigger: 'axis' },
+                legend: {
+                    data: ['音频', '文本', '弹幕'],
+                    textStyle: { color: '#fff' },
+                    bottom: '5%'
+                },
+                grid: { left: '3%', right: '4%', bottom: '15%', top: '5%', containLabel: true },
+                xAxis: {
+                    type: 'category',
+                    data: ['积极', '中性', '消极'],
+                    axisLine: { lineStyle: { color: '#444' } },
+                    axisLabel: { color: '#888' }
+                },
+                yAxis: {
+                    type: 'value',
+                    axisLine: { show: false },
+                    splitLine: { lineStyle: { color: '#333' } },
+                    axisLabel: { color: '#888' }
+                },
+                series: [
+                    {
+                        name: '音频',
+                        type: 'bar',
+                        data: [0, 0, 0],
+                        itemStyle: { color: '#3b82f6' }
+                    },
+                    {
+                        name: '文本',
+                        type: 'bar',
+                        data: [0, 0, 0],
+                        itemStyle: { color: '#8b5cf6' }
+                    },
+                    {
+                        name: '弹幕',
+                        type: 'bar',
+                        data: [0, 0, 0],
+                        itemStyle: { color: '#ec4899' }
+                    }
+                ]
+            });
+
+            // 情感一致性仪表盘
+            consistencyGaugeChart = echarts.init(document.getElementById('consistency-gauge'));
+            consistencyGaugeChart.setOption({
+                backgroundColor: 'transparent',
+                series: [{
+                    type: 'gauge',
+                    startAngle: 180,
+                    endAngle: 0,
+                    min: 0,
+                    max: 1,
+                    splitNumber: 10,
+                    axisLine: {
+                        lineStyle: {
+                            width: 20,
+                            color: [
+                                [0.3, '#ef4444'],
+                                [0.7, '#f59e0b'],
+                                [1, '#22c55e']
+                            ]
+                        }
+                    },
+                    pointer: {
+                        itemStyle: { color: 'auto' }
+                    },
+                    axisTick: {
+                        distance: -20,
+                        length: 8,
+                        lineStyle: { color: '#fff', width: 2 }
+                    },
+                    splitLine: {
+                        distance: -20,
+                        length: 15,
+                        lineStyle: { color: '#fff', width: 3 }
+                    },
+                    axisLabel: {
+                        color: 'auto',
+                        distance: 30,
+                        fontSize: 10
+                    },
+                    detail: {
+                        valueAnimation: true,
+                        formatter: '{value}',
+                        color: 'auto',
+                        fontSize: 20,
+                        offsetCenter: [0, '70%']
+                    },
+                    data: [{ value: 0, name: '一致性得分' }]
+                }]
+            });
+        }
+
+        function listenForVideoChange() {
+            ipcRenderer.on('video-change', (event, bvId) => {
+                console.log('收到视频信号:', bvId);
+                currentBvId = bvId;
+                loadData(bvId);
+            });
+        }
+
+        async function loadData(bvId) {
+            try {
+                showLoading(true);
+
+                const response = await fetch(`http://118.25.39.91:8000/api/video/multimodal-emotion/${bvId}/`);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                showLoading(false);
+
+                if (data.success) {
+                    showContent();
+                    updateUI(data);
+                } else {
+                    showError(data.error || '加载多模态情感分析失败');
+                }
+            } catch (error) {
+                showLoading(false);
+                console.error('加载数据失败:', error);
+                showError(error.message || '网络错误');
+            }
+        }
+
+        function showLoading(show) {
+            const loader = document.getElementById('loading-indicator');
+            const error = document.getElementById('error-indicator');
+            const content = document.getElementById('data-content');
+
+            if (show) {
+                loader.classList.remove('hidden');
+                error.classList.add('hidden');
+                content.classList.add('hidden');
+            } else {
+                loader.classList.add('hidden');
+            }
+        }
+
+        function showError(message) {
+            const loader = document.getElementById('loading-indicator');
+            const error = document.getElementById('error-indicator');
+            const content = document.getElementById('data-content');
+            const errorMsg = document.getElementById('error-message');
+
+            loader.classList.add('hidden');
+            error.classList.remove('hidden');
+            content.classList.add('hidden');
+            errorMsg.textContent = message || '加载失败';
+        }
+
+        function showContent() {
+            const loader = document.getElementById('loading-indicator');
+            const error = document.getElementById('error-indicator');
+            const content = document.getElementById('data-content');
+
+            loader.classList.add('hidden');
+            error.classList.add('hidden');
+            content.classList.remove('hidden');
+        }
+
+        function updateUI(data) {
+            // 更新综合情感得分卡片
+            document.getElementById('positive-score').textContent = Math.round(data.fused_emotion.positive * 100) + '%';
+            document.getElementById('neutral-score').textContent = Math.round(data.fused_emotion.neutral * 100) + '%';
+            document.getElementById('negative-score').textContent = Math.round(data.fused_emotion.negative * 100) + '%';
+
+            // 更新注意力权重雷达图
+            attentionRadarChart.setOption({
+                series: [{
+                    data: [{
+                        value: [
+                            data.attention_weights.audio,
+                            data.attention_weights.text,
+                            data.attention_weights.danmu
+                        ]
+                    }]
+                }]
+            });
+
+            // 更新各模态情感对比
+            modalityComparisonChart.setOption({
+                series: [
+                    { data: [data.individual_emotions.audio.positive, data.individual_emotions.audio.neutral, data.individual_emotions.audio.negative] },
+                    { data: [data.individual_emotions.text.positive, data.individual_emotions.text.neutral, data.individual_emotions.text.negative] },
+                    { data: [data.individual_emotions.danmu.positive, data.individual_emotions.danmu.neutral, data.individual_emotions.danmu.negative] }
+                ]
+            });
+
+            // 更新一致性仪表盘
+            consistencyGaugeChart.setOption({
+                series: [{
+                    data: [{ value: data.conflict_info.consistency_score }]
+                }]
+            });
+
+            // 更新冲突列表
+            updateConflictList(data.conflict_info);
+
+            // 更新详细信息
+            const emotionLabels = { positive: '积极', neutral: '中性', negative: '消极' };
+            document.getElementById('dominant-emotion').textContent = emotionLabels[data.dominant_emotion];
+            document.getElementById('emotion-strength').textContent = data.emotion_strength.toFixed(2);
+            document.getElementById('video-type').textContent = data.video_type;
+            document.getElementById('consistency-score').textContent = data.conflict_info.consistency_score.toFixed(2);
+            document.getElementById('total-comments').textContent = data.metadata.total_comments;
+            document.getElementById('total-danmus').textContent = data.metadata.total_danmus;
+        }
+
+        function updateConflictList(conflictInfo) {
+            const container = document.getElementById('conflict-list');
+
+            if (!conflictInfo.has_conflict || conflictInfo.conflicts.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-8 text-white/60">
+                        <i class="fa-solid fa-circle-check text-4xl text-green-400 mb-2"></i>
+                        <p>未检测到情感冲突</p>
+                        <p class="text-xs mt-1">各模态情感一致</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = conflictInfo.conflicts.map(conflict => {
+                const emotionLabels = { positive: '积极', neutral: '中性', negative: '消极' };
+                return `
+                    <div class="glass-panel rounded-xl p-4 border-l-4 border-orange-500">
+                        <div class="flex items-start gap-3">
+                            <div class="conflict-badge w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 flex-shrink-0">
+                                <i class="fa-solid fa-exclamation"></i>
+                            </div>
+                            <div class="flex-1">
+                                <div class="font-semibold text-sm mb-1">${conflict.type === 'audio-text' ? '音频-文本冲突' : '文本-弹幕冲突'}</div>
+                                <div class="text-xs text-white/60 mb-2">
+                                    ${conflict.type === 'audio-text' ?
+                                        `音频: ${emotionLabels[conflict.audio_emotion]} ⇄ 文本: ${emotionLabels[conflict.text_emotion]}` :
+                                        `文本: ${emotionLabels[conflict.text_emotion]} ⇄ 弹幕: ${emotionLabels[conflict.danmu_emotion]}`
+                                    }
+                                </div>
+                                <div class="text-xs text-orange-300/80">
+                                    <i class="fa-solid fa-lightbulb mr-1"></i>${conflict.interpretation}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function goBack() {
+            ipcRenderer.send('close-overall-reports-window');
+        }
+
+        function closeModule() {
+            ipcRenderer.send('close-overall-reports-window');
+        }
+
+        function refreshData() {
+            if (currentBvId) {
+                loadData(currentBvId);
+            }
+        }
+
+        // === Theme support ===
+        function applyTheme(bgColor, opacity) {
+            const hex = bgColor.replace('#', '');
+            const r = parseInt(hex.substring(0, 2), 16);
+            const g = parseInt(hex.substring(2, 4), 16);
+            const b = parseInt(hex.substring(4, 6), 16);
+
+            const style = document.getElementById('dynamic-theme') || document.createElement('style');
+            style.id = 'dynamic-theme';
+            style.textContent = `
+                .glass-panel { background: rgba(${r}, ${g}, ${b}, ${opacity * 0.6}) !important; }
+                .drag-area { background-color: rgba(${r}, ${g}, ${b}, ${opacity * 0.8}) !important; }
+                .stat-card:hover { background: rgba(${r}, ${g}, ${b}, ${opacity * 0.4}) !important; }
+            `;
+            if (!document.getElementById('dynamic-theme')) {
+                document.head.appendChild(style);
+            }
+        }
+
+        ipcRenderer.on('apply-ui-settings', (event, settings) => {
+            applyTheme(settings.bgColor, settings.opacity);
+        });
+
+        async function loadThemeFromConfig() {
+            try {
+                const resp = await fetch('http://118.25.39.91:8000/api/config/');
+                const result = await resp.json();
+                if (result.success && result.data?.ui_config) {
+                    applyTheme(result.data.ui_config.background_color, result.data.ui_config.opacity);
+                }
+            } catch (e) {
+                console.error('Failed to load theme:', e);
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            attentionRadarChart?.resize();
+            modalityComparisonChart?.resize();
+            consistencyGaugeChart?.resize();
+        });
+
+        // 登录状态同步
+        let isLoggedIn = false;
+        ipcRenderer.on('sync-login-status', (event, status) => {
+            isLoggedIn = status.loggedIn;
+            console.log('登录状态同步:', isLoggedIn);
+        });
+    </script>
+</body>
+</html>

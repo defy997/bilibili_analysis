@@ -19,7 +19,7 @@ from django.contrib import admin
 from django.urls import path
 from django.http import JsonResponse
 from analysis.views import analyze_by_bvid, video_dashboard, user_profile_dashboard, video_audio_dashboard, audio_task_status, get_config, save_config, async_analyze_video, task_status
-from analysis.views import check_sessdata, refresh_sessdata, generate_qrcode, poll_login, get_cookie_header, video_history
+from analysis.views import check_sessdata, refresh_sessdata, generate_qrcode, poll_login, get_cookie_header, video_history, multimodal_emotion_analysis
 from analysis.auth_views import send_code, register, login, logout, check_login
 
 def index(request):
@@ -37,6 +37,7 @@ urlpatterns = [
     path("api/video/user-profile/<str:bvid>/", user_profile_dashboard, name="user_profile_dashboard"),
     path("api/video/audio-dashboard/<str:bvid>/", video_audio_dashboard, name="video_audio_dashboard"),
     path("api/video/audio-task/<str:task_id>/", audio_task_status, name="audio_task_status"),
+    path("api/video/multimodal-emotion/<str:bvid>/", multimodal_emotion_analysis, name="multimodal_emotion"),
 
     # 配置接口
     path("api/config/", get_config, name="get_config"),
