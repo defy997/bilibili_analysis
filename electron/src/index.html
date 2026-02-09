@@ -1196,6 +1196,33 @@
             });
         });
 
+        // 监听清除视频数据信号（从历史切换到在线时）
+        ipcRenderer.on('clear-video-data', () => {
+            console.log('[Index] 收到清除视频数据信号，切换到在线模式');
+            // 清除雷达图数据
+            if (radarChart) {
+                radarChart.setOption({
+                    series: [{
+                        data: [],
+                        areaStyle: { opacity: 0 },
+                        lineStyle: { opacity: 0.3 }
+                    }]
+                });
+            }
+            // 清除其他显示数据
+            document.getElementById('danmu-count').innerText = '--';
+            document.getElementById('viewer-count').innerText = '--';
+            document.getElementById('like-count').innerText = '--';
+            document.getElementById('coin-count').innerText = '--';
+            document.getElementById('favorite-count').innerText = '--';
+            document.getElementById('share-count').innerText = '--';
+            document.getElementById('comment-count').innerText = '--';
+            document.getElementById('video-score').innerText = '--';
+            // 更新中心圆圈提示
+            updateCenterVideoInfo('--', '等待接收视频数据...');
+            showToast('已切换到在线分析模式，等待接收数据', 'info');
+        });
+
         // === 用户认证功能 ===
         let sendCodeCountdown = 0;
 

@@ -987,9 +987,30 @@ ipcMain.on('set-analysis-mode', (event, mode) => {
         analysisMode = mode;
         console.log('[Main] 分析模式已切换为:', analysisMode);
 
-        // 如果切换到在线模式，刷新当前视频
-        if (mode === 'online' && currentBvId) {
-            broadcastVideoChange(currentBvId);
+        if (mode === 'online') {
+            // 切换到在线模式时，清除前端的历史数据，等待接收浏览器扩展的新数据
+            console.log('[Main] 切换到在线模式，清除历史数据，等待浏览器扩展新数据');
+            broadcastToAll('clear-video-data');
+        } else {
+            // 切换到历史模式，如果当前有视频，刷新显示
+            if (currentBvId) {
+                broadcastVideoChange(currentBvId);
+            }
         }
     }
 });
+
+// ==========================================
+// 广播消息到所有窗口
+// ==========================================
+function broadcastToAll(channel, data) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(channel, data);
+    }
+    const windows = [analysisWindow, userProfileWindow, videoAudioWindow];
+    windows.forEach(win => {
+        if (win && !win.isDestroyed()) {
+            win.webContents.send(channel, data);
+        }
+    });
+}
