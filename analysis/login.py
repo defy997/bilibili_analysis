@@ -11,6 +11,7 @@ import os
 import json
 from datetime import datetime
 from hashlib import md5
+from urllib.parse import urlencode
 
 APPKEY = "4409e2ce8ffd12b8"
 APPSEC = "59b43e04ad6965f34319062b478f83dd"
@@ -82,19 +83,21 @@ def qr_login():
         print("等待扫码中...\n")
         
         # 第二步：轮询登录状态
-        poll_params = {
-            'appkey': APPKEY,
-            'local_id': 0,
-            'ts': int(time.time()),
-            'auth_code': auth_code
-        }
-        poll_params['sign'] = get_sign(poll_params)
         poll_url = "https://passport.bilibili.com/x/passport-tv-login/qrcode/poll"
-        
+
         max_retries = 60  # 最多等待 2 分钟
         retries = 0
-        
+
         while retries < max_retries:
+            # 每次轮询都更新 ts 和 sign
+            poll_params = {
+                'appkey': APPKEY,
+                'local_id': 0,
+                'ts': int(time.time()),
+                'auth_code': auth_code
+            }
+            poll_params['sign'] = get_sign(poll_params)
+
             poll_r = requests.post(poll_url, params=poll_params, headers=HEADERS, timeout=10)
             
             try:
@@ -175,11 +178,6 @@ def get_sign(params):
 def md5_hash(text):
     """MD5 哈希"""
     return md5(text.encode('utf-8')).hexdigest()
-
-
-def urlencode(items):
-    """URL 编码"""
-    return '&'.join(f"{k}={v}" for k, v in items)
 
 
 if __name__ == "__main__":

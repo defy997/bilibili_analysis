@@ -254,10 +254,21 @@ class SessdataManager:
         if self.user:
             return self.user
         
-        # 默认返回第一个有 bilibili 凭证的用户
-        return User.objects.filter(
+        # 首先尝试获取已有 bilibili 凭证的用户
+        user = User.objects.filter(
             bilibili_mid__isnull=False
         ).first()
+        
+        if user:
+            return user
+        
+        # 如果没有已登录的用户，尝试获取第一个用户（可能是初始创建的账户）
+        user = User.objects.filter(is_superuser=True).first()
+        if user:
+            return user
+        
+        # 如果还是没有用户，获取第一个用户（无论如何都要保存）
+        return User.objects.first()
     
     def check_sessdata_valid(self, sessdata=None):
         """
