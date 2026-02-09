@@ -800,6 +800,16 @@
                         <div class="text-sm text-white/40 mt-4">加载中...</div>
                     </div>
                 </div>
+                <!-- 分页控件 -->
+                <div class="modal-footer flex items-center justify-between px-4 py-3 border-t border-white/10" id="history-pagination" style="display: none;">
+                    <button onclick="changeHistoryPage(-1)" id="history-prev-btn" class="px-3 py-1 text-xs rounded bg-white/10 text-white/60 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed">
+                        <i class="fa-solid fa-chevron-left mr-1"></i>上一页
+                    </button>
+                    <div class="text-xs text-white/40" id="history-page-info">--</div>
+                    <button onclick="changeHistoryPage(1)" id="history-next-btn" class="px-3 py-1 text-xs rounded bg-white/10 text-white/60 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed">
+                        下一页<i class="fa-solid fa-chevron-right ml-1"></i>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -1674,17 +1684,27 @@
             modal.classList.remove('show');
         }
 
-        // === 加载视频历史记录 ===
-        async function loadVideoHistory() {
+        // === 加载视频历史记录（分页）===
+        let historyCurrentPage = 1;
+        let historyTotalPages = 1;
+
+        async function loadVideoHistory(page = 1) {
             const container = document.getElementById('video-history-list');
+            const paginationContainer = document.getElementById('history-pagination');
+            const pageInfo = document.getElementById('history-page-info');
+            const prevBtn = document.getElementById('history-prev-btn');
+            const nextBtn = document.getElementById('history-next-btn');
 
             try {
-                const response = await fetch(`${API_BASE}/api/video/history/`);
+                const response = await fetch(`${API_BASE}/api/video/history/?page=${page}&page_size=20`);
                 const result = await response.json();
 
                 if (result.success && result.data && result.data.videos.length > 0) {
                     const videos = result.data.videos;
-                    container.innerHTML = videos.map((video, index) => `
+                    historyCurrentPage = result.data.page;
+                    historyTotalPages = result.data.total_pages;
+
+                    container.innerHTML = videos.map((video) => `
                         <div class="video-history-item ${video.bvid === currentBvId ? 'active' : ''}"
                              onclick="selectVideoFromHistory('${video.bvid}', '${escapeHtml(video.title)}')">
                             <div class="history-title">${video.title || '未知标题'}</div>
@@ -1695,6 +1715,14 @@
                             </div>
                         </div>
                     `).join('');
+
+                    // 显示分页控件
+                    paginationContainer.style.display = 'flex';
+                    pageInfo.textContent = `第 ${historyCurrentPage} / ${historyTotalPages} 页，共 ${result.data.total} 条`;
+
+                    // 更新按钮状态
+                    prevBtn.disabled = historyCurrentPage <= 1;
+                    nextBtn.disabled = historyCurrentPage >= historyTotalPages;
                 } else {
                     container.innerHTML = `
                         <div class="text-center py-8">
@@ -1705,15 +1733,25 @@
                             <div class="text-white/20 text-xs">请先爬取一个视频</div>
                         </div>
                     `;
+                    paginationContainer.style.display = 'none';
                 }
             } catch (error) {
                 console.error('加载视频历史失败:', error);
                 container.innerHTML = `
                     <div class="text-center py-8">
-                        <div class="text-red-400 text-sm mb-2">加载失败</div>
-                        <div class="text-white/40 text-xs">${error.message}</div>
+                        <div class="text-red-400 text-sm">加载失败</div>
+                        <div class="text-white/40 text-xs mt-2">${error.message}</div>
                     </div>
                 `;
+                paginationContainer.style.display = 'none';
+            }
+        }
+
+        // === 切换历史记录页码 ===
+        async function changeHistoryPage(delta) {
+            const newPage = historyCurrentPage + delta;
+            if (newPage >= 1 && newPage <= historyTotalPages) {
+                await loadVideoHistory(newPage);
             }
         }
 

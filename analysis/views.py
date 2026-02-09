@@ -941,7 +941,6 @@ def video_history(request):
             
             # 获取视频总数
             total = Video.objects.count()
-            
             # 获取视频列表
             videos = Video.objects.order_by('-pubdate')[offset:offset + page_size]
             
