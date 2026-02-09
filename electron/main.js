@@ -169,6 +169,8 @@ function createWebSocketServer() {
                     // 向主窗口发送信号
                     if (mainWindow && !mainWindow.isDestroyed()) {
                         mainWindow.webContents.send('video-change', videoData);
+                        // 通知主窗口刷新历史列表
+                        mainWindow.webContents.send('refresh-history');
                     }
                     // 向分析窗口发送信号
                     if (analysisWindow && !analysisWindow.isDestroyed()) {

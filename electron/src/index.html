@@ -1250,6 +1250,16 @@
             }
         });
 
+        // 监听刷新历史列表信号（收到新视频数据时）
+        ipcRenderer.on('refresh-history', () => {
+            console.log('[Index] 收到刷新历史信号');
+            // 如果历史弹窗是打开的，刷新历史列表
+            const modal = document.getElementById('video-history-modal');
+            if (modal && modal.classList.contains('show')) {
+                loadVideoHistory();
+            }
+        });
+
         // === 用户认证功能 ===
         let sendCodeCountdown = 0;
 
