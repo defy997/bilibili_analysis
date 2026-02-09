@@ -415,7 +415,8 @@
                         await pollAnalysisTasks(analyzeData.tasks, bvId);
                         return;
                     } else if (analyzeData.status === 'cached') {
-                        console.log('[LoadData] 数据已缓存');
+                        console.log('[LoadData] 数据已缓存，直接加载');
+                        // 数据已缓存，直接调用 dashboard
                     }
                 } catch (analyzeErr) {
                     console.warn('[LoadData] 异步分析触发失败:', analyzeErr);
