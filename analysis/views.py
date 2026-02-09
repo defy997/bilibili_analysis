@@ -927,3 +927,58 @@ def get_cookie_header(request):
             }, status=500)
     else:
         return HttpResponseNotAllowed(['GET'])
+
+
+@csrf_exempt
+def video_history(request):
+    """获取爬取的视频历史记录"""
+    if request.method == 'GET':
+        try:
+            # 获取分页参数
+            page = int(request.GET.get('page', 1))
+            page_size = int(request.GET.get('page_size', 20))
+            offset = (page - 1) * page_size
+            
+            # 获取视频总数
+            total = Video.objects.count()
+            
+            # 获取视频列表
+            videos = Video.objects.order_by('-pubdate')[offset:offset + page_size]
+            
+            video_list = []
+            for video in videos:
+                # 获取该视频的评论数量
+                comment_count = Comment.objects.filter(video=video).count()
+                # 获取弹幕数量
+                danmu_count = Danmu.objects.filter(cid=video.cid).count() if video.cid else 0
+                
+                video_list.append({
+                    'bvid': video.bvid,
+                    'aid': video.aid,
+                    'title': video.title,
+                    'pubdate': video.pubdate.isoformat() if video.pubdate else None,
+                    'comment_count': comment_count,
+                    'danmu_count': danmu_count,
+                    'raw_comment_count': video.raw_comment_count
+                })
+            
+            return JsonResponse({
+                "success": True,
+                "data": {
+                    "videos": video_list,
+                    "total": total,
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": (total + page_size - 1) // page_size
+                }
+            })
+        except Exception as e:
+            print(f"获取视频历史失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({
+                "success": False,
+                "message": str(e)
+            }, status=500)
+    else:
+        return HttpResponseNotAllowed(['GET'])

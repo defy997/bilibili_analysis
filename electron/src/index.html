@@ -6,6 +6,8 @@
     <title>BiliMood Dashboard</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
@@ -189,6 +191,127 @@
             to { opacity: 0; transform: translateY(-20px); }
         }
 
+        /* 中心圆圈样式 */
+        .center-circle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 280px;
+            height: 280px;
+            border-radius: 50%;
+            background: rgba(20, 20, 30, 0.7);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+
+        .center-circle-title {
+            position: absolute;
+            top: 30px;
+            text-align: center;
+            width: 90%;
+        }
+
+        .center-circle-history-btn {
+            position: absolute;
+            bottom: 30px;
+        }
+
+        #radar-chart {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* 历史记录弹窗样式 */
+        #video-history-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #video-history-modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: rgba(20, 20, 30, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow: hidden;
+            animation: modalSlideIn 0.3s ease;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-body {
+            padding: 16px 20px;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        .video-history-item {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .video-history-item:hover {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: rgba(59, 130, 246, 0.4);
+        }
+
+        .video-history-item.active {
+            background: rgba(59, 130, 246, 0.3);
+            border-color: rgba(59, 130, 246, 0.6);
+        }
+
+        .history-title {
+            font-weight: 500;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .history-meta {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.5);
+        }
+
         /* 未登录遮罩层 */
         #login-overlay {
             position: absolute;
@@ -298,10 +421,30 @@
             </div>
         </div>
 
-        <!-- 中间内容区域：2x2 网格布局 -->
+        <!-- 中间内容区域：2x2 网格布局 + 中心圆圈 -->
         <!-- flex-1 占据剩余空间 -->
-        <div class="flex-1 w-full p-4 grid grid-cols-2 grid-rows-2 gap-0 overflow-hidden">
+        <div class="flex-1 w-full p-4 grid grid-cols-2 grid-rows-2 gap-0 overflow-hidden relative">
             
+            <!-- 中心圆圈 - 雷达图 + 视频标题 + 历史按钮 -->
+            <div class="center-circle">
+                <!-- 雷达图 -->
+                <div id="radar-chart"></div>
+                <!-- 视频标题 -->
+                <div class="center-circle-title">
+                    <div id="current-video-title" class="text-sm font-bold text-white/80 truncate px-4">
+                        当前视频
+                    </div>
+                    <div id="current-video-bvid" class="text-xs text-white/40 font-mono mt-1">
+                        --
+                    </div>
+                </div>
+                <!-- 历史记录按钮 -->
+                <button onclick="openVideoHistory()" class="center-circle-history-btn no-drag px-4 py-2 bg-white/10 hover:bg-white/20 rounded-full text-xs text-white/60 hover:text-white transition-all flex items-center gap-2">
+                    <i class="fa-solid fa-history"></i>
+                    <span>历史</span>
+                </button>
+            </div>
+
             <!-- 卡片 1: User Profile (切右下角) -->
             <div onclick="toggleCard('user', this)" class="nav-card relative rounded-tr-3xl rounded-tl-3xl rounded-bl-3xl mask-br-2 border-2 border-white/40 p-4 flex flex-col items-center justify-center text-center group">
                 <span class="text-lg font-bold tracking-wide">User Analysis</span>
@@ -617,6 +760,26 @@
                 </div>
             </div>
         </div>
+
+        <!-- 视频历史记录弹窗 -->
+        <div id="video-history-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 class="text-sm font-bold uppercase tracking-wider text-white/80">
+                        <i class="fa-solid fa-history mr-2"></i>视频历史
+                    </h3>
+                    <button onclick="closeVideoHistory()" class="no-drag hover:rotate-90 transition-transform duration-300" title="Close" aria-label="Close">
+                        <i class="fa-solid fa-xmark text-white/40 hover:text-white"></i>
+                    </button>
+                </div>
+                <div class="modal-body" id="video-history-list">
+                    <div class="flex flex-col items-center justify-center py-8">
+                        <div class="animate-spin rounded-full h-8 w-8 border-2 border-pink-500 border-t-transparent"></div>
+                        <div class="text-sm text-white/40 mt-4">加载中...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -625,6 +788,9 @@
         // === 全局登录状态 ===
         let isLoggedIn = false;
         let currentUser = null;
+        let currentBvId = null;
+        let currentVideoTitle = null;
+        let radarChart = null;
 
         // === Toast 提示函数 ===
         function showToast(message, type = 'info', duration = 3000) {
@@ -1227,6 +1393,227 @@
         document.addEventListener('DOMContentLoaded', () => {
             loadConfig();
             checkLoginStatus();
+            initRadarChart();
+        });
+
+        // === 初始化雷达图 ===
+        function initRadarChart() {
+            const chartDom = document.getElementById('radar-chart');
+            if (!chartDom) return;
+
+            radarChart = echarts.init(chartDom);
+            radarChart.setOption({
+                backgroundColor: 'transparent',
+                tooltip: {},
+                radar: {
+                    indicator: [
+                        { name: '情感', max: 100 },
+                        { name: '用户', max: 100 },
+                        { name: '弹幕', max: 100 },
+                        { name: '互动', max: 100 },
+                        { name: '热度', max: 100 }
+                    ],
+                    shape: 'circle',
+                    splitNumber: 4,
+                    axisName: {
+                        color: 'rgba(255, 255, 255, 0.6)',
+                        fontSize: 10
+                    },
+                    splitLine: {
+                        lineStyle: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        }
+                    },
+                    splitArea: {
+                        show: false
+                    },
+                    axisLine: {
+                        lineStyle: {
+                            color: 'rgba(255, 255, 255, 0.2)'
+                        }
+                    }
+                },
+                series: [{
+                    type: 'radar',
+                    data: [
+                        {
+                            value: [0, 0, 0, 0, 0],
+                            name: '视频分析',
+                            areaStyle: {
+                                color: 'rgba(236, 72, 153, 0.3)'
+                            },
+                            lineStyle: {
+                                color: 'rgba(236, 72, 153, 0.8)',
+                                width: 2
+                            },
+                            itemStyle: {
+                                color: 'rgba(236, 72, 153, 1)'
+                            }
+                        }
+                    ]
+                }]
+            });
+
+            // 响应式调整
+            window.addEventListener('resize', () => {
+                radarChart?.resize();
+            });
+        }
+
+        // === 更新中心圆圈视频信息 ===
+        function updateCenterVideoInfo(bvId, title) {
+            currentBvId = bvId;
+            currentVideoTitle = title;
+
+            document.getElementById('current-video-title').innerText = title || '当前视频';
+            document.getElementById('current-video-bvid').innerText = bvId || '--';
+
+            // 如果有数据，更新雷达图
+            if (bvId) {
+                loadVideoStatsForRadar(bvId);
+            }
+        }
+
+        // === 加载视频统计数据用于雷达图 ===
+        async function loadVideoStatsForRadar(bvId) {
+            try {
+                const response = await fetch(`${API_BASE}/api/video/dashboard/${bvId}/`);
+                const data = await response.json();
+
+                if (data.success) {
+                    // 从返回数据中获取视频标题
+                    const videoTitle = data.video_info?.title || '未知标题';
+
+                    // 更新圆圈中的视频标题显示
+                    document.getElementById('current-video-title').innerText = videoTitle;
+                    document.getElementById('current-video-bvid').innerText = bvId;
+
+                    // 计算各维度分数
+                    const sentiment = data.sentiment?.distribution;
+                    const posPercent = sentiment ? Math.round((sentiment.positive / (sentiment.positive + sentiment.neutral + sentiment.negative)) * 100) : 0;
+
+                    const totalUsers = data.overview_stats?.total_users || 0;
+                    const userScore = Math.min(100, Math.round(totalUsers / 10));
+
+                    const danmuCount = data.danmu?.timeline_heatmap?.length || 0;
+                    const danmuScore = Math.min(100, danmuCount);
+
+                    const totalComments = sentiment ? (sentiment.positive + sentiment.neutral + sentiment.negative) : 0;
+                    const interactScore = Math.min(100, Math.round(totalComments / 100));
+
+                    const hotScore = Math.min(100, Math.round(Math.random() * 50 + 50)); // 模拟热度
+
+                    // 更新雷达图
+                    radarChart?.setOption({
+                        series: [{
+                            data: [{
+                                value: [posPercent, userScore, danmuScore, interactScore, hotScore],
+                                name: videoTitle || '视频分析'
+                            }]
+                        }]
+                    });
+                }
+            } catch (error) {
+                console.error('加载视频统计数据失败:', error);
+            }
+        }
+
+        // === 打开视频历史弹窗 ===
+        async function openVideoHistory() {
+            const modal = document.getElementById('video-history-modal');
+            modal.classList.add('show');
+
+            // 加载视频列表
+            await loadVideoHistory();
+        }
+
+        // === 关闭视频历史弹窗 ===
+        function closeVideoHistory() {
+            const modal = document.getElementById('video-history-modal');
+            modal.classList.remove('show');
+        }
+
+        // === 加载视频历史记录 ===
+        async function loadVideoHistory() {
+            const container = document.getElementById('video-history-list');
+
+            try {
+                const response = await fetch(`${API_BASE}/api/video/history/`);
+                const result = await response.json();
+
+                if (result.success && result.data && result.data.videos.length > 0) {
+                    const videos = result.data.videos;
+                    container.innerHTML = videos.map((video, index) => `
+                        <div class="video-history-item ${video.bvid === currentBvId ? 'active' : ''}"
+                             onclick="selectVideoFromHistory('${video.bvid}', '${escapeHtml(video.title)}')">
+                            <div class="history-title">${video.title || '未知标题'}</div>
+                            <div class="history-meta">
+                                <span class="mr-3">${video.bvid}</span>
+                                <span>${video.comment_count || 0} 评论</span>
+                                ${video.pubdate ? `<span class="ml-3">${formatDate(video.pubdate)}</span>` : ''}
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = `
+                        <div class="text-center py-8">
+                            <div class="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-4">
+                                <i class="fa-solid fa-video text-2xl text-white/20"></i>
+                            </div>
+                            <div class="text-white/40 text-sm mb-2">暂无视频历史</div>
+                            <div class="text-white/20 text-xs">请先爬取一个视频</div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('加载视频历史失败:', error);
+                container.innerHTML = `
+                    <div class="text-center py-8">
+                        <div class="text-red-400 text-sm mb-2">加载失败</div>
+                        <div class="text-white/40 text-xs">${error.message}</div>
+                    </div>
+                `;
+            }
+        }
+
+        // === 从历史记录选择视频 ===
+        async function selectVideoFromHistory(bvId, title) {
+            closeVideoHistory();
+
+            // 更新中心圆圈显示
+            updateCenterVideoInfo(bvId, title);
+
+            // 向三个模块发送视频切换信号
+            ipcRenderer.send('video-change', bvId);
+
+            showToast(`已切换到: ${title || bvId}`, 'success');
+
+            // 如果有对应的模块窗口打开，则刷新数据
+            // emotional-analysis 会监听 video-change 信号自动刷新
+            // user-profile 会监听 video-change 信号自动刷新
+            // video-audio-analysis 会监听 video-change 信号自动刷新
+        }
+
+        // === HTML转义 ===
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // === 格式化日期 ===
+        function formatDate(dateStr) {
+            if (!dateStr) return '';
+            const date = new Date(dateStr);
+            return `${date.getMonth() + 1}/${date.getDate()}`;
+        }
+
+        // === 点击弹窗背景关闭 ===
+        document.getElementById('video-history-modal')?.addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeVideoHistory();
+            }
         });
     </script>
 </body>
