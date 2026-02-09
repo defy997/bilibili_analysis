@@ -1591,12 +1591,6 @@
 
         // === 打开视频历史弹窗 ===
         async function openVideoHistory() {
-            // 切换到历史模式
-            updateButtonStates('history');
-
-            // 通知主进程切换到历史模式
-            ipcRenderer.send('set-analysis-mode', 'history');
-
             const modal = document.getElementById('video-history-modal');
             modal.classList.add('show');
 
@@ -1674,15 +1668,15 @@
             }
         }
 
-        // === 开始在线分析 ===
+        // === 开始在线分析（切换是否接收浏览器扩展数据）===
         function startOnlineAnalysis() {
             // 切换到在线分析模式
             updateButtonStates('online');
 
-            // 通知主进程切换到在线模式
+            // 通知主进程切换到在线模式，前端将开始接收并渲染浏览器扩展的视频信息
             ipcRenderer.send('set-analysis-mode', 'online');
 
-            showToast('已切换到在线分析模式', 'info');
+            showToast('在线分析已开启，实时接收视频数据', 'info');
         }
 
         // === 从历史记录选择视频 ===
@@ -1692,7 +1686,7 @@
             // 更新中心圆圈显示
             updateCenterVideoInfo(bvId, title);
 
-            // 向主进程发送视频切换信号（带 forceRefresh 强制刷新历史数据）
+            // 向主进程发送视频切换信号，强制从数据库读取历史数据
             ipcRenderer.send('main-video-change', { bvId: bvId, title: title, forceRefresh: true });
 
             showToast(`已切换到: ${title || bvId}`, 'success');
