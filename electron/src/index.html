@@ -1417,8 +1417,8 @@
             loadConfig();
             checkLoginStatus();
             initRadarChart();
-            // 初始化按钮状态（默认历史按钮常亮）
-            updateButtonStates('history');
+            // 初始化按钮状态（默认在线分析按钮常亮）
+            updateButtonStates('online');
         });
 
         // === 初始化雷达图 ===
@@ -1591,6 +1591,12 @@
 
         // === 打开视频历史弹窗 ===
         async function openVideoHistory() {
+            // 切换到历史模式（历史按钮亮，在线按钮不亮）
+            updateButtonStates('history');
+            
+            // 通知主进程切换到历史模式
+            ipcRenderer.send('set-analysis-mode', 'history');
+
             const modal = document.getElementById('video-history-modal');
             modal.classList.add('show');
 
