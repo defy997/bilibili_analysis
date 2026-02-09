@@ -305,9 +305,21 @@
 
         // === Listen for video change ===
         function listenForVideoChange() {
-            ipcRenderer.on('video-change', (event, bvId) => {
-                console.log('Video change:', bvId);
+            ipcRenderer.on('video-change', (event, data) => {
+                console.log('Video change:', data);
+                // 兼容对象格式 {bvId, title} 和字符串格式
+                let bvId;
+                if (typeof data === 'object' && data !== null) {
+                    bvId = data.bvId;
+                    if (data.title) {
+                        document.getElementById('video-title').textContent = data.title;
+                    }
+                } else {
+                    bvId = data;
+                }
+                if (!bvId || bvId === '--') return;
                 currentBvId = bvId;
+                document.getElementById('video-bvid').innerText = bvId;
                 loadData(bvId);
             });
         }
