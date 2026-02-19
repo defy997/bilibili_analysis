@@ -13,8 +13,14 @@ from .tasks import (
     get_task_results_async
 )
 
-# B站 Cookie（临时硬编码，后续从数据库读取）
-BILI_COOKIE = "SESSDATA=55d2ed48%2C1785846835%2Cd80a0%2A22CjDxZL1htFveMUpzPXZrxp6zwh1K5neWuRyhGlZxWZ1A3xBGw6NIs8AhnyqkO5tfmBgSVmhQTHVlNDNaMzlENjNqYjQwcGNPRzN5T05YcTN3SFRLT2ZvOW9sZHFvS295WmdRdW1YQXZzc01GMEdBek1YTGZTajNINW1jdmhRaUN4MWV6QnFLcGh3IIEC"
+# 动态获取有效的B站Cookie（优先从数据库获取）
+def get_bili_cookie():
+    """获取当前有效的B站Cookie"""
+    cookie = ensure_valid_cookie()
+    if not cookie:
+        # 如果数据库没有，使用空Cookie尝试（可能部分API仍可用）
+        print("[警告] 数据库中无可用SESSDATA，将使用空Cookie尝试")
+    return cookie or ""
 
 
 @csrf_exempt
@@ -29,18 +35,19 @@ def analyze_by_bvid(request):
         except Exception as e:
             return JsonResponse({"error": f"Invalid request:{str(e)}"}, status=400)
 
+        current_cookie = get_bili_cookie()
         headers = {
             'authority': 'api.bilibili.com',
             'accept': 'application/json, text/plain, */*',
             'accept-language': 'zh-CN,zh;q=0.9',
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'referer': 'https://www.biliibili.com/',
-            'cookie': BILI_COOKIE,
+            'cookie': current_cookie,
         }
 
         try:
             # 调用服务层处理视频
-            result = process_video(bvid, headers, BILI_COOKIE)
+            result = process_video(bvid, headers, current_cookie)
 
             if result.get("status") == "no_data":
                 return JsonResponse({
@@ -319,7 +326,7 @@ def video_dashboard(request, bvid):
                 'accept-language': 'zh-CN,zh;q=0.9',
                 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'referer': 'https://www.bilibili.com/',
-                'cookie': BILI_COOKIE,
+                'cookie': get_bili_cookie(),
             }
 
             # 先检查视频是否正在被其他请求处理
@@ -328,7 +335,7 @@ def video_dashboard(request, bvid):
             else:
                 # 检查是否需要刷新数据（对比远程评论数与本地评论数）
                 try:
-                    need_refresh, _ = check_need_refresh(bvid, headers, BILI_COOKIE)
+                    need_refresh, _ = check_need_refresh(bvid, headers, get_bili_cookie())
                 except Exception:
                     from .models import Video
                     need_refresh = not Video.objects.filter(bvid=bvid).exists()
@@ -336,7 +343,7 @@ def video_dashboard(request, bvid):
                 if need_refresh:
                     print(f"[Dashboard] 数据需要刷新，开始分析: {bvid}")
                     try:
-                        result = process_video(bvid, headers, BILI_COOKIE)
+                        result = process_video(bvid, headers, get_bili_cookie())
                         print(f"[Dashboard] 视频分析完成: {bvid}")
 
                         if result.get("status") == "no_data":
@@ -393,7 +400,7 @@ def user_profile_dashboard(request, bvid):
                 'accept-language': 'zh-CN,zh;q=0.9',
                 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'referer': 'https://www.bilibili.com/',
-                'cookie': BILI_COOKIE,
+                'cookie': get_bili_cookie(),
             }
 
             # 先检查视频是否正在被其他请求处理
@@ -401,14 +408,14 @@ def user_profile_dashboard(request, bvid):
                 print(f"[UserProfile] 视频 {bvid} 正在被其他请求处理，直接返回缓存数据")
             else:
                 try:
-                    need_refresh, _ = check_need_refresh(bvid, headers, BILI_COOKIE)
+                    need_refresh, _ = check_need_refresh(bvid, headers, get_bili_cookie())
                 except Exception:
                     from .models import Video
                     need_refresh = not Video.objects.filter(bvid=bvid).exists()
 
                 if need_refresh:
                     try:
-                        result = process_video(bvid, headers, BILI_COOKIE)
+                        result = process_video(bvid, headers, get_bili_cookie())
                         if result.get("status") == "no_data":
                             return JsonResponse({
                                 "success": False,
@@ -452,7 +459,7 @@ def video_audio_dashboard(request, bvid):
         'accept-language': 'zh-CN,zh;q=0.9',
         'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'referer': 'https://www.bilibili.com/',
-        'cookie': BILI_COOKIE,
+        'cookie': get_bili_cookie(),
     }
 
     if request.method == 'GET':
@@ -462,7 +469,7 @@ def video_audio_dashboard(request, bvid):
                 video = Video.objects.get(bvid=bvid)
             except Video.DoesNotExist:
                 try:
-                    result = process_video(bvid, headers, BILI_COOKIE)
+                    result = process_video(bvid, headers, get_bili_cookie())
                     if result.get("status") == "no_data":
                         return JsonResponse({"success": False, "error": "Video has no data"}, status=404)
                     video = Video.objects.get(bvid=bvid)
@@ -493,7 +500,7 @@ def video_audio_dashboard(request, bvid):
             else:
                 audio_status = "ready"
                 try:
-                    audio_info = crawl_audio_url(bvid, video.cid, headers, BILI_COOKIE)
+                    audio_info = crawl_audio_url(bvid, video.cid, headers, get_bili_cookie())
                 except Exception:
                     audio_info = {}
 
