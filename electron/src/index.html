@@ -1245,11 +1245,21 @@
             // 处理数据格式：可能是 { bvId, title } 或只有 bvId
             let bvId, title;
             if (typeof data === 'object' && data !== null) {
-                bvId = data.bvId;
+                // 确保 bvId 是字符串
+                bvId = typeof data.bvId === 'string' ? data.bvId : String(data.bvId || '');
                 title = data.title;
+                if (title) {
+                    document.getElementById('current-video-title').textContent = title;
+                }
             } else {
-                bvId = data;
+                bvId = String(data);
                 title = null;
+            }
+
+            // 过滤无效的 bvId
+            if (!bvId || bvId === '--' || bvId === '[object Object]') {
+                console.log('[Index] 无效的 bvId，跳过:', bvId);
+                return;
             }
 
             // 更新当前视频信息

@@ -180,6 +180,8 @@ class User(AbstractUser):
     bilibili_mid = models.BigIntegerField(null=True, blank=True, verbose_name="B站用户ID")
     sessdata = models.TextField(null=True, blank=True, verbose_name="B站SESSDATA")
     bili_jct = models.CharField(max_length=50, null=True, blank=True, verbose_name="B站BILI_JCT")
+    refresh_token = models.CharField(max_length=100, null=True, blank=True, verbose_name="B站Refresh Token")
+    access_token = models.CharField(max_length=100, null=True, blank=True, verbose_name="B站Access Token")
 
     # === 用户个人配置 ===
     # 数据过滤配置
