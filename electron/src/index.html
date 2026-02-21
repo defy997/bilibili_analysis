@@ -1519,7 +1519,12 @@
             radarChart = echarts.init(chartDom);
             radarChart.setOption({
                 backgroundColor: 'transparent',
-                tooltip: {},
+                tooltip: {
+                    trigger: 'item',
+                    backgroundColor: 'rgba(0,0,0,0.7)',
+                    borderColor: 'rgba(255,255,255,0.2)',
+                    textStyle: { color: '#fff' }
+                },
                 radar: {
                     indicator: [
                         { name: '情感', max: 100 },
@@ -1530,21 +1535,26 @@
                     ],
                     shape: 'circle',
                     splitNumber: 4,
+                    radius: '65%',  // 调整半径适应圆形区域
                     axisName: {
-                        color: 'rgba(255, 255, 255, 0.6)',
-                        fontSize: 10
+                        color: 'rgba(255, 255, 255, 0.8)',
+                        fontSize: 11,
+                        fontWeight: 'bold'
                     },
                     splitLine: {
                         lineStyle: {
-                            color: 'rgba(255, 255, 255, 0.1)'
+                            color: 'rgba(255, 255, 255, 0.15)'
                         }
                     },
                     splitArea: {
-                        show: false
+                        show: true,
+                        areaStyle: {
+                            color: ['rgba(255,255,255,0.02)', 'rgba(255,255,255,0.05)']
+                        }
                     },
                     axisLine: {
                         lineStyle: {
-                            color: 'rgba(255, 255, 255, 0.2)'
+                            color: 'rgba(255, 255, 255, 0.3)'
                         }
                     }
                 },
@@ -1554,20 +1564,24 @@
                         {
                             value: [0, 0, 0, 0, 0],
                             name: '视频分析',
+                            symbol: 'circle',
+                            symbolSize: 6,
                             areaStyle: {
-                                color: 'rgba(236, 72, 153, 0.3)'
+                                color: 'rgba(236, 72, 153, 0.25)'
                             },
                             lineStyle: {
-                                color: 'rgba(236, 72, 153, 0.8)',
+                                color: 'rgba(236, 72, 153, 0.9)',
                                 width: 2
                             },
                             itemStyle: {
-                                color: 'rgba(236, 72, 153, 1)'
+                                color: 'rgba(236, 72, 153, 1)',
+                                borderColor: '#fff',
+                                borderWidth: 1
                             }
                         }
                     ]
                 }]
-            });
+            }, true);  // true = not merge, replace completely
 
             // 响应式调整
             window.addEventListener('resize', () => {
@@ -1639,25 +1653,24 @@
                 
                 const posPercent = totalSentiment > 0 ? Math.round((positive / totalSentiment) * 100) : 50;
 
-                // 用户维度
+                // 用户维度 - 使用对数缩放
                 const overviewStats = data.overview_stats || dashboardData.overview_stats || {};
                 const totalUsers = overviewStats.total_users || overviewStats.totalCommentUsers || 0;
-                const userScore = Math.min(100, Math.round(totalUsers / 5));
+                const userScore = totalUsers > 0 ? Math.min(100, Math.round(Math.log10(totalUsers + 1) * 20)) : 5;
 
-                // 弹幕维度
+                // 弹幕维度 - 修复数据路径
                 const danmuData = data.danmu || dashboardData.danmu || {};
-                const danmuTimeline = danmuData.timeline_heatmap || danmuData.timeline || [];
+                const danmuTimeline = danmuData.timeline_heatmap || danmuData.timeline || danmuData.heatmap || danmuData.data || [];
                 const danmuCount = Array.isArray(danmuTimeline) ? danmuTimeline.length : 0;
-                const danmuScore = Math.min(100, Math.round(danmuCount * 2));
+                const danmuScore = danmuCount > 0 ? Math.min(100, Math.round(Math.log10(danmuCount + 1) * 25)) : 5;
 
                 // 互动维度
-                const totalComments = overviewStats.total_comments || overviewStats.totalComments || totalSentiment;
-                const interactScore = Math.min(100, Math.round(totalComments / 50));
+                const totalComments = overviewStats.total_comments || overviewStats.totalComments || totalSentiment || 0;
+                const interactScore = Math.min(100, Math.round(Math.log10(totalComments + 1) * 20));
 
-                // 热度维度（如果有数据则使用真实数据，否则模拟）
-                const hotScore = overviewStats.views ? 
-                    Math.min(100, Math.round(Math.log10(overviewStats.views) * 20)) : 
-                    Math.min(100, Math.round(Math.random() * 50 + 50));
+                // 热度维度
+                const views = overviewStats.views || 0;
+                const hotScore = views > 0 ? Math.min(100, Math.round(Math.log10(views + 1) * 15)) : 5;
 
                 console.log('雷达图分数:', { posPercent, userScore, danmuScore, interactScore, hotScore });
 
