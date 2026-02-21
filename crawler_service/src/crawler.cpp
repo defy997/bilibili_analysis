@@ -537,6 +537,12 @@ json Crawler::crawl_video(const std::string& bvid, const std::string& cookie) {
     result["title"] = d["title"];
     result["pubdate_ts"] = d.value("pubdate", 0);
     result["reply_count"] = stat.value("reply", 0);
+    // 新增：视频统计数据
+    result["view"] = stat.value("view", 0);
+    result["like"] = stat.value("like", 0);
+    result["coin"] = stat.value("coin", 0);
+    result["favorite"] = stat.value("favorite", 0);
+    result["share"] = stat.value("share", 0);
     return result;
 }
 

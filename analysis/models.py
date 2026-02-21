@@ -11,6 +11,13 @@ class Video(models.Model):
     pubdate = models.DateTimeField(null=True, verbose_name="发布日期")
     raw_comment_count = models.IntegerField(default=0, verbose_name="原始爬取评论数")
 
+    # 视频统计数据（从 B站 API 获取）
+    view = models.BigIntegerField(default=0, verbose_name="播放量")
+    like = models.BigIntegerField(default=0, verbose_name="点赞数")
+    coin = models.BigIntegerField(default=0, verbose_name="投币数")
+    favorite = models.BigIntegerField(default=0, verbose_name="收藏数")
+    share = models.BigIntegerField(default=0, verbose_name="分享数")
+
     class Meta:
         db_table = 'videos'
         ordering = ['-pubdate']

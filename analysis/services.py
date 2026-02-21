@@ -1228,7 +1228,13 @@ def _crawl_video_info_python(bvid, headers, cookie):
         'cid': data['data']['cid'],
         'title': data['data']['title'],
         'pubdate_ts': data['data'].get('pubdate'),
-        'reply_count': stat.get('reply', 0)
+        'reply_count': stat.get('reply', 0),
+        # 新增：视频统计数据
+        'view': stat.get('view', 0),
+        'like': stat.get('like', 0),
+        'coin': stat.get('coin', 0),
+        'favorite': stat.get('favorite', 0),
+        'share': stat.get('share', 0)
     }
 
 
@@ -1483,11 +1489,25 @@ def save_video(video_info, bvid):
             'aid': video_info['aid'],
             'cid': video_info['cid'],
             'title': video_info['title'],
-            'pubdate': pubdate_dt
+            'pubdate': pubdate_dt,
+            # 新增：视频统计数据
+            'view': video_info.get('view', 0),
+            'like': video_info.get('like', 0),
+            'coin': video_info.get('coin', 0),
+            'favorite': video_info.get('favorite', 0),
+            'share': video_info.get('share', 0)
         }
     )
     if created:
         print(f"新建视频记录: {video_info['title']}")
+    else:
+        # 更新已存在的视频的统计数据
+        video_obj.view = video_info.get('view', 0)
+        video_obj.like = video_info.get('like', 0)
+        video_obj.coin = video_info.get('coin', 0)
+        video_obj.favorite = video_info.get('favorite', 0)
+        video_obj.share = video_info.get('share', 0)
+        video_obj.save(update_fields=['view', 'like', 'coin', 'favorite', 'share'])
 
     return video_obj
 

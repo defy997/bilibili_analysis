@@ -347,7 +347,13 @@ def get_comprehensive_dashboard(bvid):
             "video_info": {
                 "bvid": video.bvid,
                 "title": video.title,
-                "pubdate": video.pubdate.strftime('%Y-%m-%d %H:%M') if video.pubdate else None
+                "pubdate": video.pubdate.strftime('%Y-%m-%d %H:%M') if video.pubdate else None,
+                # 新增：视频统计数据
+                "view": video.view,
+                "like": video.like,
+                "coin": video.coin,
+                "favorite": video.favorite,
+                "share": video.share
             },
 
             # 1. 情感分析数据
