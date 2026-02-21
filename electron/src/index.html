@@ -1656,12 +1656,13 @@
                 // 支持多种数据路径格式
                 const sentimentData = data.sentiment || dashboardData.sentiment || {};
                 const sentiment = sentimentData.distribution || sentimentData;
-                
-                // 情感分数 - 后端返回的是评论数量，需要归一化为百分比
+
+                // 情感分数 - 使用加权平均计算更准确的情感得分
+                // 正面=100分，中性=50分，负面=0分，然后加权平均
                 let positive = sentiment.positive || 0;
                 let neutral = sentiment.neutral || 0;
                 let negative = sentiment.negative || 0;
-                
+
                 // 判断是比例(0-1)还是数量：如果是数量(>1)，需要归一化
                 const isProportion = positive <= 1 && neutral <= 1 && negative <= 1;
                 if (isProportion) {
@@ -1671,9 +1672,13 @@
                     negative = negative * 100;
                 }
                 // 如果是数量，保持原值，后续归一化
-                
+
                 const totalSentiment = positive + neutral + negative;
-                const posPercent = totalSentiment > 0 ? Math.round((positive / totalSentiment) * 100) : 50;
+                // 使用加权平均计算情感得分：正面得100分，中性得50分，负面得0分
+                // 这样即使没有"正面"分类的评论，也能显示合理的情感得分
+                const posPercent = totalSentiment > 0
+                    ? Math.round((positive * 100 + neutral * 50 + negative * 0) / totalSentiment)
+                    : 50;
 
                 // 用户维度 - 从 user_profile.level_distribution 计算总数
                 const userProfileData = data.user_profile || dashboardData.user_profile || {};
