@@ -1226,16 +1226,26 @@
                 });
             }
             // 清除其他显示数据
-            document.getElementById('danmu-count').innerText = '--';
-            document.getElementById('viewer-count').innerText = '--';
-            document.getElementById('like-count').innerText = '--';
-            document.getElementById('coin-count').innerText = '--';
-            document.getElementById('favorite-count').innerText = '--';
-            document.getElementById('share-count').innerText = '--';
-            document.getElementById('comment-count').innerText = '--';
-            document.getElementById('video-score').innerText = '--';
+            const danmuCountEl = document.getElementById('danmu-count');
+            const viewerCountEl = document.getElementById('viewer-count');
+            const likeCountEl = document.getElementById('like-count');
+            const coinCountEl = document.getElementById('coin-count');
+            const favoriteCountEl = document.getElementById('favorite-count');
+            const shareCountEl = document.getElementById('share-count');
+            const commentCountEl = document.getElementById('comment-count');
+            const videoScoreEl = document.getElementById('video-score');
+            const currentVideoBvidEl = document.getElementById('current-video-bvid');
+            
+            if (danmuCountEl) danmuCountEl.innerText = '--';
+            if (viewerCountEl) viewerCountEl.innerText = '--';
+            if (likeCountEl) likeCountEl.innerText = '--';
+            if (coinCountEl) coinCountEl.innerText = '--';
+            if (favoriteCountEl) favoriteCountEl.innerText = '--';
+            if (shareCountEl) shareCountEl.innerText = '--';
+            if (commentCountEl) commentCountEl.innerText = '--';
+            if (videoScoreEl) videoScoreEl.innerText = '--';
             // 更新中心圆圈提示（只清空BV号，保留标题提示）
-            document.getElementById('current-video-bvid').innerText = '等待接收视频数据...';
+            if (currentVideoBvidEl) currentVideoBvidEl.innerText = '等待接收视频数据...';
         });
 
         // 监听视频切换信号（来自浏览器扩展）
@@ -1675,8 +1685,9 @@
                                      totalSentiment || 0;
                 const interactScore = totalComments > 0 ? Math.min(100, Math.round(totalComments * 0.15)) : 5;
 
-                // 热度维度
-                const views = overviewStats.views || 0;
+                // 热度维度 - 从 video_info 获取播放量
+                const videoInfo = data.video_info || dashboardData.video_info || {};
+                const views = videoInfo.view || 0;
                 const hotScore = views > 0 ? Math.min(100, Math.round(Math.log10(views + 1) * 12)) : 5;
 
                 console.log('雷达图分数:', { posPercent, userScore, danmuScore, interactScore, hotScore });

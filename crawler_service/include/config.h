@@ -17,6 +17,15 @@ struct Config {
     bool use_proxy = true;
     std::string proxy_user = "";  // 独享代理无需认证
     std::string proxy_pass = "";
+    
+    // 短效代理配置（备用）
+    std::string short_proxy_pool_url = 
+        "https://share.proxy.qg.net/get?key=86F2076D&num=1&area=&isp=0&format=txt&seq=\\r\\n&distinct=false";
+    std::string short_proxy_user = "86F2076D";
+    std::string short_proxy_pass = "8E053A5FB99D";
+    
+    // 独享代理保存文件
+    std::string exclusive_proxy_file = "exclusive_proxies.txt";
 };
 
 Config load_config();

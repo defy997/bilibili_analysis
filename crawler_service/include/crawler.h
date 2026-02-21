@@ -2,6 +2,7 @@
 #include <string>
 #include <stdexcept>
 #include <mutex>
+#include <vector>
 #include "json.hpp"
 #include "config.h"
 
@@ -32,6 +33,14 @@ private:
 
     // 从代理池获取新代理，返回 "ip:port"
     std::string fetch_proxy();
+    
+    // 获取短效代理（备用）
+    std::string fetch_short_proxy();
+    
+    // 加载/保存/删除已保存的独享代理
+    std::vector<std::string> load_saved_proxies();
+    void save_proxy(const std::string& proxy);
+    void remove_failed_proxy(const std::string& proxy);
 
     // 获取当前代理（线程安全）
     std::string get_proxy();
