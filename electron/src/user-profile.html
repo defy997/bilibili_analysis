@@ -339,8 +339,9 @@ levelChart.setOption({
                 if (typeof data === 'object' && data !== null) {
                     // 确保 bvId 是字符串
                     bvId = typeof data.bvId === 'string' ? data.bvId : String(data.bvId || '');
-                    if (data.title) {
-                        document.getElementById('video-title').textContent = data.title;
+                    const titleEl = document.getElementById('video-title');
+                    if (titleEl && data.title) {
+                        titleEl.textContent = data.title;
                     }
                 } else {
                     bvId = String(data);
