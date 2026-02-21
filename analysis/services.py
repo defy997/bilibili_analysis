@@ -1089,6 +1089,76 @@ class DataCleaningPipeline:
 CPP_CRAWLER_URL = 'http://localhost:8081'
 
 
+def check_sessdata_and_refresh(force_refresh=False):
+    """
+    检查 SESSDATA 是否有效，如果无效或过期则尝试刷新
+    
+    Args:
+        force_refresh: 是否强制刷新
+        
+    Returns:
+        dict: {
+            'valid': bool,           # SESSDATA 是否有效
+            'message': str,          # 状态信息
+            'need_login': bool,      # 是否需要重新登录
+            'sessdata': str or None  # 有效的 SESSDATA（如果需要返回）
+        }
+    """
+    from .sessdata_manager import SessdataManager
+    
+    manager = SessdataManager()
+    
+    # 先检查当前 SESSDATA 是否有效
+    check_result = manager.check_sessdata_valid()
+    
+    if check_result['valid'] and not force_refresh:
+        if not check_result.get('need_refresh', False):
+            return {
+                'valid': True,
+                'message': 'SESSDATA 有效',
+                'need_login': False,
+                'sessdata': None
+            }
+        else:
+            # 需要刷新
+            print("[Sessdata] SESSDATA 需要刷新，尝试刷新...")
+            refresh_result = manager.refresh_sessdata()
+            if refresh_result['success']:
+                return {
+                    'valid': True,
+                    'message': 'SESSDATA 已刷新',
+                    'need_login': False,
+                    'sessdata': None
+                }
+            else:
+                return {
+                    'valid': False,
+                    'message': f'刷新失败: {refresh_result["message"]}',
+                    'need_login': True,
+                    'sessdata': None
+                }
+    else:
+        # SESSDATA 无效，需要登录
+        return {
+            'valid': False,
+            'message': check_result.get('message', 'SESSDATA 无效'),
+            'need_login': True,
+            'sessdata': None
+        }
+
+
+def ensure_sessdata_valid():
+    """
+    确保 SESSDATA 有效，如果无效则抛出异常
+    
+    Raises:
+        Exception: 如果 SESSDATA 无效且无法刷新
+    """
+    result = check_sessdata_and_refresh()
+    if not result['valid']:
+        raise Exception(f"SESSDATA 无效: {result['message']}，请先登录绑定 B 站账号")
+
+
 def _crawl_audio_url_python(bvid, cid, headers, max_retries=3, retry_delay=5):
     """Python fallback: 获取B站音频流URL"""
     import time

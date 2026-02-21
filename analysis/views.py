@@ -342,6 +342,27 @@ def video_dashboard(request, bvid):
 
                 if need_refresh:
                     print(f"[Dashboard] 数据需要刷新，开始分析: {bvid}")
+                    
+                    # 在开始爬取前检查 SESSDATA 是否有效
+                    try:
+                        from .services import check_sessdata_and_refresh
+                        sessdata_check = check_sessdata_and_refresh()
+                        if not sessdata_check['valid']:
+                            print(f"[Dashboard] SESSDATA 无效: {sessdata_check['message']}")
+                            return JsonResponse({
+                                "success": False,
+                                "error": "SESSDATA 已过期，请重新登录绑定 B 站账号",
+                                "need_login": True,
+                                "message": sessdata_check['message']
+                            }, status=401)
+                    except Exception as e:
+                        print(f"[Dashboard] SESSDATA 检查失败: {e}")
+                        return JsonResponse({
+                            "success": False,
+                            "error": f"SESSDATA 检查失败: {str(e)}",
+                            "need_login": True
+                        }, status=401)
+                    
                     try:
                         result = process_video(bvid, headers, get_bili_cookie())
                         print(f"[Dashboard] 视频分析完成: {bvid}")

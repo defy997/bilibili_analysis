@@ -569,25 +569,60 @@ def generate_time_segments(audio_sentiments, comments, cid, num_segments=10):
     if audio_sentiments.exists():
         max_time = audio_sentiments.aggregate(Max('time_offset'))['time_offset__max'] or 600
     else:
-        max_time = 600  # 默认10分钟
+        # 尝试从弹幕获取视频时长
+        from .models import Danmu
+        max_danmu_time = Danmu.objects.filter(cid=cid).aggregate(Max('progress'))['progress__max']
+        max_time = max_danmu_time if max_danmu_time else 600
     
     segment_duration = max_time / num_segments
+    
+    # 获取评论发布时间分布
+    comment_times = []
+    for c in comments:
+        if c.ctime:
+            comment_times.append(c.ctime)
     
     for i in range(num_segments):
         start_time = i * segment_duration
         end_time = (i + 1) * segment_duration
         
-        # 模拟各模态的情感得分（实际应用中应该从数据库真实查询）
-        import random
-        text_score = 0.3 + random.random() * 0.5
-        audio_score = 0.3 + random.random() * 0.5
+        # 统计该时间段的评论数量作为文本情感权重
+        segment_comments = [c for c in comments if c.ctime and 
+                          start_time <= (c.ctime % 86400) < end_time]
+        
+        if segment_comments:
+            # 计算该时间段评论的情感倾向
+            pos_count = sum(1 for c in segment_comments if c.sentiment_label == 'positive')
+            neg_count = sum(1 for c in segment_comments if c.sentiment_label == 'negative')
+            total = len(segment_comments)
+            
+            text_score = (pos_count - neg_count) / total * 0.5 + 0.5  # 归一化到 0-1
+        else:
+            text_score = 0.5  # 默认中立
+        
+        # 查找对应时间段的音频情感
+        audio_score = 0.5
+        if audio_sentiments.exists():
+            segment_audio = [a for a in audio_sentiments if 
+                           a.time_offset and start_time <= a.time_offset < end_time]
+            if segment_audio:
+                pos = sum(a.emotion_probs.get('happy', 0) + a.emotion_probs.get('surprise', 0) 
+                         for a in segment_audio)
+                neg = sum(a.emotion_probs.get('angry', 0) + a.emotion_probs.get('sad', 0) + a.emotion_probs.get('fearful', 0)
+                         for a in segment_audio)
+                audio_score = (pos - neg) * 0.5 + 0.5
+        
+        # 计算权重（评论数量越多，文本权重越高）
+        text_weight = min(0.8, 0.3 + len(segment_comments) * 0.05)
+        audio_weight = 1 - text_weight
         
         segments.append({
             'time': int(start_time),
             'textScore': round(text_score, 3),
             'audioScore': round(audio_score, 3),
-            'textWeight': 0.6 + random.random() * 0.2,
-            'audioWeight': 0.2 + random.random() * 0.2
+            'textWeight': round(text_weight, 3),
+            'audioWeight': round(audio_weight, 3),
+            'commentCount': len(segment_comments)
         })
     
     return segments

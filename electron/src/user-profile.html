@@ -374,13 +374,25 @@ levelChart.setOption({
                         updateUI(data);
                     }
                 } else {
-                    showError(data.error || 'Failed to load user profile');
+                    // 检查是否需要登录
+                    if (data.need_login) {
+                        if (confirm('SESSDATA 已过期，需要重新登录。是否前往登录页面？')) {
+                            window.location.href = 'bilibili-login.html';
+                        }
+                    } else {
+                        showError(data.error || 'Failed to load user profile');
+                    }
                 }
             } catch (error) {
                 showLoading(false);
                 console.error('加载数据失败:', error);
 
-                if (error.message.includes('getaddrinfo') || error.message.includes('Failed to fetch')) {
+                // 检查是否是认证错误
+                if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+                    if (confirm('登录已过期，是否前往登录页面？')) {
+                        window.location.href = 'bilibili-login.html';
+                    }
+                } else if (error.message.includes('getaddrinfo') || error.message.includes('Failed to fetch')) {
                     showError('无法连接到后端服务器，请确保 Django 服务已启动');
                 } else {
                     showError(error.message || 'Network error');

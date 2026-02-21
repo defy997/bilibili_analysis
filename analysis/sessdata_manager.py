@@ -609,6 +609,12 @@ class SessdataManager:
                     'message': '已扫码，等待确认',
                     'status': 'confirmed'
                 }
+            elif result.get('code') == 86038:
+                return {
+                    'success': False,
+                    'message': '二维码已过期',
+                    'status': 'expired'
+                }
             else:
                 return {
                     'success': False,

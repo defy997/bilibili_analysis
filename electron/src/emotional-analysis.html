@@ -462,12 +462,26 @@
                     updateUI(data);
                 } else {
                     console.error('数据加载失败:', data.error);
-                    showError(data.error);
+                    // 检查是否需要登录
+                    if (data.need_login) {
+                        if (confirm('SESSDATA 已过期，需要重新登录。是否前往登录页面？')) {
+                            window.location.href = 'bilibili-login.html';
+                        }
+                    } else {
+                        showError(data.error);
+                    }
                 }
             } catch (error) {
                 showLoading(false);
                 console.error('加载数据失败:', error);
-                showError('Failed to load data: ' + error.message);
+                // 检查是否是认证错误
+                if (error.response?.status === 401) {
+                    if (confirm('登录已过期，是否前往登录页面？')) {
+                        window.location.href = 'bilibili-login.html';
+                    }
+                } else {
+                    showError('Failed to load data: ' + error.message);
+                }
             }
         }
 
