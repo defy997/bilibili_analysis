@@ -347,7 +347,6 @@ levelChart.setOption({
                 }
                 if (!bvId || bvId === '--' || bvId === '[object Object]') return;
                 currentBvId = bvId;
-                document.getElementById('video-bvid').textContent = bvId;
                 loadData(bvId);
             });
         }
