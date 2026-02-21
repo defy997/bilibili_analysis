@@ -358,10 +358,16 @@ json Crawler::crawl_comments(int64_t aid, const std::string& cookie) {
             } catch (const AntiCrawlException&) {
                 anti_crawl_hits++;
                 std::cout << "Page " << page << " -> 412 (" << anti_crawl_hits
-                          << "/" << max_anti_crawl << "), rotating proxy..." << std::endl;
+                          << "/" << max_anti_crawl << "), keeping current proxy..." << std::endl;
+
+                // 失败3次再换代理，避免频繁切换
+                if (anti_crawl_hits >= 3) {
+                    rotate_proxy();
+                    std::cout << "Too many 412s, switching proxy..." << std::endl;
+                }
 
                 if (anti_crawl_hits >= max_anti_crawl) {
-                    std::cout << "Too many 412s, returning " << all_comments.size()
+                    std::cout << "Max 412s reached, returning " << all_comments.size()
                               << " comments" << std::endl;
                     json result;
                     result["total"] = all_comments.size();
@@ -369,9 +375,8 @@ json Crawler::crawl_comments(int64_t aid, const std::string& cookie) {
                     return result;
                 }
 
-                rotate_proxy();
-                // 换完代理等 2 秒再试
-                std::this_thread::sleep_for(std::chrono::seconds(2));
+                // 换完代理等 3 秒再试
+                std::this_thread::sleep_for(std::chrono::seconds(3));
                 retry--;  // 不消耗 retry 次数
                 continue;
 
