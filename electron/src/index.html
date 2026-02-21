@@ -197,8 +197,8 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 280px;
-            height: 280px;
+            width: 260px;
+            height: 260px;
             border-radius: 50%;
             background: rgba(20, 20, 30, 0.7);
             border: 2px solid rgba(255, 255, 255, 0.1);
@@ -1535,10 +1535,11 @@
                     ],
                     shape: 'circle',
                     splitNumber: 4,
-                    radius: '65%',  // 调整半径适应圆形区域
+                    radius: '55%',  // 调小以适应容器
+                    center: ['50%', '50%'],  // 居中
                     axisName: {
                         color: 'rgba(255, 255, 255, 0.8)',
-                        fontSize: 11,
+                        fontSize: 10,
                         fontWeight: 'bold'
                     },
                     splitLine: {
@@ -1646,31 +1647,37 @@
                 const sentimentData = data.sentiment || dashboardData.sentiment || {};
                 const sentiment = sentimentData.distribution || sentimentData;
                 
-                const positive = sentiment.positive || 0;
-                const neutral = sentiment.neutral || 0;
-                const negative = sentiment.negative || 0;
+                // 情感分数 - 原始数据是 0-1，需要乘以100
+                const positive = (sentiment.positive || 0) * 100;
+                const neutral = (sentiment.neutral || 0) * 100;
+                const negative = (sentiment.negative || 0) * 100;
                 const totalSentiment = positive + neutral + negative;
                 
                 const posPercent = totalSentiment > 0 ? Math.round((positive / totalSentiment) * 100) : 50;
 
-                // 用户维度 - 使用对数缩放
-                const overviewStats = data.overview_stats || dashboardData.overview_stats || {};
-                const totalUsers = overviewStats.total_users || overviewStats.totalCommentUsers || 0;
-                const userScore = totalUsers > 0 ? Math.min(100, Math.round(Math.log10(totalUsers + 1) * 20)) : 5;
+                // 用户维度 - 从 user_profile.level_distribution 计算总数
+                const userProfileData = data.user_profile || dashboardData.user_profile || {};
+                const levelDist = userProfileData.level_distribution || [];
+                const totalUsers = levelDist.reduce((sum, item) => sum + (item.count || 0), 0);
+                // 线性缩放
+                const userScore = totalUsers > 0 ? Math.min(100, Math.round(totalUsers * 0.25)) : 5;
 
-                // 弹幕维度 - 修复数据路径
+                // 弹幕维度 - 从 stats.total_count 获取真实弹幕数
                 const danmuData = data.danmu || dashboardData.danmu || {};
-                const danmuTimeline = danmuData.timeline_heatmap || danmuData.timeline || danmuData.heatmap || danmuData.data || [];
-                const danmuCount = Array.isArray(danmuTimeline) ? danmuTimeline.length : 0;
-                const danmuScore = danmuCount > 0 ? Math.min(100, Math.round(Math.log10(danmuCount + 1) * 25)) : 5;
+                const danmuStats = danmuData.stats || {};
+                const danmuCount = danmuStats.total_count || 0;
+                // 线性缩放，每40条=10分
+                const danmuScore = danmuCount > 0 ? Math.min(100, Math.round(danmuCount * 0.23)) : 5;
 
-                // 互动维度
-                const totalComments = overviewStats.total_comments || overviewStats.totalComments || totalSentiment || 0;
-                const interactScore = Math.min(100, Math.round(Math.log10(totalComments + 1) * 20));
+                // 互动维度 - 从 sentiment 获取评论总数
+                const totalComments = data.sentiment?.distribution?.total || 
+                                     dashboardData.sentiment?.distribution?.total ||
+                                     totalSentiment || 0;
+                const interactScore = totalComments > 0 ? Math.min(100, Math.round(totalComments * 0.15)) : 5;
 
                 // 热度维度
                 const views = overviewStats.views || 0;
-                const hotScore = views > 0 ? Math.min(100, Math.round(Math.log10(views + 1) * 15)) : 5;
+                const hotScore = views > 0 ? Math.min(100, Math.round(Math.log10(views + 1) * 12)) : 5;
 
                 console.log('雷达图分数:', { posPercent, userScore, danmuScore, interactScore, hotScore });
 
