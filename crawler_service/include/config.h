@@ -11,12 +11,12 @@ struct Config {
     double max_delay = 8.0;  // 最大延迟（秒）
     int max_retries = 3;
 
-    // 代理池配置
+    // 独享代理配置
     std::string proxy_pool_url =
-        "https://share.proxy.qg.net/get?key=86F2076D&num=1&area=&isp=0&format=txt&seq=\\r\\n&distinct=false";
+        "https://exclusive.proxy.qg.net/replace?key=6A26857D&num=1&area=&isp=0&format=txt&seq=\\r\\n&distinct=false&keep_alive=1440";
     bool use_proxy = true;
-    std::string proxy_user = "86F2076D";
-    std::string proxy_pass = "8E053A5FB99D";
+    std::string proxy_user = "";  // 独享代理无需认证
+    std::string proxy_pass = "";
 };
 
 Config load_config();
