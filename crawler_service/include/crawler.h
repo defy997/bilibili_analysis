@@ -41,6 +41,10 @@ private:
     std::vector<std::string> load_saved_proxies();
     void save_proxy(const std::string& proxy);
     void remove_failed_proxy(const std::string& proxy);
+    
+    // 短效代理相关
+    std::vector<std::string> load_short_proxies();
+    void remove_failed_short_proxy(const std::string& proxy);
 
     // 获取当前代理（线程安全）
     std::string get_proxy();

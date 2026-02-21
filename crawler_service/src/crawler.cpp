@@ -102,7 +102,45 @@ void Crawler::remove_failed_proxy(const std::string& proxy) {
     }
 }
 
-// 尝试获取短效代理（备用）
+// 加载已保存的短效代理列表
+std::vector<std::string> Crawler::load_short_proxies() {
+    std::vector<std::string> proxies;
+    std::ifstream file(config_.short_proxy_file);
+    if (file.is_open()) {
+        std::string line;
+        while (std::getline(file, line)) {
+            if (!line.empty() && line[0] != '#') {
+                size_t pos = line.find('#');
+                if (pos != std::string::npos) line = line.substr(0, pos);
+                size_t start = line.find_first_not_of(" \t\r\n");
+                size_t end = line.find_last_not_of(" \t\r\n");
+                if (start != std::string::npos) {
+                    line = line.substr(start, end - start + 1);
+                    if (!line.empty()) proxies.push_back(line);
+                }
+            }
+        }
+        file.close();
+    }
+    return proxies;
+}
+
+// 删除失效的短效代理
+void Crawler::remove_failed_short_proxy(const std::string& proxy) {
+    auto proxies = load_short_proxies();
+    std::ofstream file(config_.short_proxy_file);
+    if (file.is_open()) {
+        for (const auto& p : proxies) {
+            if (p != proxy) {
+                file << p << "\n";
+            }
+        }
+        file.close();
+        std::cout << "[Proxy] Removed failed short proxy: " << proxy << std::endl;
+    }
+}
+
+// 尝试获取短效代理（备用）- 支持多个代理
 std::string Crawler::fetch_short_proxy() {
     std::string body = http_get_direct(config_.short_proxy_pool_url);
     
@@ -114,21 +152,82 @@ std::string Crawler::fetch_short_proxy() {
     };
     trim(body);
     
-    if (body.empty() || body[0] == '{' || body[0] == '<') {
+    if (body.empty()) {
+        throw std::runtime_error("Short proxy returned empty");
+    }
+    
+    std::vector<std::string> proxies;
+    
+    // 如果是JSON格式，解析获取多个proxy
+    if (body[0] == '{') {
+        try {
+            json j = json::parse(body);
+            if (j.contains("data") && j["data"].contains("ips") && 
+                !j["data"]["ips"].empty()) {
+                for (const auto& ip : j["data"]["ips"]) {
+                    std::string proxy = ip.contains("server") ? ip["server"].get<std::string>() : "";
+                    if (!proxy.empty()) {
+                        proxies.push_back(proxy);
+                    }
+                }
+                std::cout << "[Fallback] Parsed " << proxies.size() << " short proxies from JSON" << std::endl;
+            }
+            
+            if (proxies.empty()) {
+                throw std::runtime_error("JSON missing ips field");
+            }
+            
+            // 保存到文件
+            std::ofstream file(config_.short_proxy_file);
+            if (file.is_open()) {
+                for (const auto& p : proxies) {
+                    file << p << "\n";
+                }
+                file.close();
+                std::cout << "[Fallback] Saved " << proxies.size() << " short proxies to " << config_.short_proxy_file << std::endl;
+            }
+            
+            // 返回第一个
+            std::cout << "[Fallback] Using short proxy: " << proxies[0] << std::endl;
+            return proxies[0];
+            
+        } catch (const json::exception& e) {
+            throw std::runtime_error("Failed to parse short proxy JSON: " + std::string(e.what()));
+        }
+    }
+    
+    // 原有纯文本格式 - 可能返回多个（用换行分隔）
+    if (body[0] == '{' || body[0] == '<') {
         throw std::runtime_error("Short proxy returned error: " + body.substr(0, 200));
     }
     
-    auto colon_pos = body.find(':');
-    if (colon_pos == std::string::npos || colon_pos == 0 || colon_pos == body.size() - 1) {
+    // 尝试解析多行格式
+    std::istringstream iss(body);
+    std::string line;
+    while (std::getline(iss, line)) {
+        trim(line);
+        if (!line.empty() && line.find(':') != std::string::npos) {
+            if (std::isdigit(static_cast<unsigned char>(line[0]))) {
+                proxies.push_back(line);
+            }
+        }
+    }
+    
+    if (proxies.empty()) {
         throw std::runtime_error("Invalid short proxy format: " + body.substr(0, 100));
     }
     
-    if (!std::isdigit(static_cast<unsigned char>(body[0]))) {
-        throw std::runtime_error("Short proxy returned non-IP: " + body.substr(0, 100));
+    // 保存到文件
+    std::ofstream file(config_.short_proxy_file);
+    if (file.is_open()) {
+        for (const auto& p : proxies) {
+            file << p << "\n";
+        }
+        file.close();
     }
     
-    std::cout << "[Fallback] Fetched short proxy: " << body << std::endl;
-    return body;
+    std::cout << "[Fallback] Fetched " << proxies.size() << " short proxies" << std::endl;
+    return proxies[0];
 }
 
 std::string Crawler::fetch_proxy() {
@@ -157,13 +256,38 @@ std::string Crawler::fetch_proxy() {
         };
         trim(body);
 
-        // 校验：必须是 "数字.数字.数字.数字:端口" 格式，不能是 JSON 错误响应
-        if (body.empty() || body[0] == '{' || body[0] == '<') {
-            // 检查是否是删除频率超限错误
-            if (body.find("DELETE_LIMIT_EXCEEDED") != std::string::npos) {
-                std::cout << "[Proxy] Exclusive proxy rate limited, trying short proxy..." << std::endl;
-                return fetch_short_proxy();
+        // 检查是否是JSON格式
+        if (!body.empty() && body[0] == '{') {
+            try {
+                json j = json::parse(body);
+                // 检查是否是错误响应
+                if (j.contains("code")) {
+                    int code = j["code"].get<int>();
+                    if (code != 0 && code != 200) {
+                        std::string msg = j.contains("message") ? j["message"].get<std::string>() : "unknown";
+                        if (msg.find("DELETE_LIMIT_EXCEEDED") != std::string::npos) {
+                            std::cout << "[Proxy] Exclusive proxy rate limited, trying short proxy..." << std::endl;
+                            return fetch_short_proxy();
+                        }
+                        throw std::runtime_error("Proxy API error: " + msg);
+                    }
+                }
+                // 解析JSON获取代理
+                if (j.contains("data") && j["data"].contains("ips") && 
+                    !j["data"]["ips"].empty()) {
+                    std::string proxy = j["data"]["ips"][0]["server"];
+                    std::cout << "Fetched exclusive proxy (JSON): " << proxy << std::endl;
+                    save_proxy(proxy);
+                    return proxy;
+                }
+                throw std::runtime_error("JSON missing ips field: " + body.substr(0, 100));
+            } catch (const json::exception& e) {
+                throw std::runtime_error("Failed to parse proxy JSON: " + std::string(e.what()));
             }
+        }
+
+        // 原有纯文本格式处理
+        if (body.empty() || body[0] == '<') {
             throw std::runtime_error("Proxy pool returned error: " + body.substr(0, 200));
         }
 
@@ -212,16 +336,52 @@ void Crawler::rotate_proxy() {
     // 如果当前代理失效，先从保存的列表中移除
     if (!current_proxy_.empty()) {
         std::cout << "[Proxy] Removing failed proxy: " << current_proxy_ << std::endl;
-        remove_failed_proxy(current_proxy_);
+        // 判断是独享代理还是短效代理
+        auto saved_exclusive = load_saved_proxies();
+        bool is_exclusive = false;
+        for (const auto& p : saved_exclusive) {
+            if (p == current_proxy_) {
+                is_exclusive = true;
+                break;
+            }
+        }
+        
+        if (is_exclusive) {
+            remove_failed_proxy(current_proxy_);
+        } else {
+            remove_failed_short_proxy(current_proxy_);
+        }
     }
 
-    // 当前是本地 IP 被封 → 从代理池取新 IP
+    // 1. 尝试从已保存的短效代理中获取
+    auto short_proxies = load_short_proxies();
+    if (!short_proxies.empty()) {
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> dis(0, short_proxies.size() - 1);
+        std::string new_proxy = short_proxies[dis(gen)];
+        current_proxy_ = new_proxy;
+        std::cout << "[Proxy] Switched to saved short proxy: " << current_proxy_ << std::endl;
+        return;
+    }
+    
+    // 2. 获取新的短效代理
+    try {
+        std::string new_proxy = fetch_short_proxy();
+        current_proxy_ = new_proxy;
+        std::cout << "[Proxy] Switched to new short proxy: " << current_proxy_ << std::endl;
+        return;
+    } catch (const std::exception& e) {
+        std::cout << "[Proxy] Failed to get short proxy: " << e.what() << std::endl;
+    }
+    
+    // 3. 尝试独享代理
     try {
         std::string new_proxy = fetch_proxy();
         current_proxy_ = new_proxy;
-        std::cout << "Switched to proxy: " << current_proxy_ << std::endl;
+        std::cout << "[Proxy] Switched to exclusive proxy: " << current_proxy_ << std::endl;
     } catch (const std::exception& e) {
-        std::cout << "Failed to get proxy: " << e.what() << ", staying on local IP" << std::endl;
+        std::cout << "[Proxy] All proxy methods failed: " << e.what() << ", staying on local IP" << std::endl;
         current_proxy_.clear();  // 切换回直连
     }
 }

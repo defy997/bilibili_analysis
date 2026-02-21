@@ -1657,12 +1657,22 @@
                 const sentimentData = data.sentiment || dashboardData.sentiment || {};
                 const sentiment = sentimentData.distribution || sentimentData;
                 
-                // 情感分数 - 原始数据是 0-1，需要乘以100
-                const positive = (sentiment.positive || 0) * 100;
-                const neutral = (sentiment.neutral || 0) * 100;
-                const negative = (sentiment.negative || 0) * 100;
-                const totalSentiment = positive + neutral + negative;
+                // 情感分数 - 后端返回的是评论数量，需要归一化为百分比
+                let positive = sentiment.positive || 0;
+                let neutral = sentiment.neutral || 0;
+                let negative = sentiment.negative || 0;
                 
+                // 判断是比例(0-1)还是数量：如果是数量(>1)，需要归一化
+                const isProportion = positive <= 1 && neutral <= 1 && negative <= 1;
+                if (isProportion) {
+                    // 如果是比例，乘以100
+                    positive = positive * 100;
+                    neutral = neutral * 100;
+                    negative = negative * 100;
+                }
+                // 如果是数量，保持原值，后续归一化
+                
+                const totalSentiment = positive + neutral + negative;
                 const posPercent = totalSentiment > 0 ? Math.round((positive / totalSentiment) * 100) : 50;
 
                 // 用户维度 - 从 user_profile.level_distribution 计算总数
