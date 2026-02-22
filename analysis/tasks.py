@@ -85,13 +85,23 @@ def analyze_audio_task(self, bvid, cookie=None):
         'cookie': cookie,
     }
 
-    from .services import analyze_video_audio
-    result = analyze_video_audio(bvid, headers, cookie)
-    
-    # 通知 Electron 任务完成
-    notify_task_complete(bvid, 'audio', 'success', result)
-    
-    return result
+    try:
+        from .services import analyze_video_audio
+        result = analyze_video_audio(bvid, headers, cookie)
+
+        # 通知 Electron 任务完成
+        notify_task_complete(bvid, 'audio', 'success', result)
+
+        return result
+    except Exception as e:
+        print(f"[AudioTask] 音频分析失败: {e}")
+        import traceback
+        traceback.print_exc()
+
+        # 通知 Electron 任务失败
+        notify_task_complete(bvid, 'audio', 'error', {'error': str(e)})
+
+        return {'type': 'audio', 'status': 'error', 'error': str(e)}
 
 
 @shared_task(bind=True)

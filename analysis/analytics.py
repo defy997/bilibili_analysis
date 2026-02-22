@@ -93,6 +93,66 @@ def _get_sentiment_distribution_from_cache(comments):
     return {"positive": positive, "neutral": neutral, "negative": negative}
 
 
+def _get_score_histogram_from_list(scores, bins=10):
+    """从预加载的分数列表计算情感分数分布直方图"""
+    if not scores:
+        return []
+    step = 1.0 / bins
+    return [
+        {
+            "range": f"{i * step:.1f}-{(i + 1) * step:.1f}",
+            "count": sum(1 for s in scores if s is not None and i * step <= s < (i + 1) * step)
+        }
+        for i in range(bins)
+    ]
+
+
+def _get_hourly_from_list(comments_list):
+    """从预加载的评论列表计算24小时分布"""
+    hourly = [0] * 24
+    for c in comments_list:
+        if c.ctime is not None:
+            hourly[c.ctime.hour] += 1
+    return [{"hour": i, "count": hourly[i]} for i in range(24)]
+
+
+def _get_danmu_stats_from_list(danmus_list):
+    """从预加载的弹幕列表计算基础统计"""
+    positive = sum(1 for d in danmus_list if d.sentiment_label == 'positive')
+    neutral = sum(1 for d in danmus_list if d.sentiment_label == 'neutral')
+    negative = sum(1 for d in danmus_list if d.sentiment_label == 'negative')
+    return {
+        "total_count": len(danmus_list),
+        "positive": positive,
+        "neutral": neutral,
+        "negative": negative
+    }
+
+
+def _get_danmu_heatmap_from_list(danmus_list, interval=60):
+    """从预加载的弹幕列表计算时间轴热度图（消除 N+1 查询）"""
+    if not danmus_list:
+        return []
+    valid = [d for d in danmus_list if d.video_time is not None]
+    if not valid:
+        return []
+    max_time = max(d.video_time for d in valid)
+    buckets = int(max_time / interval) + 1
+    heatmap = []
+    for i in range(buckets):
+        start_time = i * interval
+        end_time = (i + 1) * interval
+        bucket = [d for d in valid if start_time <= d.video_time < end_time]
+        scores = [d.sentiment_score for d in bucket if d.sentiment_score is not None]
+        avg_sentiment = sum(scores) / len(scores) if scores else None
+        heatmap.append({
+            "time": start_time,
+            "count": len(bucket),
+            "sentiment_avg": round(avg_sentiment, 3) if avg_sentiment is not None else 0.5
+        })
+    return heatmap
+
+
 def get_sentiment_distribution(bvid):
     """获取情感分布统计 - 使用聚合查询优化"""
     # 使用 Annotate + aggregate 一次查询搞定
@@ -478,6 +538,7 @@ def get_comprehensive_dashboard(bvid):
         # 预加载评论到内存，后续查询复用
         comments_list = list(comments)
         danmus_list = list(danmus)
+        scores_list = [c.sentiment_score for c in comments_list]
 
         dashboard_data = {
             "success": True,
@@ -485,7 +546,6 @@ def get_comprehensive_dashboard(bvid):
                 "bvid": video.bvid,
                 "title": video.title,
                 "pubdate": video.pubdate.strftime('%Y-%m-%d %H:%M') if video.pubdate else None,
-                # 新增：视频统计数据
                 "view": video.view,
                 "like": video.like,
                 "coin": video.coin,
@@ -493,11 +553,11 @@ def get_comprehensive_dashboard(bvid):
                 "share": video.share
             },
 
-            # 1. 情感分析数据 - 优化：使用预加载数据
+            # 1. 情感分析数据 - 全部使用预加载数据，无额外 DB 查询
             "sentiment": {
                 "distribution": _get_sentiment_distribution_from_cache(comments_list),
-                "score_histogram": get_sentiment_score_histogram(bvid, bins=10),
-                "trend_by_time": get_sentiment_trend_by_time(bvid, interval='hour')
+                "score_histogram": _get_score_histogram_from_list(scores_list, bins=10),
+                "trend_by_time": get_sentiment_trend_by_time(bvid, interval='hour')  # GROUP BY，保持 ORM
             },
 
             # 2. 用户画像数据
@@ -514,10 +574,10 @@ def get_comprehensive_dashboard(bvid):
                 "top_comments": get_top_comments(bvid, limit=20)
             },
 
-            # 4. 时间维度数据
+            # 4. 时间维度数据 - hourly 使用预加载数据
             "time_analysis": {
-                "hourly_distribution": get_hourly_distribution(bvid),
-                "daily_trend": get_daily_trend(bvid)
+                "hourly_distribution": _get_hourly_from_list(comments_list),
+                "daily_trend": get_daily_trend(bvid)  # GROUP BY，保持 ORM
             },
 
             # 5. 地域数据
@@ -525,12 +585,12 @@ def get_comprehensive_dashboard(bvid):
                 "top_provinces": get_location_distribution(bvid, limit=10)
             },
 
-            # 6. 弹幕数据
+            # 6. 弹幕数据 - 全部使用预加载数据，消除 N+1
             "danmu": {
-                "stats": get_danmu_stats(bvid),
-                "timeline_heatmap": get_danmu_timeline_heatmap(bvid, interval=60)
+                "stats": _get_danmu_stats_from_list(danmus_list),
+                "timeline_heatmap": _get_danmu_heatmap_from_list(danmus_list, interval=60)
             },
-            
+
             "cached": False
         }
 

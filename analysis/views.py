@@ -113,6 +113,10 @@ def async_analyze_video(request):
                         print(f"[History] 用户 {uid} 分析了视频 {bv}")
                     except Exception as e:
                         print(f"[History] 记录历史失败: {e}")
+                    finally:
+                        # 子线程必须手动关闭 DB 连接，否则会造成连接泄漏
+                        from django.db import connection
+                        connection.close()
 
             # 记录用户分析历史（异步，不阻塞主流程）
             if user_id:
@@ -349,7 +353,7 @@ def video_dashboard(request, bvid):
 
             # === 记录用户视频历史 ===
             user_id = request.session.get('user_id')
-            
+
             def record_video_history(uid, bv):
                 if uid and bv:
                     try:
@@ -365,7 +369,11 @@ def video_dashboard(request, bvid):
                         print(f"[History] 用户 {uid} 分析了视频 {bv}")
                     except Exception as e:
                         print(f"[History] 记录历史失败: {e}")
-            
+                    finally:
+                        # 子线程必须手动关闭 DB 连接，否则会造成连接泄漏
+                        from django.db import connection
+                        connection.close()
+
             # 记录用户分析历史（异步，不阻塞主流程）
             if user_id:
                 import threading
