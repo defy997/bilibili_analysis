@@ -239,8 +239,8 @@
                     多模态情感分布
                 </h3>
                 <div class="grid grid-cols-2 gap-6">
-                    <div id="text-emotion-chart" class="w-full h-64"></div>
-                    <div id="audio-emotion-chart" class="w-full h-64"></div>
+                    <div id="text-emotion-chart" class="w-full h-80"></div>
+                    <div id="audio-emotion-chart" class="w-full h-80"></div>
                 </div>
             </div>
         </div>
@@ -513,48 +513,47 @@
 
         // 渲染情感分布图表
         function renderEmotionCharts() {
-            // 文本情感饼图
+            // 文本情感饼图（3个类别）
             const textOption = {
                 backgroundColor: 'transparent',
                 title: {
                     text: '文本情感分布',
                     left: 'center',
-                    top: '2%',
-                    textStyle: { color: '#fff', fontSize: 14 }
+                    top: 8,
+                    textStyle: { color: '#fff', fontSize: 13 }
                 },
                 tooltip: {
                     trigger: 'item',
                     formatter: '{b}: {d}%'
                 },
                 legend: {
-                    orient: 'horizontal',
-                    bottom: '2%',
-                    textStyle: { color: 'rgba(255,255,255,0.7)' },
-                    itemWidth: 12,
-                    itemHeight: 12
+                    orient: 'vertical',
+                    right: '2%',
+                    top: 'middle',
+                    textStyle: { color: 'rgba(255,255,255,0.7)', fontSize: 11 },
+                    itemWidth: 10,
+                    itemHeight: 10
                 },
                 series: [{
                     type: 'pie',
-                    radius: ['35%', '60%'],
-                    center: ['50%', '45%'],
+                    radius: ['38%', '62%'],
+                    center: ['40%', '55%'],
                     avoidLabelOverlap: true,
                     itemStyle: {
-                        borderRadius: 6,
+                        borderRadius: 5,
                         borderColor: 'rgba(20, 20, 30, 0.8)',
                         borderWidth: 2
                     },
-                    label: {
-                        show: true,
-                        position: 'outside',
-                        formatter: '{b}: {d}%',
-                        color: 'rgba(255,255,255,0.9)',
-                        fontSize: 11
-                    },
-                    labelLine: {
-                        show: true,
-                        length: 10,
-                        length2: 15,
-                        lineStyle: { color: 'rgba(255,255,255,0.5)' }
+                    label: { show: false },
+                    labelLine: { show: false },
+                    emphasis: {
+                        label: {
+                            show: true,
+                            fontSize: 12,
+                            fontWeight: 'bold',
+                            color: '#fff',
+                            formatter: '{b}\n{d}%'
+                        }
                     },
                     data: [
                         { value: multimodalData.textEmotions.positive, name: '正面', itemStyle: { color: '#22c55e' } },
@@ -563,49 +562,48 @@
                     ]
                 }]
             };
-            
-            // 音频情感饼图
+
+            // 音频情感饼图（6个类别）
             const audioOption = {
                 backgroundColor: 'transparent',
                 title: {
                     text: '音频情感分布',
                     left: 'center',
-                    top: '2%',
-                    textStyle: { color: '#fff', fontSize: 14 }
+                    top: 8,
+                    textStyle: { color: '#fff', fontSize: 13 }
                 },
                 tooltip: {
                     trigger: 'item',
                     formatter: '{b}: {d}%'
                 },
                 legend: {
-                    orient: 'horizontal',
-                    bottom: '2%',
-                    textStyle: { color: 'rgba(255,255,255,0.7)' },
-                    itemWidth: 12,
-                    itemHeight: 12
+                    orient: 'vertical',
+                    right: '2%',
+                    top: 'middle',
+                    textStyle: { color: 'rgba(255,255,255,0.7)', fontSize: 10 },
+                    itemWidth: 8,
+                    itemHeight: 8
                 },
                 series: [{
                     type: 'pie',
-                    radius: ['35%', '60%'],
-                    center: ['50%', '45%'],
+                    radius: ['35%', '58%'],
+                    center: ['38%', '55%'],
                     avoidLabelOverlap: true,
                     itemStyle: {
-                        borderRadius: 6,
+                        borderRadius: 5,
                         borderColor: 'rgba(20, 20, 30, 0.8)',
                         borderWidth: 2
                     },
-                    label: {
-                        show: true,
-                        position: 'outside',
-                        formatter: '{b}: {d}%',
-                        color: 'rgba(255,255,255,0.9)',
-                        fontSize: 11
-                    },
-                    labelLine: {
-                        show: true,
-                        length: 10,
-                        length2: 15,
-                        lineStyle: { color: 'rgba(255,255,255,0.5)' }
+                    label: { show: false },
+                    labelLine: { show: false },
+                    emphasis: {
+                        label: {
+                            show: true,
+                            fontSize: 11,
+                            fontWeight: 'bold',
+                            color: '#fff',
+                            formatter: '{b}\n{d}%'
+                        }
                     },
                     data: [
                         { value: multimodalData.audioEmotions.happy, name: '开心', itemStyle: { color: '#fbbf24' } },
@@ -617,7 +615,7 @@
                     ]
                 }]
             };
-            
+
             textEmotionChart.setOption(textOption);
             audioEmotionChart.setOption(audioOption);
         }
