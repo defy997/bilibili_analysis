@@ -317,9 +317,9 @@ std::string Crawler::fetch_proxy() {
         return body;  // "ip:port"
     } catch (const std::exception& e) {
         std::string err_msg = e.what();
-        // 如果是限速错误，尝试短效代理
-        if (err_msg.find("DELETE_LIMIT_EXCEEDED") != std::string::npos || 
-            err_msg.find("rate limited") != std::string::npos) {
+        // 如果是限速错误，尝试短效代理（如果启用）
+        if ((err_msg.find("DELETE_LIMIT_EXCEEDED") != std::string::npos || 
+             err_msg.find("rate limited") != std::string::npos) && config_.enable_short_proxy) {
             std::cout << "[Proxy] Exclusive proxy failed: " << err_msg << std::endl;
             std::cout << "[Proxy] Trying short proxy as fallback..." << std::endl;
             try {
@@ -327,8 +327,10 @@ std::string Crawler::fetch_proxy() {
             } catch (...) {
                 throw std::runtime_error("Both exclusive and short proxy failed");
             }
+        } else {
+            // 短效代理被禁用或不是限速错误，直接抛出异常
+            throw;
         }
-        throw;
     }
 }
 

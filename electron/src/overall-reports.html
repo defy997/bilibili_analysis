@@ -519,17 +519,25 @@
                 title: {
                     text: '文本情感分布',
                     left: 'center',
+                    top: '2%',
                     textStyle: { color: '#fff', fontSize: 14 }
                 },
                 tooltip: {
                     trigger: 'item',
                     formatter: '{b}: {d}%'
                 },
+                legend: {
+                    orient: 'horizontal',
+                    bottom: '2%',
+                    textStyle: { color: 'rgba(255,255,255,0.7)' },
+                    itemWidth: 12,
+                    itemHeight: 12
+                },
                 series: [{
                     type: 'pie',
-                    radius: ['40%', '70%'],
-                    center: ['50%', '55%'],
-                    avoidLabelOverlap: false,
+                    radius: ['35%', '60%'],
+                    center: ['50%', '45%'],
+                    avoidLabelOverlap: true,
                     itemStyle: {
                         borderRadius: 6,
                         borderColor: 'rgba(20, 20, 30, 0.8)',
@@ -537,8 +545,16 @@
                     },
                     label: {
                         show: true,
-                        formatter: '{b}\n{d}%',
-                        color: 'rgba(255,255,255,0.7)'
+                        position: 'outside',
+                        formatter: '{b}: {d}%',
+                        color: 'rgba(255,255,255,0.9)',
+                        fontSize: 11
+                    },
+                    labelLine: {
+                        show: true,
+                        length: 10,
+                        length2: 15,
+                        lineStyle: { color: 'rgba(255,255,255,0.5)' }
                     },
                     data: [
                         { value: multimodalData.textEmotions.positive, name: '正面', itemStyle: { color: '#22c55e' } },
@@ -554,17 +570,25 @@
                 title: {
                     text: '音频情感分布',
                     left: 'center',
+                    top: '2%',
                     textStyle: { color: '#fff', fontSize: 14 }
                 },
                 tooltip: {
                     trigger: 'item',
                     formatter: '{b}: {d}%'
                 },
+                legend: {
+                    orient: 'horizontal',
+                    bottom: '2%',
+                    textStyle: { color: 'rgba(255,255,255,0.7)' },
+                    itemWidth: 12,
+                    itemHeight: 12
+                },
                 series: [{
                     type: 'pie',
-                    radius: ['40%', '70%'],
-                    center: ['50%', '55%'],
-                    avoidLabelOverlap: false,
+                    radius: ['35%', '60%'],
+                    center: ['50%', '45%'],
+                    avoidLabelOverlap: true,
                     itemStyle: {
                         borderRadius: 6,
                         borderColor: 'rgba(20, 20, 30, 0.8)',
@@ -572,8 +596,16 @@
                     },
                     label: {
                         show: true,
-                        formatter: '{b}\n{d}%',
-                        color: 'rgba(255,255,255,0.7)'
+                        position: 'outside',
+                        formatter: '{b}: {d}%',
+                        color: 'rgba(255,255,255,0.9)',
+                        fontSize: 11
+                    },
+                    labelLine: {
+                        show: true,
+                        length: 10,
+                        length2: 15,
+                        lineStyle: { color: 'rgba(255,255,255,0.5)' }
                     },
                     data: [
                         { value: multimodalData.audioEmotions.happy, name: '开心', itemStyle: { color: '#fbbf24' } },
