@@ -1212,6 +1212,41 @@
             });
         });
 
+        // 监听多模态报告窗口关闭事件（从主进程 close-overall-reports-window 触发）
+        ipcRenderer.on('overall-reports-window-closed', () => {
+            const cards = document.querySelectorAll('.nav-card');
+            cards.forEach(card => {
+                const onclickAttr = card.getAttribute('onclick');
+                if (onclickAttr && onclickAttr.includes("'compare'")) {
+                    card.classList.remove('active');
+                }
+            });
+        });
+
+        // 监听模块内部关闭事件（从各子窗口点 X 触发，main.js 发送 module-closed）
+        ipcRenderer.on('module-closed', (event, moduleName) => {
+            const moduleMap = {
+                'analysis': "'emotional'",
+                'emotional': "'emotional'",
+                'user-profile': "'user'",
+                'user': "'user'",
+                'video-audio': "'video'",
+                'video': "'video'",
+                'overall-reports': "'compare'",
+                'compare': "'compare'"
+            };
+            const targetKey = moduleMap[moduleName];
+            if (targetKey) {
+                const cards = document.querySelectorAll('.nav-card');
+                cards.forEach(card => {
+                    const onclickAttr = card.getAttribute('onclick');
+                    if (onclickAttr && onclickAttr.includes(targetKey)) {
+                        card.classList.remove('active');
+                    }
+                });
+            }
+        });
+
         // 监听清除视频数据信号（从历史切换到在线时）
         ipcRenderer.on('clear-video-data', () => {
             console.log('[Index] 收到清除视频数据信号，切换到在线模式');
