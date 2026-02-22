@@ -423,12 +423,6 @@
             // 重置 WebSocket 通知标志
             taskCompletedViaWs = false;
 
-            // 如果已经通过 WebSocket 收到任务完成通知，直接返回
-            if (taskCompletedViaWs) {
-                console.log('[Poll] 任务已完成，等待 WebSocket 推送处理');
-                return;
-            }
-
             const loadingText = document.querySelector('#loading-indicator .text-lg');
             const loadingSubtext = document.querySelector('#loading-indicator .text-sm');
 
