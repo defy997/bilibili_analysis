@@ -1152,17 +1152,9 @@
 
         // === 保存配置 ===
         async function saveSettings() {
-            // 直接调用后端检查登录状态
-            try {
-                const checkResponse = await fetch(`${API_BASE}/api/auth/check/`, { credentials: 'include' });
-                const checkResult = await checkResponse.json();
-                
-                if (!checkResult.success || !checkResult.logged_in) {
-                    alert('请先登录后再保存配置！');
-                    return;
-                }
-            } catch (error) {
-                alert('检查登录状态失败: ' + error.message);
+            // 先检查登录状态
+            if (!isLoggedIn) {
+                alert('请先登录后再保存配置！');
                 return;
             }
             
@@ -1503,8 +1495,11 @@
                     showToast(`Welcome back, ${result.data.username}!`, 'success');
                     toggleLogin(false);
 
-                    // 重新检查登录状态确保同步
-                    await checkLoginStatus();
+                    // 更新登录状态
+                    isLoggedIn = true;
+                    currentUser = result.data;
+                    updateLoginUI();
+                    updateLoginOverlay();
 
                     // 清空表单
                     document.getElementById('login-account').value = '';

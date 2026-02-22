@@ -301,6 +301,53 @@ function createTray() {
 
 // Electron 会在初始化后并准备创建浏览器窗口时，调用这个函数
 app.whenReady().then(() => {
+  // 解决 Electron file:// → http:// 跨域请求不携带 session cookie 的问题
+  // 根本原因：Chromium SameSite=Lax 默认策略阻止跨域 POST 请求发送 cookie
+  // 用内存变量保存 sessionid，绕过 Electron 对 IP 地址 cookie 存储的限制
+  // onBeforeSendHeaders 同步注入，彻底绕过 Chromium SameSite 限制
+  const mainSes = session.fromPartition('persist:main');
+  let storedSessionId = null;
+
+  // 用单个监听器同时处理登录和登出（Electron 每次调用 onHeadersReceived 会替换上一个监听器）
+  mainSes.webRequest.onHeadersReceived(
+    { urls: [
+        'http://118.25.39.91:8000/api/auth/login/',
+        'http://118.25.39.91:8000/api/auth/logout/'
+    ]},
+    (details, callback) => {
+      callback({ responseHeaders: details.responseHeaders });
+      if (details.url.includes('/api/auth/login/')) {
+        // 登录成功：从 Set-Cookie 提取 sessionid 存入内存
+        const setCookieList = details.responseHeaders['set-cookie']
+                           || details.responseHeaders['Set-Cookie']
+                           || [];
+        for (const header of setCookieList) {
+          const m = header.match(/sessionid=([^;]+)/i);
+          if (m) {
+            storedSessionId = m[1];
+            console.log('[Cookie] sessionid 已存入内存');
+          }
+        }
+      } else if (details.url.includes('/api/auth/logout/')) {
+        // 登出：清除内存中的 sessionid
+        storedSessionId = null;
+        console.log('[Cookie] 已登出，sessionid 已清除');
+      }
+    }
+  );
+
+  // 对所有 API 请求，同步注入内存中的 sessionid 到 Cookie 头
+  mainSes.webRequest.onBeforeSendHeaders(
+    { urls: ['http://118.25.39.91:8000/*'] },
+    (details, callback) => {
+      const requestHeaders = { ...details.requestHeaders };
+      if (storedSessionId) {
+        requestHeaders['Cookie'] = `sessionid=${storedSessionId}`;
+      }
+      callback({ requestHeaders });
+    }
+  );
+
   createWindow();
   createTray();
   createWebSocketServer();
