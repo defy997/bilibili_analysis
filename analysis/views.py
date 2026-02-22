@@ -1033,3 +1033,43 @@ def multimodal_emotion_analysis(request, bvid):
             return JsonResponse(result, status=404)
     else:
         return HttpResponseNotAllowed(['GET'])
+
+
+# ==================== C++爬虫专用 API ====================
+
+@csrf_exempt
+def get_sessdata_for_crawler(request):
+    """
+    获取用于C++爬虫的SESSDATA（不含完整cookie）
+    C++爬虫调用此API获取有效的SESSDATA用于WBI签名
+    
+    GET /api/crawler/sessdata/
+    """
+    if request.method == 'GET':
+        try:
+            from .sessdata_manager import SessdataManager
+            
+            manager = SessdataManager()
+            # 获取可用于爬虫的SESSDATA（会自动检查有效性，必要时刷新）
+            sessdata = manager.get_sessdata_for_crawler()
+            
+            if sessdata:
+                return JsonResponse({
+                    "success": True,
+                    "sessdata": sessdata
+                })
+            else:
+                return JsonResponse({
+                    "success": False,
+                    "message": "无可用的SESSDATA，请先登录B站账号"
+                }, status=401)
+        except Exception as e:
+            print(f"获取 SESSDATA 失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({
+                "success": False,
+                "message": str(e)
+            }, status=500)
+    else:
+        return HttpResponseNotAllowed(['GET'])

@@ -1490,6 +1490,7 @@ def save_video(video_info, bvid):
             'cid': video_info['cid'],
             'title': video_info['title'],
             'pubdate': pubdate_dt,
+            'raw_comment_count': video_info.get('reply_count', 0),  # 保存评论数
             # 新增：视频统计数据
             'view': video_info.get('view', 0),
             'like': video_info.get('like', 0),
@@ -1499,15 +1500,16 @@ def save_video(video_info, bvid):
         }
     )
     if created:
-        print(f"新建视频记录: {video_info['title']}")
+        print(f"新建视频记录: {video_info['title']}, 评论数: {video_info.get('reply_count', 0)}")
     else:
         # 更新已存在的视频的统计数据
+        video_obj.raw_comment_count = video_info.get('reply_count', 0)
         video_obj.view = video_info.get('view', 0)
         video_obj.like = video_info.get('like', 0)
         video_obj.coin = video_info.get('coin', 0)
         video_obj.favorite = video_info.get('favorite', 0)
         video_obj.share = video_info.get('share', 0)
-        video_obj.save(update_fields=['view', 'like', 'coin', 'favorite', 'share'])
+        video_obj.save(update_fields=['raw_comment_count', 'view', 'like', 'coin', 'favorite', 'share'])
 
     return video_obj
 

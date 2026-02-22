@@ -26,6 +26,12 @@ public:
         return instance;
     }
 
+    // 设置 SESSDATA API 地址
+    void set_sessdata_api(const std::string& api_url, const std::string& api_path) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        sessdata_api_url_ = api_url + api_path;
+    }
+
     // 初始化：从 B站 nav 接口获取密钥
     void init() {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -102,9 +108,68 @@ private:
     std::mutex mutex_;
     static constexpr int KEY_EXPIRY_SECONDS = 6 * 3600;  // 6小时过期
 
+    // SESSDATA API 配置
+    std::string sessdata_api_url_;
+    std::string cached_sessdata_;
+    int64_t sessdata_last_fetch_ = 0;
+    static constexpr int SESSDATA_EXPIRY_SECONDS = 3600;  // SESSDATA 缓存1小时
+
     // 获取当前时间戳（秒）
     static int64_t get_current_timestamp() {
         return std::time(nullptr);
+    }
+
+    // 从 Django API 获取 SESSDATA
+    std::string fetch_sessdata_from_api() {
+        if (sessdata_api_url_.empty()) {
+            std::cout << "[Wbi] SESSDATA API not configured, using fallback" << std::endl;
+            return "";
+        }
+
+        // 检查缓存是否有效
+        if (!cached_sessdata_.empty() && 
+            (get_current_timestamp() - sessdata_last_fetch_) < SESSDATA_EXPIRY_SECONDS) {
+            return cached_sessdata_;
+        }
+
+        CURL* curl = curl_easy_init();
+        if (!curl) {
+            std::cout << "[Wbi] Failed to init curl for SESSDATA" << std::endl;
+            return "";
+        }
+
+        std::string response;
+        curl_easy_setopt(curl, CURLOPT_URL, sessdata_api_url_.c_str());
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+
+        CURLcode res = curl_easy_perform(curl);
+        long http_code = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+        curl_easy_cleanup(curl);
+
+        if (res != CURLE_OK || http_code != 200) {
+            std::cout << "[Wbi] Failed to fetch SESSDATA, HTTP " << http_code << std::endl;
+            return "";
+        }
+
+        try {
+            auto resp_json = json::parse(response);
+            if (resp_json.value("success", false)) {
+                cached_sessdata_ = resp_json.value("sessdata", "");
+                sessdata_last_fetch_ = get_current_timestamp();
+                std::cout << "[Wbi] SESSDATA fetched from API, expires in " << SESSDATA_EXPIRY_SECONDS << "s" << std::endl;
+                return cached_sessdata_;
+            } else {
+                std::cout << "[Wbi] SESSDATA API error: " << resp_json.value("message", "unknown") << std::endl;
+                return "";
+            }
+        } catch (const std::exception& e) {
+            std::cout << "[Wbi] Parse SESSDATA response error: " << e.what() << std::endl;
+            return "";
+        }
     }
 
     // 从 nav 接口获取 wbi 密钥
@@ -120,7 +185,15 @@ private:
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
         curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
-        curl_easy_setopt(curl, CURLOPT_COOKIE, "SESSDATA=55d2ed48%2C1785846835%2Cd80a0*22CjDxZL1htFveMUpzPXZrxp6zwh1K5neWuRyhGlZxWZ1A3xBGw6NIs8AhnyqkO5tfmBgSVmhQTHVlNDNaMzlENjNqYjQwcGNPRzN5T05YcTN3SFRLT2ZvOW9sZHFvS295WmdRdW1YQXZzc01GMEdBek1YTGZTajNINW1jdmhRaUN4MWV6QnFLcGh3IIEC");
+
+        // 动态获取 SESSDATA（优先从 API 获取，失败则尝试空 SESSDATA）
+        std::string sessdata = fetch_sessdata_from_api();
+        if (!sessdata.empty()) {
+            std::string cookie = "SESSDATA=" + sessdata;
+            curl_easy_setopt(curl, CURLOPT_COOKIE, cookie.c_str());
+        } else {
+            std::cout << "[Wbi] Warning: Using empty SESSDATA (may fail)" << std::endl;
+        }
         
         // 必要的请求头
         struct curl_slist* headers = nullptr;

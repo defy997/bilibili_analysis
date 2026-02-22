@@ -29,6 +29,10 @@ struct Config {
     
     // 独享代理保存文件
     std::string exclusive_proxy_file = "exclusive_proxies.txt";
+    
+    // Django API 服务器地址（用于获取SESSDATA）
+    std::string django_api_url = "http://127.0.0.1:8000";
+    std::string sessdata_api = "/api/crawler/sessdata/";
 };
 
 Config load_config();

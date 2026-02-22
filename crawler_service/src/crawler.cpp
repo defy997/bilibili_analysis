@@ -19,6 +19,13 @@ static size_t write_callback(char* ptr, size_t size, size_t nmemb, void* userdat
 
 Crawler::Crawler(const Config& cfg) : config_(cfg) {
     curl_global_init(CURL_GLOBAL_DEFAULT);
+    
+    // 配置 WBI 签名的 SESSDATA API
+    WbiSigner& wbi = WbiSigner::get_instance();
+    std::string full_api_url = config_.django_api_url + config_.sessdata_api;
+    wbi.set_sessdata_api(config_.django_api_url, config_.sessdata_api);
+    std::cout << "[Crawler] WBI SESSDATA API: " << full_api_url << std::endl;
+    
     // 启动时用本地 IP，412 后再切代理池
     std::cout << "Starting with local IP (proxy on standby)" << std::endl;
 }
