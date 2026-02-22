@@ -889,7 +889,7 @@
         // 检查登录状态
         async function checkLoginStatus() {
             try {
-                const response = await fetch(`${API_BASE}/api/auth/check/`);
+                const response = await fetch(`${API_BASE}/api/auth/check/`, { credentials: 'include' });
                 const result = await response.json();
                 if (result.success && result.logged_in) {
                     isLoggedIn = true;
@@ -1038,6 +1038,7 @@
             try {
                 const response = await fetch(`${API_BASE}${endpoint}`, {
                     ...options,
+                    credentials: 'include',  // 携带 cookie
                     headers: {
                         'Content-Type': 'application/json',
                         ...options.headers
@@ -1151,6 +1152,12 @@
 
         // === 保存配置 ===
         async function saveSettings() {
+            // 先检查登录状态
+            if (!isLoggedIn) {
+                alert('请先登录后再保存配置！');
+                return;
+            }
+            
             try {
                 const config = {
                     filter_config: {
@@ -1173,6 +1180,7 @@
 
                 const response = await fetch('http://118.25.39.91:8000/api/config/save/', {
                     method: 'POST',
+                    credentials: 'include',  // 携带 cookie
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(config)
                 });
@@ -1371,6 +1379,7 @@
             try {
                 const response = await fetch(`${API_BASE}/api/auth/send-code/`, {
                     method: 'POST',
+                    credentials: 'include',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, purpose: 'register' })
                 });
@@ -1438,6 +1447,7 @@
             try {
                 const response = await fetch(`${API_BASE}/api/auth/register/`, {
                     method: 'POST',
+                    credentials: 'include',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, email, password, code })
                 });
@@ -1474,6 +1484,7 @@
             try {
                 const response = await fetch(`${API_BASE}/api/auth/login/`, {
                     method: 'POST',
+                    credentials: 'include',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
                 });
@@ -1509,7 +1520,7 @@
         // 登出
         async function handleLogout() {
             try {
-                await fetch(`${API_BASE}/api/auth/logout/`, { method: 'POST' });
+                await fetch(`${API_BASE}/api/auth/logout/`, { method: 'POST', credentials: 'include' });
                 showToast('Logged out successfully', 'success');
             } catch (error) {
                 console.error('登出失败:', error);
@@ -1676,7 +1687,7 @@
             console.log('正在加载雷达图数据 for:', bvId);
             
             try {
-                const response = await fetch(`${API_BASE}/api/video/dashboard/${bvId}/`);
+                const response = await fetch(`${API_BASE}/api/video/dashboard/${bvId}/`, { credentials: 'include' });
                 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -1810,7 +1821,7 @@
             const nextBtn = document.getElementById('history-next-btn');
 
             try {
-                const response = await fetch(`${API_BASE}/api/video/history/?page=${page}&page_size=20`);
+                const response = await fetch(`${API_BASE}/api/video/history/?page=${page}&page_size=20`, { credentials: 'include' });
                 const result = await response.json();
 
                 if (result.success && result.data && result.data.videos.length > 0) {
