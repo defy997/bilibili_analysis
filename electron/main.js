@@ -2,12 +2,92 @@ const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, session } 
 app.isQuitting = false;
 const path = require('path');
 const WebSocket = require('ws');
+const http = require('http');
 
 // 配置 session 以支持跨域 Cookie
 // 使用默认 session
 app.on('ready', () => {
     console.log('✅ Electron session 配置完成');
 });
+
+// HTTP 服务器用于接收 Django 后端的任务完成通知
+let httpServer;
+
+// 创建 HTTP 服务器用于接收任务通知
+function createNotificationServer() {
+    httpServer = http.createServer((req, res) => {
+        // 设置 CORS 头
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+        if (req.method === 'OPTIONS') {
+            res.writeHead(200);
+            res.end();
+            return;
+        }
+
+        if (req.method === 'POST' && req.url === '/api/task-notify/') {
+            let body = '';
+            req.on('data', chunk => {
+                body += chunk.toString();
+            });
+            req.on('end', () => {
+                try {
+                    const data = JSON.parse(body);
+                    console.log('[TaskNotify] 收到任务完成通知:', data);
+
+                    // 广播任务完成消息到所有窗口
+                    broadcastTaskComplete(data);
+
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: true }));
+                } catch (error) {
+                    console.error('[TaskNotify] 解析通知失败:', error);
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Invalid JSON' }));
+                }
+            });
+        } else {
+            res.writeHead(404);
+            res.end();
+        }
+    });
+
+    httpServer.listen(3001, () => {
+        console.log('✅ 任务通知服务器启动在端口 3001');
+    });
+}
+
+// 广播任务完成消息到所有窗口
+function broadcastTaskComplete(data) {
+    const { bvid, task_type, status, result } = data;
+
+    // 发送到主窗口
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('task-complete', data);
+    }
+
+    // 发送到分析窗口
+    if (analysisWindow && !analysisWindow.isDestroyed()) {
+        analysisWindow.webContents.send('task-complete', data);
+    }
+
+    // 发送到用户画像窗口
+    if (userProfileWindow && !userProfileWindow.isDestroyed()) {
+        userProfileWindow.webContents.send('task-complete', data);
+    }
+
+    // 发送到视频音频分析窗口
+    if (videoAudioWindow && !videoAudioWindow.isDestroyed()) {
+        videoAudioWindow.webContents.send('task-complete', data);
+    }
+
+    // 发送到综合报告窗口
+    if (overallReportsWindow && !overallReportsWindow.isDestroyed()) {
+        overallReportsWindow.webContents.send('task-complete', data);
+    }
+}
 
 // 设置控制台输出编码为UTF-8(解决Windows终端中文乱码)
 if (process.platform === 'win32') {
@@ -351,6 +431,7 @@ app.whenReady().then(() => {
   createWindow();
   createTray();
   createWebSocketServer();
+  createNotificationServer();
 
   app.on('activate', () => {
     // 在macOS上，当单击dock图标并且没有其他窗口打开时，
@@ -374,6 +455,11 @@ app.on('window-all-closed', () => {
   // 关闭WebSocket服务器
   if (wss) {
     wss.close();
+  }
+
+  // 关闭HTTP通知服务器
+  if (httpServer) {
+    httpServer.close();
   }
 });
 
@@ -410,6 +496,11 @@ ipcMain.on('close-window', () => {
   // 关闭WebSocket服务器
   if (wss) {
     wss.close();
+  }
+
+  // 关闭HTTP通知服务器
+  if (httpServer) {
+    httpServer.close();
   }
 
   // 销毁托盘

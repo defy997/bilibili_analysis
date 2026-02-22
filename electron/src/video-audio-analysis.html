@@ -185,11 +185,13 @@
         let audioTimelineChart = null;
         let comparisonChart = null;
         let currentBvId = null;
+        let taskCompletedViaWs = false;  // 标记是否通过 WebSocket 收到任务完成通知
 
         // === Init ===
         document.addEventListener('DOMContentLoaded', () => {
             initCharts();
             listenForVideoChange();
+            listenForTaskComplete();  // 添加任务完成监听
             loadThemeFromConfig();
             
             // 临时调试：自动打开开发者工具
@@ -324,6 +326,48 @@
             });
         }
 
+        // === 监听任务完成信号（WebSocket推送） ===
+        function listenForTaskComplete() {
+            ipcRenderer.on('task-complete', (event, data) => {
+                console.log('[TaskNotify] 收到任务完成通知:', data);
+                
+                const { bvid, task_type, status, result } = data;
+                
+                // 如果不是当前视频的任务，忽略
+                if (bvid !== currentBvId) {
+                    console.log('[TaskNotify] 忽略非当前视频的任务通知');
+                    return;
+                }
+                
+                // 标记已通过 WebSocket 收到任务完成通知
+                taskCompletedViaWs = true;
+                
+                // 获取加载状态元素
+                const loadingIndicator = document.getElementById('loading-indicator');
+                const loadingText = loadingIndicator?.querySelector('.text-lg');
+                const loadingSubtext = loadingIndicator?.querySelector('.text-sm');
+                
+                // 更新进度显示
+                if (status === 'success' && result) {
+                    if (loadingText) loadingText.innerText = 'Analysis Complete!';
+                    if (loadingSubtext) {
+                        const count = result.timeline_length || result.count || 0;
+                        loadingSubtext.innerText = `${count} audio segments analyzed`;
+                    }
+                    
+                    // 延迟后加载 dashboard
+                    setTimeout(async () => {
+                        showLoading(false);
+                        await loadDashboard(bvid);
+                    }, 1500);
+                } else if (status === 'error') {
+                    console.error('[TaskNotify] 任务失败:', result?.error);
+                    if (loadingText) loadingText.innerText = 'Analysis Failed';
+                    if (loadingSubtext) loadingSubtext.innerText = result?.error || 'Unknown error';
+                }
+            });
+        }
+
         // === Load data ===
         async function loadData(bvId) {
             try {
@@ -376,10 +420,26 @@
             const maxAttempts = 120;  // 增加超时时间（音频分析可能需要更长时间）
             let attempts = 0;
 
+            // 重置 WebSocket 通知标志
+            taskCompletedViaWs = false;
+
+            // 如果已经通过 WebSocket 收到任务完成通知，直接返回
+            if (taskCompletedViaWs) {
+                console.log('[Poll] 任务已完成，等待 WebSocket 推送处理');
+                return;
+            }
+
             const loadingText = document.querySelector('#loading-indicator .text-lg');
             const loadingSubtext = document.querySelector('#loading-indicator .text-sm');
 
             const pollTimer = setInterval(async () => {
+                // 如果已经通过 WebSocket 收到任务完成通知，停止轮询
+                if (taskCompletedViaWs) {
+                    clearInterval(pollTimer);
+                    console.log('[Poll] 停止轮询，等待 WebSocket 推送处理');
+                    return;
+                }
+
                 attempts++;
 
                 try {

@@ -213,11 +213,13 @@
         let hourlyChart = null;
         let danmuHeatmapChart = null;
         let currentBvId = null;
+        let taskCompletedViaWs = false;  // 标记是否通过 WebSocket 收到任务完成通知
 
         // === 初始化 ===
         document.addEventListener('DOMContentLoaded', () => {
             initCharts();
             listenForVideoChange();
+            listenForTaskComplete();  // 添加任务完成监听
             loadThemeFromConfig();
 
             // 按 Ctrl+Shift+O 打开开发者工具调试
@@ -420,6 +422,57 @@
             });
         }
 
+        // === 监听任务完成信号（WebSocket推送） ===
+        function listenForTaskComplete() {
+            ipcRenderer.on('task-complete', (event, data) => {
+                console.log('[TaskNotify] 收到任务完成通知:', data);
+                
+                const { bvid, task_type, status, result } = data;
+                
+                // 如果不是当前视频的任务，忽略
+                if (bvid !== currentBvId) {
+                    console.log('[TaskNotify] 忽略非当前视频的任务通知');
+                    return;
+                }
+                
+                // 标记已通过 WebSocket 收到任务完成通知
+                taskCompletedViaWs = true;
+                
+                // 获取加载状态元素
+                const loadingTasks = document.getElementById('loading-tasks');
+                const loadingProgress = document.getElementById('loading-progress');
+                const loadingTitle = document.getElementById('loading-title');
+                const loadingSubtitle = document.getElementById('loading-subtitle');
+                
+                // 更新进度显示
+                if (status === 'success' && result) {
+                    if (loadingProgress) {
+                        loadingProgress.style.width = '100%';
+                        loadingProgress.classList.remove('animate-pulse');
+                        loadingProgress.classList.add('bg-green-500');
+                    }
+                    if (loadingTitle) loadingTitle.innerText = 'Analysis Complete!';
+                    if (loadingSubtitle) {
+                        const count = result.count || 0;
+                        const positive = result.positive_count || 0;
+                        const negative = result.negative_count || 0;
+                        loadingSubtitle.innerText = `${count} items processed (pos: ${positive}, neg: ${negative})`;
+                    }
+                    
+                    // 延迟后加载 dashboard
+                    setTimeout(async () => {
+                        if (loadingTasks) loadingTasks.classList.add('hidden');
+                        showLoading(false);
+                        await loadDashboard(bvid);
+                    }, 1500);
+                } else if (status === 'error') {
+                    console.error('[TaskNotify] 任务失败:', result?.error);
+                    if (loadingTitle) loadingTitle.innerText = 'Analysis Failed';
+                    if (loadingSubtitle) loadingSubtitle.innerText = result?.error || 'Unknown error';
+                }
+            });
+        }
+
         // === 加载数据 ===
         async function loadData(bvId) {
             try {
@@ -492,6 +545,15 @@
             const maxAttempts = 60; // 最多轮询60次（2分钟）
             let attempts = 0;
 
+            // 重置 WebSocket 通知标志
+            taskCompletedViaWs = false;
+
+            // 如果已经通过 WebSocket 收到任务完成通知，直接加载 dashboard
+            if (taskCompletedViaWs) {
+                console.log('[Poll] 任务已完成，等待 WebSocket 推送处理');
+                return;
+            }
+
             // 显示任务状态
             const loadingTasks = document.getElementById('loading-tasks');
             const loadingProgress = document.getElementById('loading-progress');
@@ -505,6 +567,13 @@
             }
 
             const pollTimer = setInterval(async () => {
+                // 如果已经通过 WebSocket 收到任务完成通知，停止轮询
+                if (taskCompletedViaWs) {
+                    clearInterval(pollTimer);
+                    console.log('[Poll] 停止轮询，等待 WebSocket 推送处理');
+                    return;
+                }
+
                 attempts++;
 
                 try {
