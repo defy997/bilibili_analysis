@@ -359,32 +359,34 @@ void Crawler::rotate_proxy() {
             remove_failed_short_proxy(current_proxy_);
         }
     }
-
-    // 1. 尝试从已保存的短效代理中获取
-    auto short_proxies = load_short_proxies();
-    if (!short_proxies.empty()) {
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<> dis(0, short_proxies.size() - 1);
-        std::string new_proxy = short_proxies[dis(gen)];
-        current_proxy_ = new_proxy;
-        current_proxy_type_ = "short";  // 短效代理
-        std::cout << "[Proxy] Switched to saved short proxy: " << current_proxy_ << std::endl;
-        return;
+    
+    // 1. 如果启用短效代理，尝试从已保存的短效代理中获取
+    if (config_.enable_short_proxy) {
+        auto short_proxies = load_short_proxies();
+        if (!short_proxies.empty()) {
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            std::uniform_int_distribution<> dis(0, short_proxies.size() - 1);
+            std::string new_proxy = short_proxies[dis(gen)];
+            current_proxy_ = new_proxy;
+            current_proxy_type_ = "short";  // 短效代理
+            std::cout << "[Proxy] Switched to saved short proxy: " << current_proxy_ << std::endl;
+            return;
+        }
+        
+        // 2. 获取新的短效代理
+        try {
+            std::string new_proxy = fetch_short_proxy();
+            current_proxy_ = new_proxy;
+            current_proxy_type_ = "short";  // 短效代理
+            std::cout << "[Proxy] Switched to new short proxy: " << current_proxy_ << std::endl;
+            return;
+        } catch (const std::exception& e) {
+            std::cout << "[Proxy] Failed to get short proxy: " << e.what() << std::endl;
+        }
     }
     
-    // 2. 获取新的短效代理
-    try {
-        std::string new_proxy = fetch_short_proxy();
-        current_proxy_ = new_proxy;
-        current_proxy_type_ = "short";  // 短效代理
-        std::cout << "[Proxy] Switched to new short proxy: " << current_proxy_ << std::endl;
-        return;
-    } catch (const std::exception& e) {
-        std::cout << "[Proxy] Failed to get short proxy: " << e.what() << std::endl;
-    }
-    
-    // 3. 尝试独享代理
+    // 3. 尝试独享代理（如果禁用短效代理则直接跳到这里）
     try {
         std::string new_proxy = fetch_proxy();
         current_proxy_ = new_proxy;
