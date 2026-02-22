@@ -93,6 +93,32 @@ def async_analyze_video(request):
             if not bvid:
                 return JsonResponse({"error": "BVID is required"}, status=400)
 
+            # 获取当前用户ID（用于记录历史）
+            user_id = request.session.get('user_id')
+
+            # 辅助函数：记录用户视频历史
+            def record_video_history(uid, bv):
+                if uid and bv:
+                    try:
+                        from analysis.models import UserVideoHistory, Video
+                        # 确保视频存在
+                        video, _ = Video.objects.get_or_create(bvid=bv)
+                        # 创建或更新历史记录
+                        history, created = UserVideoHistory.objects.update_or_create(
+                            user_id=uid,
+                            video=video,
+                            defaults={'analyzed_at': timezone.now()}
+                        )
+                        print(f"[History] 用户 {uid} 分析了视频 {bv}")
+                    except Exception as e:
+                        print(f"[History] 记录历史失败: {e}")
+
+            # 记录用户分析历史（异步，不阻塞主流程）
+            if user_id:
+                # 使用线程记录历史，不阻塞主流程
+                import threading
+                threading.Thread(target=record_video_history, args=(user_id, bvid)).start()
+
             # 获取有效的 Cookie
             cookie = ensure_valid_cookie()
             headers = {
@@ -959,21 +985,36 @@ def get_cookie_header(request):
 
 @csrf_exempt
 def video_history(request):
-    """获取爬取的视频历史记录"""
+    """获取爬取的视频历史记录（按用户过滤）"""
     if request.method == 'GET':
         try:
+            # 检查用户是否登录
+            user_id = request.session.get('user_id')
+            if not user_id:
+                return JsonResponse({
+                    "success": False,
+                    "message": "请先登录"
+                }, status=401)
+            
             # 获取分页参数
             page = int(request.GET.get('page', 1))
             page_size = int(request.GET.get('page_size', 20))
             offset = (page - 1) * page_size
             
-            # 获取视频总数
-            total = Video.objects.count()
-            # 获取视频列表
-            videos = Video.objects.order_by('-pubdate')[offset:offset + page_size]
+            # 获取用户的历史记录
+            from analysis.models import UserVideoHistory, Video, Comment, Danmu
+            
+            # 获取历史记录总数
+            total = UserVideoHistory.objects.filter(user_id=user_id).count()
+            
+            # 获取历史记录列表
+            history_list = UserVideoHistory.objects.filter(
+                user_id=user_id
+            ).select_related('video').order_by('-analyzed_at')[offset:offset + page_size]
             
             video_list = []
-            for video in videos:
+            for history in history_list:
+                video = history.video
                 # 获取该视频的评论数量
                 comment_count = Comment.objects.filter(video=video).count()
                 # 获取弹幕数量
@@ -986,7 +1027,10 @@ def video_history(request):
                     'pubdate': video.pubdate.isoformat() if video.pubdate else None,
                     'comment_count': comment_count,
                     'danmu_count': danmu_count,
-                    'raw_comment_count': video.raw_comment_count
+                    'raw_comment_count': video.raw_comment_count,
+                    'analyzed_at': history.analyzed_at.isoformat() if history.analyzed_at else None,
+                    'is_favorite': history.is_favorite,
+                    'note': history.note
                 })
             
             return JsonResponse({
@@ -996,7 +1040,7 @@ def video_history(request):
                     "total": total,
                     "page": page,
                     "page_size": page_size,
-                    "total_pages": (total + page_size - 1) // page_size
+                    "total_pages": (total + page_size - 1) // page_size if total > 0 else 0
                 }
             })
         except Exception as e:

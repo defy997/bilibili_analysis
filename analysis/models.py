@@ -253,6 +253,24 @@ class User(AbstractUser):
         }
 
 
+class UserVideoHistory(models.Model):
+    """用户视频分析历史记录"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='video_history', verbose_name="用户")
+    video = models.ForeignKey(Video, on_delete=models.CASCADE, related_name='user_history', verbose_name="视频")
+    analyzed_at = models.DateTimeField(auto_now=True, verbose_name="最后分析时间")
+    is_favorite = models.BooleanField(default=False, verbose_name="是否收藏")
+    note = models.CharField(max_length=255, null=True, blank=True, verbose_name="备注")
+
+    class Meta:
+        db_table = 'user_video_history'
+        ordering = ['-analyzed_at']
+        # 用户和视频组合唯一
+        unique_together = ['user', 'video']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.video.title}"
+
+
 class EmailVerificationCode(models.Model):
     """邮箱验证码模型"""
     email = models.EmailField(verbose_name="邮箱")

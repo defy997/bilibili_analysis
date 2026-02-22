@@ -1186,7 +1186,9 @@
                     alert('配置保存成功！');
                     toggleSettings(false);
                 } else {
-                    alert('保存失败: ' + result.error);
+                    // 兼容 message 和 error 两种返回格式
+                    const errorMsg = result.error || result.message || '未知错误';
+                    alert('保存失败: ' + errorMsg);
                 }
             } catch (error) {
                 console.error('保存配置失败:', error);
