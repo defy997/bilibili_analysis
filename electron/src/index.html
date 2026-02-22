@@ -1072,11 +1072,26 @@
 
         // === 应用UI设置 ===
         function applyUISettings() {
-            const bgColor = document.getElementById('bg-color').value;
-            const opacity = parseInt(document.getElementById('opacity').value) / 100;
+            const bgColorInput = document.getElementById('bg-color');
+            const opacityInput = document.getElementById('opacity');
+            
+            if (!bgColorInput || !opacityInput) return;
+            
+            const bgColor = bgColorInput.value;
+            const opacity = parseInt(opacityInput.value) / 100;
 
-            // 将16进制颜色转换为RGB
-            const hex = bgColor.replace('#', '');
+            // 将16进制颜色转换为RGB（支持3位和6位颜色）
+            let hex = bgColor.replace('#', '');
+            // 扩展3位颜色为6位（如 #fff -> #ffffff）
+            if (hex.length === 3) {
+                hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+            }
+            // 检查是否为有效6位十六进制
+            if (hex.length !== 6 || !/^[0-9a-fA-F]{6}$/.test(hex)) {
+                console.warn('无效的背景颜色:', bgColor);
+                return;
+            }
+            
             const r = parseInt(hex.substring(0, 2), 16);
             const g = parseInt(hex.substring(2, 4), 16);
             const b = parseInt(hex.substring(4, 6), 16);
@@ -1534,7 +1549,7 @@
             }
 
             // 应用UI配置
-            if (ui_config) {
+            if (ui_config && ui_config.background_color && ui_config.opacity !== undefined) {
                 document.getElementById('bg-color').value = ui_config.background_color;
                 document.getElementById('bg-color-value').innerText = ui_config.background_color;
 
