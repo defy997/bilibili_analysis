@@ -30,6 +30,9 @@ private:
     // 当前代理 IP:Port，空字符串表示直连
     std::string current_proxy_;
     std::mutex proxy_mutex_;
+    
+    // 当前代理类型: "exclusive"(独享), "short"(短效), ""(直连)
+    std::string current_proxy_type_;
 
     // 从代理池获取新代理，返回 "ip:port"
     std::string fetch_proxy();

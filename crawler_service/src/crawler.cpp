@@ -17,7 +17,7 @@ static size_t write_callback(char* ptr, size_t size, size_t nmemb, void* userdat
     return size * nmemb;
 }
 
-Crawler::Crawler(const Config& cfg) : config_(cfg) {
+Crawler::Crawler(const Config& cfg) : config_(cfg), current_proxy_(""), current_proxy_type_("") {
     curl_global_init(CURL_GLOBAL_DEFAULT);
     
     // 配置 WBI 签名的 SESSDATA API
@@ -368,6 +368,7 @@ void Crawler::rotate_proxy() {
         std::uniform_int_distribution<> dis(0, short_proxies.size() - 1);
         std::string new_proxy = short_proxies[dis(gen)];
         current_proxy_ = new_proxy;
+        current_proxy_type_ = "short";  // 短效代理
         std::cout << "[Proxy] Switched to saved short proxy: " << current_proxy_ << std::endl;
         return;
     }
@@ -376,6 +377,7 @@ void Crawler::rotate_proxy() {
     try {
         std::string new_proxy = fetch_short_proxy();
         current_proxy_ = new_proxy;
+        current_proxy_type_ = "short";  // 短效代理
         std::cout << "[Proxy] Switched to new short proxy: " << current_proxy_ << std::endl;
         return;
     } catch (const std::exception& e) {
@@ -386,10 +388,12 @@ void Crawler::rotate_proxy() {
     try {
         std::string new_proxy = fetch_proxy();
         current_proxy_ = new_proxy;
+        current_proxy_type_ = "exclusive";  // 独享代理
         std::cout << "[Proxy] Switched to exclusive proxy: " << current_proxy_ << std::endl;
     } catch (const std::exception& e) {
         std::cout << "[Proxy] All proxy methods failed: " << e.what() << ", staying on local IP" << std::endl;
         current_proxy_.clear();  // 切换回直连
+        current_proxy_type_.clear();
     }
 }
 
@@ -398,6 +402,7 @@ void Crawler::reset_to_direct() {
     if (!current_proxy_.empty()) {
         std::cout << "[Reset] Video finished, resetting to direct connection" << std::endl;
         current_proxy_.clear();
+        current_proxy_type_.clear();
     }
 }
 
@@ -441,14 +446,25 @@ std::string Crawler::http_get(const std::string& url, const std::string& cookie)
     // 禁用环境变量代理
     curl_easy_setopt(curl, CURLOPT_NOPROXY, "*");
 
-    // 挂代理池的代理（账密认证）
+    // 挂代理池的代理（根据代理类型使用不同账密）
     std::string proxy = get_proxy();
     if (!proxy.empty()) {
         std::string proxy_url = "http://" + proxy;
         curl_easy_setopt(curl, CURLOPT_PROXY, proxy_url.c_str());
-        if (!config_.proxy_user.empty()) {
-            std::string auth = config_.proxy_user + ":" + config_.proxy_pass;
-            curl_easy_setopt(curl, CURLOPT_PROXYUSERPWD, auth.c_str());
+        
+        // 根据代理类型选择正确的账密
+        if (current_proxy_type_ == "short") {
+            // 短效代理
+            if (!config_.short_proxy_user.empty()) {
+                std::string auth = config_.short_proxy_user + ":" + config_.short_proxy_pass;
+                curl_easy_setopt(curl, CURLOPT_PROXYUSERPWD, auth.c_str());
+            }
+        } else {
+            // 独享代理或其他
+            if (!config_.proxy_user.empty()) {
+                std::string auth = config_.proxy_user + ":" + config_.proxy_pass;
+                curl_easy_setopt(curl, CURLOPT_PROXYUSERPWD, auth.c_str());
+            }
         }
     }
 
