@@ -2,6 +2,7 @@ import json
 import requests
 from django.http import JsonResponse, HttpResponseNotAllowed
 from django.views.decorators.csrf import csrf_exempt
+from django.utils import timezone
 from .services import process_video, check_need_refresh, crawl_video_info, crawl_audio_url, is_video_processing, ensure_valid_cookie
 from .analytics import get_comprehensive_dashboard, get_user_profile_dashboard
 from .models import UserConfig, Video, Comment, Danmu, AudioSentiment
@@ -345,6 +346,31 @@ def video_dashboard(request, bvid):
     if request.method == 'GET':
         try:
             print(f"[Dashboard] 请求视频: {bvid}")
+
+            # === 记录用户视频历史 ===
+            user_id = request.session.get('user_id')
+            
+            def record_video_history(uid, bv):
+                if uid and bv:
+                    try:
+                        from analysis.models import UserVideoHistory, Video
+                        # 确保视频存在
+                        video, _ = Video.objects.get_or_create(bvid=bv)
+                        # 创建或更新历史记录
+                        history, created = UserVideoHistory.objects.update_or_create(
+                            user_id=uid,
+                            video=video,
+                            defaults={'analyzed_at': timezone.now()}
+                        )
+                        print(f"[History] 用户 {uid} 分析了视频 {bv}")
+                    except Exception as e:
+                        print(f"[History] 记录历史失败: {e}")
+            
+            # 记录用户分析历史（异步，不阻塞主流程）
+            if user_id:
+                import threading
+                threading.Thread(target=record_video_history, args=(user_id, bvid)).start()
+            # === 历史记录逻辑结束 ===
 
             headers = {
                 'authority': 'api.bilibili.com',

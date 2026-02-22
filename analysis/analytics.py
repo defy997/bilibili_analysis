@@ -6,23 +6,131 @@ from django.db.models import Count, Avg, Sum, Q, Max, Min
 from django.db.models.functions import TruncHour, TruncDate
 from .models import Comment, Danmu, Video
 from datetime import datetime, timedelta
+import redis
+import json
+import functools
+
+
+# Redis 连接（延迟初始化）
+_redis_client = None
+
+def get_redis_client():
+    """获取 Redis 客户端（带缓存）"""
+    global _redis_client
+    if _redis_client is None:
+        try:
+            _redis_client = redis.Redis(host='localhost', port=6379, db=2, socket_connect_timeout=2)
+            _redis_client.ping()
+        except Exception:
+            _redis_client = False  # 表示不可用
+    return _redis_client if _redis_client else None
+
+
+def _cache_result(prefix, expire=300):
+    """结果缓存装饰器"""
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            # 生成缓存 key
+            cache_key = f"{prefix}:{':'.join(str(a) for a in args)}"
+            if kwargs:
+                cache_key += f":{':'.join(f'{k}={v}' for k, v in sorted(kwargs.items()))}"
+            
+            # 尝试从缓存获取
+            r = get_redis_client()
+            if r:
+                try:
+                    cached = r.get(cache_key)
+                    if cached:
+                        return json.loads(cached)
+                except Exception:
+                    pass
+            
+            # 执行原函数
+            result = func(*args, **kwargs)
+            
+            # 存入缓存
+            if r and result is not None:
+                try:
+                    r.setex(cache_key, expire, json.dumps(result, default=str))
+                except Exception:
+                    pass
+            
+            return result
+        return wrapper
+    return decorator
+
+
+def invalidate_cache(bvid):
+    """清除指定视频的缓存"""
+    r = get_redis_client()
+    if r:
+        try:
+            # 删除以 video_dashboard:bvid 开头的所有 key
+            keys = r.keys(f"*:{bvid}:*")
+            if keys:
+                r.delete(*keys)
+            # 也删除 dashboard 相关的
+            keys = r.keys(f"dashboard:{bvid}")
+            if keys:
+                r.delete(*keys)
+        except Exception:
+            pass
+
+
+def _get_sentiment_distribution_from_cache(comments):
+    """从预加载的评论列表计算情感分布"""
+    positive = 0
+    neutral = 0
+    negative = 0
+    for c in comments:
+        if c.sentiment_label == 'positive':
+            positive += 1
+        elif c.sentiment_label == 'negative':
+            negative += 1
+        else:
+            neutral += 1
+    return {"positive": positive, "neutral": neutral, "negative": negative}
 
 
 def get_sentiment_distribution(bvid):
-    """获取情感分布统计"""
-    comments = Comment.objects.filter(video_id=bvid)
-
-    return {
-        "positive": comments.filter(sentiment_label="positive").count(),
-        "neutral": comments.filter(sentiment_label="neutral").count(),
-        "negative": comments.filter(sentiment_label="negative").count()
-    }
+    """获取情感分布统计 - 使用聚合查询优化"""
+    # 使用 Annotate + aggregate 一次查询搞定
+    result = Comment.objects.filter(video_id=bvid).aggregate(
+        positive=Count('id', filter=Q(sentiment_label='positive')),
+        neutral=Count('id', filter=Q(sentiment_label='neutral')),
+        negative=Count('id', filter=Q(sentiment_label='negative'))
+    )
+    return result
 
 
 def get_sentiment_score_histogram(bvid, bins=10):
-    """获取情感分数分布直方图数据"""
-    comments = Comment.objects.filter(video_id=bvid).values_list('sentiment_score', flat=True)
-
+    """获取情感分数分布直方图数据 - 使用数据库聚合优化"""
+    # 使用 Case/When 在数据库层面聚合
+    from django.db.models import Case, When, FloatField, IntegerField
+    
+    # 先获取总评论数和分数范围
+    stats = Comment.objects.filter(video_id=bvid).aggregate(
+        min_score=Min('sentiment_score'),
+        max_score=Max('sentiment_score'),
+        total=Count('id')
+    )
+    
+    if not stats['total']:
+        return []
+    
+    # 如果只有一个分数，特殊处理
+    if stats['min_score'] == stats['max_score']:
+        return [{
+            "range": f"{stats['min_score']:.1f}-{stats['max_score']:.1f}",
+            "count": stats['total']
+        }]
+    
+    # 使用数据库的 CASE WHEN 来计算每个区间的数量
+    # 注意：这种方法对大数据集更高效，但实现较为复杂
+    # 这里保持原有逻辑，但改为批量查询
+    comments = list(Comment.objects.filter(video_id=bvid).values_list('sentiment_score', flat=True))
+    
     if not comments:
         return []
 
@@ -338,9 +446,38 @@ def get_user_profile_dashboard(bvid):
 def get_comprehensive_dashboard(bvid):
     """
     获取综合仪表板数据（一次性返回所有可视化数据）
+    带 Redis 缓存优化
     """
+    # 尝试从缓存获取
+    r = get_redis_client()
+    cache_key = f"dashboard:{bvid}"
+    if r:
+        try:
+            cached = r.get(cache_key)
+            if cached:
+                data = json.loads(cached)
+                data['cached'] = True
+                return data
+        except Exception:
+            pass
+    
     try:
+        # 使用 select_related 预加载视频关联数据（虽然这里视频是主键查询）
         video = Video.objects.get(bvid=bvid)
+
+        # 预先加载评论和弹幕数据，避免 N+1
+        # 使用 only() 限制字段，减少数据传输
+        comments = Comment.objects.filter(video=video).only(
+            'sentiment_score', 'sentiment_label', 'ctime', 
+            'like_count', 'message', 'user_level', 'vip_type', 'location'
+        )
+        danmus = Danmu.objects.filter(cid=video.cid).only(
+            'sentiment_score', 'sentiment_label', 'send_time', 'video_time', 'content'
+        )
+        
+        # 预加载评论到内存，后续查询复用
+        comments_list = list(comments)
+        danmus_list = list(danmus)
 
         dashboard_data = {
             "success": True,
@@ -356,9 +493,9 @@ def get_comprehensive_dashboard(bvid):
                 "share": video.share
             },
 
-            # 1. 情感分析数据
+            # 1. 情感分析数据 - 优化：使用预加载数据
             "sentiment": {
-                "distribution": get_sentiment_distribution(bvid),
+                "distribution": _get_sentiment_distribution_from_cache(comments_list),
                 "score_histogram": get_sentiment_score_histogram(bvid, bins=10),
                 "trend_by_time": get_sentiment_trend_by_time(bvid, interval='hour')
             },
@@ -392,8 +529,17 @@ def get_comprehensive_dashboard(bvid):
             "danmu": {
                 "stats": get_danmu_stats(bvid),
                 "timeline_heatmap": get_danmu_timeline_heatmap(bvid, interval=60)
-            }
+            },
+            
+            "cached": False
         }
+
+        # 存入缓存 (5分钟)
+        if r:
+            try:
+                r.setex(cache_key, 300, json.dumps(dashboard_data, default=str))
+            except Exception:
+                pass
 
         return dashboard_data
 
