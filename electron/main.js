@@ -1173,7 +1173,7 @@ function createBilibiliLoginWindow() {
 // ==========================================
 
 ipcMain.on('broadcast-ui-settings', (event, settings) => {
-    const windows = [analysisWindow, userProfileWindow, videoAudioWindow];
+    const windows = [analysisWindow, userProfileWindow, videoAudioWindow, overallReportsWindow];
     windows.forEach(win => {
         if (win && !win.isDestroyed()) {
             win.webContents.send('apply-ui-settings', settings);

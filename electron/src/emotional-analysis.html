@@ -1013,6 +1013,9 @@
             const g = parseInt(hex.substring(2, 4), 16);
             const b = parseInt(hex.substring(4, 6), 16);
 
+            // 设置 body 背景色
+            document.body.style.backgroundColor = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+
             const style = document.getElementById('dynamic-theme') || document.createElement('style');
             style.id = 'dynamic-theme';
             style.textContent = `
