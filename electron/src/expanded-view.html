@@ -533,9 +533,10 @@
         </div>
     </div>
 
+    <script src="js/shared.js"></script>
     <script>
         const { ipcRenderer } = require('electron');
-        const API_BASE = 'http://118.25.39.91:8000';
+        // API_BASE → shared.js
 
         let currentBvId = null;
         let charts = {};

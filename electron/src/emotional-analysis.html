@@ -7,59 +7,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
-        html, body {
-            height: 100%;
-            margin: 0;
-            padding: 0;
-        }
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: transparent;
-        }
-        .glass-panel {
-            background: rgba(20, 20, 30, 0.6);
-            -webkit-backdrop-filter: blur(20px);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-        }
-        .stat-card {
-            transition: all 0.3s ease;
-        }
-        .stat-card:hover {
-            transform: translateY(-2px);
-            background: rgba(255, 255, 255, 0.15);
-        }
-        /* 拖拽区域样式 */
-        .drag-area {
-            -webkit-app-region: drag;
-            cursor: grab;
-        }
-        .drag-area:active {
-            cursor: grabbing;
-        }
-        /* 防止按钮被拖拽 */
-        .no-drag {
-            -webkit-app-region: no-drag;
-        }
-        /* 自定义滚动条样式 */
-        .overflow-y-auto::-webkit-scrollbar {
-            width: 8px;
-        }
-        .overflow-y-auto::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 4px;
-        }
-        .overflow-y-auto::-webkit-scrollbar-thumb {
-            background: rgba(244, 114, 182, 0.3);
-            border-radius: 4px;
-        }
-        .overflow-y-auto::-webkit-scrollbar-thumb:hover {
-            background: rgba(244, 114, 182, 0.5);
-        }
-    </style>
+    <link rel="stylesheet" href="css/shared.css">
+    <!-- pink scrollbar is the default in shared.css — no override needed -->
 </head>
 <body class="h-full w-full text-white overflow-hidden">
 
@@ -205,6 +154,7 @@
         </div>
     </div>
 
+    <script src="js/shared.js"></script>
     <script>
         const { ipcRenderer } = require('electron');
 
@@ -929,15 +879,7 @@
             }
         }
 
-        // === 显示/隐藏加载指示器 ===
-        function showLoading(show) {
-            const loader = document.getElementById('loading-indicator');
-            if (show) {
-                loader.classList.remove('hidden');
-            } else {
-                loader.classList.add('hidden');
-            }
-        }
+        // showLoading() → shared.js
 
         // === 显示错误信息 ===
         function showError(message) {
@@ -1186,43 +1128,10 @@
             }
         }
 
-        // === Theme support ===
-        function applyTheme(bgColor, opacity) {
-            const hex = bgColor.replace('#', '');
-            const r = parseInt(hex.substring(0, 2), 16);
-            const g = parseInt(hex.substring(2, 4), 16);
-            const b = parseInt(hex.substring(4, 6), 16);
-
-            // 设置 body 背景色
-            document.body.style.backgroundColor = `rgba(${r}, ${g}, ${b}, ${opacity})`;
-
-            const style = document.getElementById('dynamic-theme') || document.createElement('style');
-            style.id = 'dynamic-theme';
-            style.textContent = `
-                .glass-panel { background: rgba(${r}, ${g}, ${b}, ${opacity * 0.6}) !important; }
-                .drag-area { background-color: rgba(${r}, ${g}, ${b}, ${opacity * 0.8}) !important; }
-                .stat-card:hover { background: rgba(${r}, ${g}, ${b}, ${opacity * 0.4}) !important; }
-            `;
-            if (!document.getElementById('dynamic-theme')) {
-                document.head.appendChild(style);
-            }
-        }
-
+        // applyTheme() + loadThemeFromConfig() → shared.js
         ipcRenderer.on('apply-ui-settings', (event, settings) => {
             applyTheme(settings.bgColor, settings.opacity);
         });
-
-        async function loadThemeFromConfig() {
-            try {
-                const resp = await fetch('http://118.25.39.91:8000/api/config/');
-                const result = await resp.json();
-                if (result.success && result.data?.ui_config) {
-                    applyTheme(result.data.ui_config.background_color, result.data.ui_config.opacity);
-                }
-            } catch (e) {
-                console.error('Failed to load theme:', e);
-            }
-        }
 
         // 窗口大小变化时重绘图表
         window.addEventListener('resize', () => {

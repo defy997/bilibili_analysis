@@ -1,0 +1,74 @@
+/* =====================================================================
+   BiliMood · Shared Styles
+   Included by every analysis panel HTML file.
+   ===================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+
+/* ── Base ──────────────────────────────────────────────────────────── */
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: transparent;
+}
+
+/* ── Glass panel ───────────────────────────────────────────────────── */
+.glass-panel {
+    background: rgba(20, 20, 30, 0.6);
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ── Stat card ─────────────────────────────────────────────────────── */
+.stat-card {
+    transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* ── Drag regions ──────────────────────────────────────────────────── */
+.drag-area {
+    -webkit-app-region: drag;
+    cursor: grab;
+}
+
+.drag-area:active {
+    cursor: grabbing;
+}
+
+.no-drag {
+    -webkit-app-region: no-drag;
+}
+
+/* ── Scrollbar (thumb color via CSS variable per page) ─────────────── */
+:root {
+    --scrollbar-thumb:       rgba(244, 114, 182, 0.3);
+    --scrollbar-thumb-hover: rgba(244, 114, 182, 0.5);
+}
+
+.overflow-y-auto::-webkit-scrollbar {
+    width: 8px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 4px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+}
