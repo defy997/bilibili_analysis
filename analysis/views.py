@@ -143,16 +143,30 @@ def async_analyze_video(request):
                     "message": "视频正在被其他请求处理"
                 })
 
-            # 检查视频是否已有数据
+            # 检查视频是否已有数据 AND 情感分析已完成
             try:
                 video = Video.objects.get(bvid=bvid)
                 if video.raw_comment_count and video.raw_comment_count > 0:
-                    # 已有数据，返回已缓存状态
-                    return JsonResponse({
-                        "success": True,
-                        "status": "cached",
-                        "message": "视频数据已存在"
-                    })
+                    # 检查评论情感分析是否已完成（不只是有原始评论）
+                    from analysis.models import Comment
+                    # 统计已分析（非默认0.5分数）的评论数量
+                    analyzed_count = Comment.objects.filter(video=video).exclude(sentiment_score=0.5).count()
+                    # 同时检查弹幕情感分析
+                    from analysis.models import Danmu
+                    danmu_analyzed_count = Danmu.objects.filter(cid=video.cid).exclude(sentiment_score=0.5).count()
+
+                    if analyzed_count > 0 or danmu_analyzed_count > 0:
+                        # 情感分析已完成，返回已缓存状态
+                        return JsonResponse({
+                            "success": True,
+                            "status": "cached",
+                            "message": "视频情感分析已完成",
+                            "data": {
+                                "comment_count": analyzed_count,
+                                "danmu_count": danmu_analyzed_count
+                            }
+                        })
+                    # 否则继续提交分析任务
             except Video.DoesNotExist:
                 pass
 

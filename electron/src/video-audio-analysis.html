@@ -374,7 +374,26 @@
                 showLoading(true);
                 console.log('Loading data for:', bvId);
 
-                // 1. 先尝试触发异步分析（评论和弹幕）
+                // 1. 直接调用 audio dashboard API 检查是否有已有数据
+                // 优先检查音频数据是否存在，这是最可靠的判断方式
+                let audioData = null;
+                try {
+                    const audioResp = await fetch(`http://118.25.39.91:8000/api/video/audio-dashboard/${bvId}/`);
+                    audioData = await audioResp.json();
+                    console.log('[LoadData] Audio dashboard response:', JSON.stringify(audioData, null, 2));
+
+                    // 如果音频数据已存在（status === 'analyzed'），直接显示
+                    if (audioData.success && audioData.audio && audioData.audio.status === 'analyzed') {
+                        console.log('[LoadData] 音频数据已存在，直接显示');
+                        showLoading(false);
+                        updateUI(audioData);
+                        return;
+                    }
+                } catch (audioErr) {
+                    console.warn('[LoadData] 音频数据获取失败:', audioErr);
+                }
+
+                // 2. 如果没有音频数据，尝试触发异步分析
                 try {
                     const analyzeResp = await fetch(`http://118.25.39.91:8000/api/video/async-analyze/`, {
                         method: 'POST',
@@ -389,7 +408,7 @@
                         await pollAnalysisTasks(analyzeData.tasks, bvId);
                         return;
                     } else if (analyzeData.status === 'cached') {
-                        console.log('[LoadData] 数据已缓存');
+                        console.log('[LoadData] 数据已缓存，继续加载 dashboard...');
                     } else if (analyzeData.status === 'already_processing') {
                         console.log('[LoadData] 视频正在被其他请求处理，轮询 audio dashboard...');
                         await pollAudioDashboardUntilReady(bvId);
@@ -399,7 +418,8 @@
                     console.warn('[LoadData] 异步分析触发失败:', analyzeErr);
                 }
 
-                // 2. 调用 audio dashboard API
+                // 3. 调用 audio dashboard API 获取数据
+                // 重新获取，因为上面可能已经有新数据
                 const response = await fetch(`http://118.25.39.91:8000/api/video/audio-dashboard/${bvId}/`);
                 const data = await response.json();
                 console.log('API Response:', JSON.stringify(data, null, 2));
@@ -436,8 +456,10 @@
                         const resp = await fetch(`http://118.25.39.91:8000/api/video/audio-dashboard/${bvId}/`);
                         const data = await resp.json();
 
-                        if (data.success && data.data &&
-                            (data.data.timeline_length > 0 || data.data.comment_count > 0)) {
+                        // 修正：检查正确的数据结构 data.audio.status 和 data.audio.timeline
+                        if (data.success && data.audio &&
+                            (data.audio.status === 'analyzed' ||
+                             (data.audio.timeline && data.audio.timeline.length > 0))) {
                             clearInterval(timer);
                             if (loadingText) loadingText.innerText = 'Analysis Complete!';
                             setTimeout(() => {
