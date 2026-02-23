@@ -729,6 +729,30 @@ def get_multimodal_emotion_analysis(bvid, video_type='general'):
         # 11. 获取详细音频情感分布（6分类）
         audio_emotion_detail = get_audio_emotion_detail(audio_sentiments)
 
+        # 12. 保存多模态结果到数据库
+        from .models import MultimodalSentiment
+        multimodal, created = MultimodalSentiment.objects.update_or_create(
+            video=video,
+            defaults={
+                'fused_positive': fused_emotion['positive'],
+                'fused_neutral': fused_emotion['neutral'],
+                'fused_negative': fused_emotion['negative'],
+                'audio_weight': attention_weights['audio'],
+                'text_weight': attention_weights['text'],
+                'danmu_weight': attention_weights['danmu'],
+                'audio_emotion': audio_emotion,
+                'text_emotion': text_emotion,
+                'danmu_emotion': danmu_emotion,
+                'has_conflict': conflict_info.get('has_conflict', False),
+                'conflict_details': conflict_info.get('conflicts', []),
+                'video_type': video_type,
+                'dominant_emotion': dominant_emotion,
+                'emotion_strength': emotion_strength,
+                'overall_score': overall_score,
+            }
+        )
+        print(f"[Multimodal] {'创建' if created else '更新'}多模态情感分析: {bvid}")
+
         return {
             'success': True,
             'fused_emotion': {

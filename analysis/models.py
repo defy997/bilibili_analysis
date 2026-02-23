@@ -107,6 +107,78 @@ class AudioSentiment(models.Model):
         return f"AudioSentiment({self.video_id}, t={self.time_offset}s)"
 
 
+class MultimodalSentiment(models.Model):
+    """多模态情感融合结果表"""
+    video = models.OneToOneField(
+        Video, on_delete=models.CASCADE,
+        related_name='multimodal_sentiment',
+        verbose_name="视频"
+    )
+
+    # 融合后的三分类结果
+    fused_positive = models.FloatField(default=0.33, verbose_name="融合正面概率")
+    fused_neutral = models.FloatField(default=0.33, verbose_name="融合中性概率")
+    fused_negative = models.FloatField(default=0.34, verbose_name="融合负面概率")
+
+    # 各模态注意力权重
+    audio_weight = models.FloatField(default=0.35, verbose_name="音频权重")
+    text_weight = models.FloatField(default=0.35, verbose_name="文本权重")
+    danmu_weight = models.FloatField(default=0.3, verbose_name="弹幕权重")
+
+    # 各模态原始情感分布（JSON存储）
+    audio_emotion = models.JSONField(default=dict, verbose_name="音频情感分布")
+    text_emotion = models.JSONField(default=dict, verbose_name="文本情感分布")
+    danmu_emotion = models.JSONField(default=dict, verbose_name="弹幕情感分布")
+
+    # 冲突检测
+    has_conflict = models.BooleanField(default=False, verbose_name="是否存在情感冲突")
+    conflict_details = models.JSONField(default=dict, verbose_name="冲突详情")
+
+    # 元数据
+    video_type = models.CharField(max_length=20, default='general', verbose_name="视频类型")
+    dominant_emotion = models.CharField(max_length=20, default='neutral', verbose_name="主导情感")
+    emotion_strength = models.FloatField(default=0.0, verbose_name="情感强度")
+    overall_score = models.FloatField(default=0.5, verbose_name="综合得分")
+    analyzed_at = models.DateTimeField(auto_now=True, verbose_name="分析时间")
+
+    class Meta:
+        db_table = 'multimodal_sentiments'
+        verbose_name = "多模态情感分析"
+        verbose_name_plural = "多模态情感分析"
+
+    def __str__(self):
+        return f"MultimodalSentiment({self.video_id}, {self.dominant_emotion})"
+
+    def to_dict(self):
+        """转换为字典"""
+        return {
+            'fused_emotion': {
+                'positive': self.fused_positive,
+                'neutral': self.fused_neutral,
+                'negative': self.fused_negative
+            },
+            'attention_weights': {
+                'audio': self.audio_weight,
+                'text': self.text_weight,
+                'danmu': self.danmu_weight
+            },
+            'modal_emotions': {
+                'audio': self.audio_emotion,
+                'text': self.text_emotion,
+                'danmu': self.danmu_emotion
+            },
+            'conflict': {
+                'has_conflict': self.has_conflict,
+                'details': self.conflict_details
+            },
+            'video_type': self.video_type,
+            'dominant_emotion': self.dominant_emotion,
+            'emotion_strength': self.emotion_strength,
+            'overall_score': self.overall_score,
+            'analyzed_at': self.analyzed_at.isoformat() if self.analyzed_at else None
+        }
+
+
 class UserConfig(models.Model):
     """用户配置表（单例模式，只有一条记录）"""
     # 数据过滤配置
