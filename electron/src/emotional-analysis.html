@@ -487,6 +487,7 @@
                         body: JSON.stringify({ bvid: bvId })
                     });
                     const analyzeData = await analyzeResp.json();
+                    console.log('[LoadData] async-analyze response:', analyzeData);
 
                     if (analyzeData.success && analyzeData.status === 'processing') {
                         // 有任务在进行中，开始轮询
@@ -494,8 +495,17 @@
                         await pollAnalysisTasks(analyzeData.tasks, bvId);
                         return; // 轮询完成后会自动加载 dashboard
                     } else if (analyzeData.status === 'cached') {
-                        console.log('[LoadData] 数据已缓存');
-                        // 继续加载 dashboard
+                        console.log('[LoadData] 数据已缓存，检查数据是否有效...');
+                        // 即使是cached，也可能数据正在爬取中，需要检查dashboard数据是否有效
+                        const isValid = await checkDashboardDataValid(bvId);
+                        if (!isValid) {
+                            // 数据无效（还在爬取中），进入轮询
+                            console.log('[LoadData] 数据无效，继续轮询...');
+                            await pollDashboardUntilReady(bvId);
+                            return;
+                        }
+                        // 数据有效，继续加载dashboard
+                        console.log('[LoadData] 数据有效，加载dashboard');
                     } else if (analyzeData.status === 'already_processing') {
                         console.log('[LoadData] 视频正在被其他请求处理，轮询 dashboard...');
                         await pollDashboardUntilReady(bvId);
@@ -506,14 +516,23 @@
                     // 继续尝试同步加载
                 }
 
-                // 2. 调用 dashboard API
+                // 2. 调用 dashboard API（最终加载数据）
                 const response = await fetch(`http://118.25.39.91:8000/api/video/dashboard/${bvId}/`);
                 const data = await response.json();
+                console.log('[LoadData] dashboard response:', data);
 
                 // 隐藏加载指示器
                 showLoading(false);
 
                 if (data.success) {
+                    // 额外检查：如果数据为空，可能还在爬取，再轮询一次
+                    const commentCount = data.sentiment?.distribution?.positive + data.sentiment?.distribution?.neutral + data.sentiment?.distribution?.negative || 0;
+                    const danmuCount = data.danmu?.timeline_heatmap?.length || 0;
+                    if (commentCount === 0 && danmuCount === 0) {
+                        console.log('[LoadData] 初始数据为空，尝试轮询等待...');
+                        await pollDashboardUntilReady(bvId);
+                        return;
+                    }
                     updateUI(data);
                 } else {
                     console.error('数据加载失败:', data.error);
@@ -540,10 +559,27 @@
             }
         }
 
+        // === 检查dashboard数据是否有效（不为空）===
+        async function checkDashboardDataValid(bvId) {
+            try {
+                const resp = await fetch(`http://118.25.39.91:8000/api/video/dashboard/${bvId}/`);
+                const data = await resp.json();
+                if (data.success) {
+                    const commentCount = data.sentiment?.distribution?.positive + data.sentiment?.distribution?.neutral + data.sentiment?.distribution?.negative || 0;
+                    const danmuCount = data.danmu?.timeline_heatmap?.length || 0;
+                    console.log(`[checkDashboardDataValid] commentCount: ${commentCount}, danmuCount: ${danmuCount}`);
+                    return commentCount > 0 || danmuCount > 0;
+                }
+            } catch (err) {
+                console.error('[checkDashboardDataValid] error:', err);
+            }
+            return false;
+        }
+
         // === 无任务ID时轮询 dashboard，等待数据就绪（already_processing 场景）===
         async function pollDashboardUntilReady(bvId) {
             const pollInterval = 3000;
-            const maxAttempts = 40; // 40 * 3s = 2分钟
+            const maxAttempts = 60; // 增加到60次，3分钟
             let attempts = 0;
 
             const loadingTasks = document.getElementById('loading-tasks');
@@ -565,9 +601,18 @@
                     try {
                         const resp = await fetch(`http://118.25.39.91:8000/api/video/dashboard/${bvId}/`);
                         const data = await resp.json();
+                        console.log(`[PollDashboard] attempt ${attempts}:`, data);
 
-                        if (data.success && data.data &&
-                            (data.data.comment_count > 0 || data.data.danmu_count > 0)) {
+                        // 检查正确的API返回结构
+                        const pos = data.sentiment?.distribution?.positive || 0;
+                        const neu = data.sentiment?.distribution?.neutral || 0;
+                        const neg = data.sentiment?.distribution?.negative || 0;
+                        const commentCount = pos + neu + neg;
+                        const danmuCount = data.danmu?.timeline_heatmap?.length || 0;
+
+                        console.log(`[PollDashboard] commentCount: ${commentCount}, danmuCount: ${danmuCount}`);
+
+                        if (data.success && (commentCount > 0 || danmuCount > 0)) {
                             clearInterval(timer);
                             if (loadingProgress) {
                                 loadingProgress.style.width = '100%';
@@ -575,6 +620,7 @@
                                 loadingProgress.classList.add('bg-green-500');
                             }
                             if (loadingTitle) loadingTitle.innerText = 'Analysis Complete!';
+                            if (loadingSubtitle) loadingSubtitle.innerText = `${commentCount} comments, ${danmuCount} danmu`;
                             setTimeout(() => {
                                 if (loadingTasks) loadingTasks.classList.add('hidden');
                                 showLoading(false);
@@ -586,6 +632,7 @@
                         // 更新进度动画
                         const progress = Math.min(20 + attempts * 2, 85);
                         if (loadingProgress) loadingProgress.style.width = `${progress}%`;
+                        if (loadingSubtitle) loadingSubtitle.innerText = `Waiting... ${attempts}/${maxAttempts}`;
                     } catch (err) {
                         console.error('[PollDashboard] 轮询错误:', err);
                     }

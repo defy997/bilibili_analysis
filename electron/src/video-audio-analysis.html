@@ -382,13 +382,20 @@
                     audioData = await audioResp.json();
                     console.log('[LoadData] Audio dashboard response:', JSON.stringify(audioData, null, 2));
 
-                    // 如果音频数据已存在（status === 'analyzed'），直接显示
-                    if (audioData.success && audioData.audio && audioData.audio.status === 'analyzed') {
+                    // 如果音频数据已存在（status === 'analyzed' 或者 timeline 有数据），直接显示
+                    const hasAudioData = audioData.success &&
+                        audioData.audio &&
+                        (audioData.audio.status === 'analyzed' ||
+                         (audioData.audio.timeline && audioData.audio.timeline.length > 0));
+
+                    if (hasAudioData) {
                         console.log('[LoadData] 音频数据已存在，直接显示');
                         showLoading(false);
                         updateUI(audioData);
                         return;
                     }
+
+                    console.log('[LoadData] 音频数据不存在，status:', audioData.audio?.status);
                 } catch (audioErr) {
                     console.warn('[LoadData] 音频数据获取失败:', audioErr);
                 }
@@ -401,6 +408,7 @@
                         body: JSON.stringify({ bvid: bvId })
                     });
                     const analyzeData = await analyzeResp.json();
+                    console.log('[LoadData] async-analyze response:', analyzeData);
 
                     if (analyzeData.success && analyzeData.status === 'processing') {
                         console.log('[LoadData] 异步任务已提交，开始轮询...');
@@ -408,7 +416,14 @@
                         await pollAnalysisTasks(analyzeData.tasks, bvId);
                         return;
                     } else if (analyzeData.status === 'cached') {
-                        console.log('[LoadData] 数据已缓存，继续加载 dashboard...');
+                        console.log('[LoadData] 数据已缓存，检查是否需要触发音频分析...');
+                        // 检查是否需要触发音频分析
+                        if (audioData && audioData.audio && audioData.audio.status === 'ready') {
+                            // 音频数据还没有，触发音频分析
+                            console.log('[LoadData] 音频未分析，触发分析...');
+                            await triggerAudioAnalysis(bvId);
+                            return;
+                        }
                     } else if (analyzeData.status === 'already_processing') {
                         console.log('[LoadData] 视频正在被其他请求处理，轮询 audio dashboard...');
                         await pollAudioDashboardUntilReady(bvId);
@@ -684,6 +699,53 @@
                     comparisonChart.resize();
                 }, 100);
                 console.log('Comparison chart updated:', dist);
+            }
+        }
+
+        // === 触发音频分析 (供 loadData 调用) ===
+        async function triggerAudioAnalysis(bvId) {
+            console.log('[triggerAudioAnalysis] 触发音频分析 for:', bvId);
+            const analyzeBtn = document.getElementById('analyze-btn');
+            if (analyzeBtn) {
+                analyzeBtn.disabled = true;
+                analyzeBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Analyzing...';
+            }
+            showLoading(true);
+
+            try {
+                const resp = await fetch(`http://118.25.39.91:8000/api/video/audio-dashboard/${bvId}/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ force_refresh: false })
+                });
+                const data = await resp.json();
+                console.log('[triggerAudioAnalysis] response:', data);
+
+                if (data.success && (data.status === 'cached' || data.status === 'completed')) {
+                    // 同步完成或缓存命中，直接刷新
+                    showLoading(false);
+                    loadData(bvId);
+                    return;
+                }
+
+                if (data.success && data.task_id) {
+                    // Celery 异步，轮询
+                    pollTaskStatus(data.task_id);
+                } else {
+                    showLoading(false);
+                    if (analyzeBtn) {
+                        analyzeBtn.disabled = false;
+                        analyzeBtn.innerHTML = '<i class="fa-solid fa-waveform-lines mr-1"></i> Retry';
+                    }
+                    console.error('[triggerAudioAnalysis] failed:', data.error);
+                }
+            } catch (error) {
+                showLoading(false);
+                if (analyzeBtn) {
+                    analyzeBtn.disabled = false;
+                    analyzeBtn.innerHTML = '<i class="fa-solid fa-waveform-lines mr-1"></i> Retry';
+                }
+                console.error('[triggerAudioAnalysis] error:', error);
             }
         }
 
