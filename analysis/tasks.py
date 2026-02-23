@@ -1,6 +1,7 @@
 from celery import Celery, group, chain, shared_task
 from celery.result import AsyncResult
 import celery
+import json
 
 # 创建 Celery 应用实例（供其他模块导入）
 app = Celery('bilibili_analysis')
@@ -119,10 +120,18 @@ def crawl_and_analyze_comments(self, bvid, aid, headers=None, cookie=None):
         analyze_sentiment, get_sentiment_label, save_comment,
         crawl_video_info, save_video
     )
+    from .analytics import set_crawl_progress
     import time
 
     print(f"[CommentTask] 开始处理评论: bvid={bvid}, aid={aid}")
     start_time = time.time()
+    
+    # 初始化进度状态
+    set_crawl_progress(bvid, 'comments', {
+        'status': 'crawling',
+        'count': 0,
+        'message': '开始爬取评论...'
+    })
 
     try:
         # 1. 确保视频记录存在
@@ -140,6 +149,14 @@ def crawl_and_analyze_comments(self, bvid, aid, headers=None, cookie=None):
             return {'type': 'comments', 'status': 'no_data', 'count': 0}
 
         print(f"[CommentTask] 爬取完成，共{len(all_comments)}条，开始流水线处理...")
+
+        # 更新进度状态
+        set_crawl_progress(bvid, 'comments', {
+            'status': 'analyzing',
+            'count': 0,
+            'total': len(all_comments),
+            'message': f'开始分析 {len(all_comments)} 条评论...'
+        })
 
         # 3. 流水线处理：逐条清洗、分析、保存
         comment_count = 0
@@ -191,6 +208,15 @@ def crawl_and_analyze_comments(self, bvid, aid, headers=None, cookie=None):
                 pending_texts = []
                 pending_indices = []
 
+                # 每处理100条更新一次进度
+                if (i + 1) % 100 == 0:
+                    set_crawl_progress(bvid, 'comments', {
+                        'status': 'analyzing',
+                        'count': comment_count,
+                        'total': len(all_comments),
+                        'message': f'已分析 {i+1}/{len(all_comments)} 条评论'
+                    })
+
                 print(f"[CommentTask] 流水线处理进度: {i+1}/{len(all_comments)}")
 
         # 处理剩余的未分析数据
@@ -214,6 +240,16 @@ def crawl_and_analyze_comments(self, bvid, aid, headers=None, cookie=None):
         elapsed = time.time() - start_time
         print(f"[CommentTask] 评论分析完成: count={comment_count}, 耗时{elapsed:.2f}s")
 
+        # 更新最终进度状态
+        set_crawl_progress(bvid, 'comments', {
+            'status': 'completed',
+            'count': comment_count,
+            'positive': positive_count,
+            'negative': negative_count,
+            'neutral': neutral_count,
+            'message': f'评论分析完成，共 {comment_count} 条'
+        })
+
         result = {
             'type': 'comments',
             'status': 'success',
@@ -233,6 +269,12 @@ def crawl_and_analyze_comments(self, bvid, aid, headers=None, cookie=None):
         print(f"[CommentTask] 评论分析失败: {e}")
         import traceback
         traceback.print_exc()
+        
+        # 更新失败状态
+        set_crawl_progress(bvid, 'comments', {
+            'status': 'error',
+            'message': f'评论分析失败: {str(e)}'
+        })
         
         # 通知 Electron 任务失败
         notify_task_complete(bvid, 'comments', 'error', {'error': str(e)})
@@ -282,10 +324,18 @@ def crawl_and_analyze_danmu(self, bvid, cid, headers=None, cookie=None):
         crawl_danmaku, clean_text, is_meaningful_text,
         analyze_sentiment, get_sentiment_label, save_danmaku
     )
+    from .analytics import set_crawl_progress
     import time
 
     print(f"[DanmuTask] 开始处理弹幕: bvid={bvid}, cid={cid}")
     start_time = time.time()
+    
+    # 初始化进度状态
+    set_crawl_progress(bvid, 'danmu', {
+        'status': 'crawling',
+        'count': 0,
+        'message': '开始爬取弹幕...'
+    })
 
     try:
         # 1. 爬取弹幕
@@ -295,6 +345,14 @@ def crawl_and_analyze_danmu(self, bvid, cid, headers=None, cookie=None):
             return {'type': 'danmu', 'status': 'no_data', 'count': 0}
 
         print(f"[DanmuTask] 爬取完成，共{len(danmaku_list)}条，开始流水线处理...")
+
+        # 更新进度状态
+        set_crawl_progress(bvid, 'danmu', {
+            'status': 'analyzing',
+            'count': 0,
+            'total': len(danmaku_list),
+            'message': f'开始分析 {len(danmaku_list)} 条弹幕...'
+        })
 
         # 2. 流水线处理：逐条清洗、分析、保存
         danmu_count = 0
@@ -407,6 +465,16 @@ def crawl_and_analyze_danmu(self, bvid, cid, headers=None, cookie=None):
 
         elapsed = time.time() - start_time
         print(f"[DanmuTask] 弹幕分析完成: count={danmu_count}, 耗时{elapsed:.2f}s")
+
+        # 更新最终进度状态
+        set_crawl_progress(bvid, 'danmu', {
+            'status': 'completed',
+            'count': danmu_count,
+            'positive': positive_count,
+            'negative': negative_count,
+            'neutral': neutral_count,
+            'message': f'弹幕分析完成，共 {danmu_count} 条'
+        })
 
         result = {
             'type': 'danmu',

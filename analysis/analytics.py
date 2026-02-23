@@ -26,6 +26,75 @@ def get_redis_client():
     return _redis_client if _redis_client else None
 
 
+# ==================== 爬取进度追踪 (SSE) ====================
+
+def set_crawl_progress(bvid, progress_type, data):
+    """
+    设置爬取进度（供 Celery 任务调用）
+    
+    Args:
+        bvid: 视频BV号
+        progress_type: 'comments' | 'danmu' | 'audio' | 'overall'
+        data: 进度数据 dict
+    """
+    r = get_redis_client()
+    if not r:
+        return
+    
+    key = f"crawl_progress:{bvid}"
+    try:
+        # 获取现有进度
+        existing = r.hgetall(key) or {}
+        existing[progress_type] = json.dumps({
+            **data,
+            'updated_at': datetime.now().isoformat()
+        })
+        r.hmset(key, existing)
+        r.expire(key, 3600)  # 1小时过期
+    except Exception as e:
+        print(f"[Progress] 设置进度失败: {e}")
+
+
+def get_crawl_progress(bvid):
+    """
+    获取爬取进度
+    
+    Returns:
+        dict: {
+            'comments': {'count': 0, 'page': 0, 'status': 'pending'|'crawling'|'completed'},
+            'danmu': {'count': 0, 'status': 'pending'|'crawling'|'completed'},
+            'overall': {'stage': 'pending'|'crawling'|'analyzing'|'completed', 'percent': 0}
+        }
+    """
+    r = get_redis_client()
+    if not r:
+        return None
+    
+    key = f"crawl_progress:{bvid}"
+    try:
+        data = r.hgetall(key)
+        if not data:
+            return None
+        
+        result = {}
+        for k, v in data.items():
+            result[k] = json.loads(v) if isinstance(v, str) else v
+        return result
+    except Exception as e:
+        print(f"[Progress] 获取进度失败: {e}")
+        return None
+
+
+def clear_crawl_progress(bvid):
+    """清除爬取进度"""
+    r = get_redis_client()
+    if r:
+        try:
+            r.delete(f"crawl_progress:{bvid}")
+        except Exception:
+            pass
+
+
 def _cache_result(prefix, expire=300):
     """结果缓存装饰器"""
     def decorator(func):

@@ -490,25 +490,37 @@
                     console.log('[LoadData] async-analyze response:', analyzeData);
 
                     if (analyzeData.success && analyzeData.status === 'processing') {
-                        // 有任务在进行中，开始轮询
-                        console.log('[LoadData] 异步任务已提交，开始轮询:', analyzeData.tasks);
-                        await pollAnalysisTasks(analyzeData.tasks, bvId);
-                        return; // 轮询完成后会自动加载 dashboard
+                        // 有任务在进行中，使用 SSE 监听进度
+                        console.log('[LoadData] 异步任务已提交，开始 SSE 监听:', analyzeData.tasks);
+                        const sseResult = await listenCrawlProgress(bvId);
+                        
+                        // 如果 SSE 失败，回退到轮询
+                        if (sseResult === 'fallback') {
+                            console.log('[LoadData] SSE 失败，回退到轮询');
+                            await pollAnalysisTasks(analyzeData.tasks, bvId);
+                        }
+                        return; // 完成后会自动加载 dashboard
                     } else if (analyzeData.status === 'cached') {
                         console.log('[LoadData] 数据已缓存，检查数据是否有效...');
                         // 即使是cached，也可能数据正在爬取中，需要检查dashboard数据是否有效
                         const isValid = await checkDashboardDataValid(bvId);
                         if (!isValid) {
-                            // 数据无效（还在爬取中），进入轮询
-                            console.log('[LoadData] 数据无效，继续轮询...');
-                            await pollDashboardUntilReady(bvId);
+                            // 数据无效（还在爬取中），使用 SSE 监听
+                            console.log('[LoadData] 数据无效，使用 SSE 监听进度...');
+                            const sseResult = await listenCrawlProgress(bvId);
+                            if (sseResult === 'fallback') {
+                                await pollDashboardUntilReady(bvId);
+                            }
                             return;
                         }
                         // 数据有效，继续加载dashboard
                         console.log('[LoadData] 数据有效，加载dashboard');
                     } else if (analyzeData.status === 'already_processing') {
-                        console.log('[LoadData] 视频正在被其他请求处理，轮询 dashboard...');
-                        await pollDashboardUntilReady(bvId);
+                        console.log('[LoadData] 视频正在被其他请求处理，使用 SSE 监听...');
+                        const sseResult = await listenCrawlProgress(bvId);
+                        if (sseResult === 'fallback') {
+                            await pollDashboardUntilReady(bvId);
+                        }
                         return;
                     }
                 } catch (analyzeErr) {
@@ -574,6 +586,99 @@
                 console.error('[checkDashboardDataValid] error:', err);
             }
             return false;
+        }
+
+        // === 使用 SSE 监听爬取进度（实时推送，无需轮询）===
+        async function listenCrawlProgress(bvId) {
+            const loadingProgress = document.getElementById('loading-progress');
+            const loadingTitle = document.getElementById('loading-title');
+            const loadingSubtitle = document.getElementById('loading-subtitle');
+
+            return new Promise((resolve, reject) => {
+                const eventSource = new EventSource(`http://118.25.39.91:8000/api/video/crawl-progress/${bvId}/`);
+                
+                eventSource.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        console.log('[SSE] 收到进度更新:', data);
+
+                        // 处理不同类型的消息
+                        if (data.type === 'starting') {
+                            // 等待开始
+                            if (loadingTitle) loadingTitle.innerText = 'Starting...';
+                            if (loadingSubtitle) loadingSubtitle.innerText = data.message || 'Waiting for crawl to start...';
+                        } 
+                        else if (data.type === 'complete' || (data.overall && data.overall.stage === 'completed')) {
+                            // 所有任务完成
+                            eventSource.close();
+                            if (loadingProgress) {
+                                loadingProgress.style.width = '100%';
+                                loadingProgress.classList.remove('animate-pulse');
+                                loadingProgress.classList.add('bg-green-500');
+                            }
+                            if (loadingTitle) loadingTitle.innerText = 'Analysis Complete!';
+                            
+                            // 获取各任务结果
+                            const progress = data.progress || data;
+                            const comments = progress.comments || {};
+                            const danmu = progress.danmu || {};
+                            const totalCount = (comments.count || 0) + (danmu.count || 0);
+                            if (loadingSubtitle) loadingSubtitle.innerText = `${totalCount} items processed`;
+                            
+                            // 等待一小段时间后加载 dashboard
+                            setTimeout(() => resolve(), 1000);
+                        }
+                        else if (data.type === 'timeout') {
+                            // 超时
+                            eventSource.close();
+                            console.warn('[SSE] 进度监听超时');
+                            resolve(); // 仍然 resolve，让后续逻辑处理
+                        }
+                        else {
+                            // 正常进度更新
+                            const comments = data.comments || {};
+                            const danmu = data.danmu || {};
+                            const audio = data.audio || {};
+                            
+                            // 计算总体进度
+                            let percent = 10;
+                            let statusText = 'Starting...';
+                            
+                            if (comments.status === 'crawling') {
+                                percent = 20;
+                                statusText = 'Crawling comments...';
+                            } else if (comments.status === 'analyzing') {
+                                percent = 30 + Math.round((comments.count || 0) / (comments.total || 1) * 20);
+                                statusText = `Analyzing comments: ${comments.count || 0}/${comments.total || 0}`;
+                            } else if (comments.status === 'completed' && danmu.status === 'crawling') {
+                                percent = 60;
+                                statusText = 'Crawling danmu...';
+                            } else if (danmu.status === 'analyzing') {
+                                percent = 70 + Math.round((danmu.count || 0) / (danmu.total || 1) * 20);
+                                statusText = `Analyzing danmu: ${danmu.count || 0}/${danmu.total || 0}`;
+                            } else if (danmu.status === 'completed') {
+                                percent = 95;
+                                statusText = 'Finalizing...';
+                            }
+                            
+                            if (loadingProgress) {
+                                loadingProgress.style.width = `${Math.min(percent, 95)}%`;
+                            }
+                            if (loadingTitle) loadingTitle.innerText = 'Analyzing Video';
+                            if (loadingSubtitle) loadingSubtitle.innerText = statusText;
+                        }
+                    } catch (err) {
+                        console.error('[SSE] 解析进度数据失败:', err);
+                    }
+                };
+
+                eventSource.onerror = (err) => {
+                    console.warn('[SSE] 连接错误:', err);
+                    eventSource.close();
+                    // SSE 失败时回退到轮询
+                    resolve('fallback');
+                };
+            });
         }
 
         // === 无任务ID时轮询 dashboard，等待数据就绪（already_processing 场景）===

@@ -1128,6 +1128,60 @@ def multimodal_emotion_analysis(request, bvid):
         return HttpResponseNotAllowed(['GET'])
 
 
+# ==================== 爬取进度 SSE 流 ====================
+
+def crawl_progress_sse(request, bvid):
+    """
+    爬取进度 Server-Sent Events (SSE) 端点
+    GET /api/video/crawl-progress/<bvid>/
+    
+    使用 EventSource 在前端接收实时进度更新
+    """
+    from django.http import StreamingHttpResponse
+    from .analytics import get_crawl_progress
+    
+    def event_stream():
+        import time
+        
+        last_data = None
+        check_count = 0
+        max_checks = 300  # 最多5分钟 (5*60/1=300次)
+        
+        while check_count < max_checks:
+            check_count += 1
+            
+            # 获取当前进度
+            progress = get_crawl_progress(bvid)
+            
+            if progress:
+                # 检查是否有实质性进展
+                current_data = json.dumps(progress)
+                if current_data != last_data:
+                    last_data = current_data
+                    yield f"data: {current_data}\n\n"
+                
+                # 检查是否全部完成
+                overall = progress.get('overall', {})
+                if overall.get('stage') == 'completed':
+                    # 发送完成信号后等待一下再退出
+                    yield f"data: {json.dumps({'type': 'complete', 'progress': progress})}\n\n"
+                    break
+            else:
+                # 首次检查，发送初始状态
+                if check_count == 1:
+                    yield f"data: {json.dumps({'type': 'starting', 'message': 'Waiting for crawl to start...'})}\n\n"
+            
+            time.sleep(1)  # 每秒检查一次
+        
+        # 发送超时信号
+        yield f"data: {json.dumps({'type': 'timeout', 'message': 'Progress check timeout'})}\n\n"
+    
+    response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
+    response['Cache-Control'] = 'no-cache'
+    response['X-Accel-Buffering'] = 'no'
+    return response
+
+
 # ==================== C++爬虫专用 API ====================
 
 @csrf_exempt
