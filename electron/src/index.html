@@ -221,26 +221,57 @@
             width: 90%;
         }
 
-        .center-circle-history-btn {
-            position: absolute;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-        }
-
         .center-circle-online-btn {
             position: absolute;
-            bottom: 60px;
+            bottom: 88px;
             left: 50%;
             transform: translateX(-50%);
         }
 
         .center-circle-history-btn {
             position: absolute;
-            bottom: 30px;
+            bottom: 58px;
             left: 50%;
             transform: translateX(-50%);
         }
+
+        .center-circle-url-btn {
+            position: absolute;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        #url-input-form {
+            position: absolute;
+            inset: 0;
+            display: none;          /* JS 用 style.display 控制 */
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 16px;
+            background: rgba(13, 13, 26, 0.95);
+            border-radius: 50%;
+            z-index: 20;            /* 盖住所有绝对定位的按钮 */
+        }
+
+        #url-input {
+            width: 80%;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 20px;
+            padding: 6px 12px;
+            font-size: 11px;
+            color: white;
+            text-align: center;
+            outline: none;
+        }
+
+        #url-input::placeholder { color: rgba(255,255,255,0.3); }
+        #url-input:focus { border-color: rgba(236,72,153,0.6); }
+
+        .url-analyze-btn { background: rgba(236, 72, 153, 0.4); }
 
         #radar-chart {
             width: 100%;
@@ -479,6 +510,26 @@
                     <i class="fa-solid fa-history"></i>
                     <span>历史</span>
                 </button>
+                <!-- 网址分析按钮 -->
+                <button type="button" onclick="openUrlInput()" id="url-btn" class="center-circle-url-btn no-drag px-4 py-2 bg-white/10 hover:bg-white/20 rounded-full text-xs text-white/60 hover:text-white transition-all flex items-center gap-2">
+                    <i class="fa-solid fa-link"></i>
+                    <span>网址</span>
+                </button>
+                <!-- URL 内联输入框（默认隐藏） -->
+                <div id="url-input-form" class="no-drag">
+                    <p class="text-[10px] text-white/40">粘贴B站链接或BV号</p>
+                    <input id="url-input" type="text" placeholder="https://bilibili.com/video/BV...">
+                    <div class="flex gap-2">
+                        <button type="button" onclick="analyzeFromUrl()"
+                                class="url-analyze-btn px-3 py-1 rounded-full text-[11px] font-semibold text-white transition-all">
+                            分析
+                        </button>
+                        <button type="button" onclick="closeUrlInput()"
+                                class="px-3 py-1 rounded-full text-[11px] text-white/50 hover:text-white transition-all bg-white/10">
+                            取消
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <!-- 卡片 1: User Profile (切右下角) -->
@@ -887,6 +938,46 @@
         function openExtensionFolder() {
             ipcRenderer.send('open-extension-folder');
         }
+
+        // === URL 网址分析 ===
+        function openUrlInput() {
+            document.getElementById('url-input-form').style.display  = 'flex';
+            document.getElementById('online-analysis-btn').style.display = 'none';
+            document.getElementById('history-btn').style.display     = 'none';
+            document.getElementById('url-btn').style.display         = 'none';
+            const input = document.getElementById('url-input');
+            input.value = '';
+            input.focus();
+        }
+
+        function closeUrlInput() {
+            document.getElementById('url-input-form').style.display  = 'none';
+            document.getElementById('online-analysis-btn').style.display = '';
+            document.getElementById('history-btn').style.display     = '';
+            document.getElementById('url-btn').style.display         = '';
+        }
+
+        function analyzeFromUrl() {
+            const raw = document.getElementById('url-input').value.trim();
+            if (!raw) return;
+
+            const bvMatch = raw.match(/BV[a-zA-Z0-9]{10}/);
+            if (!bvMatch) {
+                showToast('无法识别BV号，请检查链接格式', 'error');
+                return;
+            }
+
+            const bvId = bvMatch[0];
+            closeUrlInput();
+            updateCenterVideoInfo(bvId, bvId);
+            ipcRenderer.send('main-video-change', { bvId, title: bvId, forceRefresh: true });
+            showToast(`开始分析 ${bvId}`, 'info');
+        }
+
+        document.getElementById('url-input')?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter')  analyzeFromUrl();
+            if (e.key === 'Escape') closeUrlInput();
+        });
         window.addEventListener('beforeunload', (e) => {
             e.returnValue = false;
         });
