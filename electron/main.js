@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, session } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, session, shell } = require('electron');
 app.isQuitting = false;
 const path = require('path');
 const WebSocket = require('ws');
@@ -87,7 +87,7 @@ let overallReportsWindow; // 多模态情感分析报告窗口
 let expandedWindow; // 展开仪表盘窗口
 let bilibiliLoginWindow; // B站扫码登录窗口
 let wss; // WebSocket服务器，用于与Chrome插件通信
-let tray = null; // 系统托盘
+
 let lastWindowPosition = null; // 记录上次主窗口位置以便还原
 let currentBvId = null; // 当前正在观看的视频BV号
 let currentVideoTitle = null; // 当前视频标题
@@ -125,7 +125,7 @@ function createWindow() {
     alwaysOnTop: true, // 始终置顶
     transparent: true, // 透明背景
     resizable: false, // 禁止调整大小
-    skipTaskbar: true, // 不显示在任务栏
+    skipTaskbar: false, // 显示在任务栏（支持最小化还原）
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -165,21 +165,17 @@ function createWindow() {
     }
   });
 
-  // 窗口关闭事件（点击X按钮时隐藏到托盘）
+  // 窗口关闭事件（Alt+F4 等系统关闭 → 最小化到任务栏，避免意外退出）
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) {
       event.preventDefault();
-      mainWindow.hide();
-      console.log('窗口已隐藏到托盘');
-    } else {
-      console.log('应用正在退出');
+      mainWindow.minimize();
     }
   });
 
   // 设置窗口属性
   mainWindow.setAlwaysOnTop(true, 'floating');
   mainWindow.setVisibleOnAllWorkspaces(true);
-  mainWindow.setSkipTaskbar(true);
   mainWindow.setMovable(true);
 
   // 开发环境下打开开发者工具
@@ -265,106 +261,6 @@ function createWebSocketServer() {
     console.log('WebSocket服务器启动在端口 3000');
 }
 
-// 创建系统托盘
-function createTray() {
-  // 尝试加载本地图标，如果失败则使用内置图标
-  let icon;
-  try {
-    const iconPath = path.join(__dirname, 'assets', 'tray-icon.png');
-    icon = nativeImage.createFromPath(iconPath);
-
-    // 如果图标加载失败或为空，使用默认图标
-    if (icon.isEmpty()) {
-      throw new Error('Icon file not found');
-    }
-  } catch (error) {
-    // 使用粉色渐变图标（BiliMood 风格 - 粉色渐变圆形 + B站图标）
-    icon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAKoSURBVFiF7ZY9TsNAEIW/SYAgAQQ0NDQ0NDQQNNAgKD9AQ0FDQ0FDQ6A/gJpHg6D8AAWF4NdYdpyb1DYPdZzEsq1zf3d2d7GQAObk5H0GdwFwBKC1NscY4wag1lr7OedUKecccs5RliXquqau68g5R1VVEUIIuq4j55w552RZRlVVEUIInHPEGEPOORljUEphjEEphTEGIYSEeZ4nF8cYQ0opcs5RliXquiamaxqGgTEGl8uFtm1RliXquiYlRVmWFEVBt9tF13W0bYuyLBFCoJTCGENKqWQMw8A5R0qJsiwJIRBS4nkeWuvIOUdKipQS5xw550gpxTlHSqniZ4xBa01KqRjGGLTWxJSIKWNd13HO0dQ1KSW01qSUIuccxpjiN8YQ55wYY8g5R1mWhBDIOTN9fX0l5xxt25JSom1bYkq0bUtKibZtSSlRliUhBLTWhBACxhhyzpFzjpxz5Jw755xz8TyPMQZjzPN9X/Hz86uqqoqc87g55yCEgDGGnHPknCORcyalRM45cs6Rc46cc+ScI+ccOefIOUfOOXLOkXOOnHPknCPnHDnnyDlHzjlyzpFzDkIIGGNQSqGUQimFUgqlFEoplFIopVBKoZRCKYVSCqUUSimUUiilUEqhlEIphVIKpRRKKZRSKKVQSn0DfwNXYwF7bC6sTAAAAABJRU5ErkJggg==');
-  }
-
-  tray = new Tray(icon);
-
-  console.log('系统托盘创建成功');
-
-  // 托盘菜单
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: '显示 BiliMood',
-      click: () => {
-        if (mainWindow) {
-          mainWindow.show();
-          mainWindow.focus();
-        }
-      }
-    },
-    {
-      label: '隐藏',
-      click: () => {
-        if (mainWindow) {
-          mainWindow.hide();
-        }
-      }
-    },
-    { type: 'separator' },
-    {
-      label: '退出',
-      click: () => {
-        app.isQuitting = true;
-
-        // 关闭所有窗口
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.destroy();
-        }
-        if (analysisWindow && !analysisWindow.isDestroyed()) {
-          analysisWindow.destroy();
-        }
-        if (userProfileWindow && !userProfileWindow.isDestroyed()) {
-          userProfileWindow.destroy();
-        }
-        if (videoAudioWindow && !videoAudioWindow.isDestroyed()) {
-          videoAudioWindow.destroy();
-        }
-        if (overallReportsWindow && !overallReportsWindow.isDestroyed()) {
-          overallReportsWindow.destroy();
-        }
-        if (expandedWindow && !expandedWindow.isDestroyed()) {
-          expandedWindow.destroy();
-        }
-        if (bilibiliLoginWindow && !bilibiliLoginWindow.isDestroyed()) {
-          bilibiliLoginWindow.destroy();
-        }
-
-        // 关闭WebSocket服务器
-        if (wss) {
-          wss.close();
-        }
-
-        // 销毁托盘
-        if (tray) {
-          tray.destroy();
-        }
-
-        // 退出应用
-        app.quit();
-      }
-    }
-  ]);
-
-  tray.setToolTip('BiliMood - B站情感分析');
-  tray.setContextMenu(contextMenu);
-
-  // 点击托盘图标显示/隐藏窗口
-  tray.on('click', () => {
-    if (mainWindow) {
-      if (mainWindow.isVisible()) {
-        mainWindow.hide();
-      } else {
-        mainWindow.show();
-        mainWindow.focus();
-      }
-    }
-  });
-}
 
 // Electron 会在初始化后并准备创建浏览器窗口时，调用这个函数
 app.whenReady().then(() => {
@@ -416,7 +312,6 @@ app.whenReady().then(() => {
   );
 
   createWindow();
-  createTray();
   createWebSocketServer();
   createNotificationServer();
 
@@ -452,9 +347,9 @@ app.on('window-all-closed', () => {
 
 // 监听渲染进程的消息
 ipcMain.on('minimize-window', () => {
-  // 最小化到托盘
+  // 最小化到任务栏
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.hide();
+    mainWindow.minimize();
   }
 });
 
@@ -491,11 +386,6 @@ ipcMain.on('close-window', () => {
   // 关闭HTTP通知服务器
   if (httpServer) {
     httpServer.close();
-  }
-
-  // 销毁托盘
-  if (tray) {
-    tray.destroy();
   }
 
   // 退出应用
@@ -1056,6 +946,11 @@ ipcMain.on('close-expanded-window', () => {
     if (expandedWindow && !expandedWindow.isDestroyed()) {
         expandedWindow.hide();
     }
+});
+
+ipcMain.on('open-extension-folder', () => {
+    const extensionPath = path.join(__dirname, '..', 'chrome_extension');
+    shell.openPath(extensionPath);
 });
 
 function createExpandedWindow() {

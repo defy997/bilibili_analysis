@@ -6,8 +6,7 @@ class BilibiliVideoMonitor {
         this.socket = null;
         this.lastBvId = null;
         this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = 5;
-        this.reconnectDelay = 2000; // 2秒
+        this.reconnectDelay = 2000; // 初始重连间隔 2秒
 
         this.init();
     }
@@ -77,16 +76,14 @@ class BilibiliVideoMonitor {
     }
 
     handleReconnect() {
-        if (this.reconnectAttempts < this.maxReconnectAttempts) {
-            this.reconnectAttempts++;
-            console.log(`🔄 ${this.reconnectDelay}ms后尝试重连 (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+        this.reconnectAttempts++;
+        // 指数退避：2s → 4s → 8s → 16s，最长 30s，然后一直以 30s 间隔重试
+        const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), 30000);
+        console.log(`🔄 ${delay / 1000}s后尝试重连 (第${this.reconnectAttempts}次)`);
 
-            setTimeout(() => {
-                this.connectWebSocket();
-            }, this.reconnectDelay);
-        } else {
-            console.error('❌ 重连次数超过上限，停止重连');
-        }
+        setTimeout(() => {
+            this.connectWebSocket();
+        }, delay);
     }
 
     startMonitoring() {

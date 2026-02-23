@@ -123,6 +123,11 @@
             -webkit-mask-composite: source-in;
             mask-composite: intersect;
         }
+
+        .ext-install-btn {
+            background: rgba(236, 72, 153, 0.15);
+            border: 1px solid rgba(236, 72, 153, 0.3);
+        }
             /* 自定义滚动条 */
         .custom-scrollbar::-webkit-scrollbar {
             width: 4px;
@@ -434,6 +439,16 @@
                     <i class="fa-solid fa-gear"></i>
                     <span>Settings</span>
                 </button>
+                <!-- 最小化按钮 -->
+                <button onclick="minimizeWindow()" title="最小化到任务栏"
+                        class="hover:text-pink-400 transition-colors w-6 h-6 flex items-center justify-center rounded hover:bg-white/10">
+                    <i class="fa-solid fa-minus text-xs"></i>
+                </button>
+                <!-- 关闭按钮 -->
+                <button onclick="closeWindow()" title="退出应用"
+                        class="hover:text-red-400 transition-colors w-6 h-6 flex items-center justify-center rounded hover:bg-red-500/15">
+                    <i class="fa-solid fa-xmark text-xs"></i>
+                </button>
             </div>
         </div>
 
@@ -653,6 +668,24 @@
                         </div>
                     </div>
 
+                    <!-- Chrome 扩展安装引导 -->
+                    <div class="space-y-3">
+                        <label class="text-[10px] font-bold text-white/30 uppercase tracking-widest">Chrome Extension</label>
+                        <div class="bg-white/5 p-3 rounded-2xl border border-white/10 space-y-3">
+                            <div class="space-y-2 text-[11px] text-white/50 leading-relaxed">
+                                <div class="flex gap-2"><span class="text-pink-400 font-bold flex-shrink-0">1.</span><span>点击下方按钮，打开扩展文件夹</span></div>
+                                <div class="flex gap-2"><span class="text-pink-400 font-bold flex-shrink-0">2.</span><span>Chrome 地址栏输入 <span class="text-white/70 font-mono">chrome://extensions</span></span></div>
+                                <div class="flex gap-2"><span class="text-pink-400 font-bold flex-shrink-0">3.</span><span>右上角开启 <span class="text-white/70">开发者模式</span></span></div>
+                                <div class="flex gap-2"><span class="text-pink-400 font-bold flex-shrink-0">4.</span><span>点击「加载已解压的扩展程序」，选择打开的文件夹</span></div>
+                            </div>
+                            <button type="button" onclick="openExtensionFolder()"
+                                    class="w-full py-2 rounded-xl text-[11px] font-semibold text-white/80 hover:text-white transition-all flex items-center justify-center gap-2 ext-install-btn">
+                                <i class="fa-solid fa-folder-open text-pink-400"></i>
+                                打开扩展文件夹
+                            </button>
+                        </div>
+                    </div>
+
                     <div class="pt-2">
                         <div class="bg-gradient-to-br from-pink-500/10 to-purple-500/10 p-4 rounded-2xl border border-pink-500/10">
                             <p class="text-[10px] text-white/40 leading-relaxed text-center">
@@ -850,6 +883,9 @@
         }
         function closeWindow() {
             ipcRenderer.send('close-window');
+        }
+        function openExtensionFolder() {
+            ipcRenderer.send('open-extension-folder');
         }
         window.addEventListener('beforeunload', (e) => {
             e.returnValue = false;
