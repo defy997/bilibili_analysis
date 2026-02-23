@@ -579,7 +579,7 @@
         // === 无任务ID时轮询 dashboard，等待数据就绪（already_processing 场景）===
         async function pollDashboardUntilReady(bvId) {
             const pollInterval = 3000;
-            const maxAttempts = 60; // 增加到60次，3分钟
+            const maxAttempts = 200; // 最多10分钟，等待后端爬取完成
             let attempts = 0;
 
             const loadingTasks = document.getElementById('loading-tasks');
@@ -587,13 +587,14 @@
             const loadingTitle = document.getElementById('loading-title');
             const loadingSubtitle = document.getElementById('loading-subtitle');
 
+            showLoading(true); // 确保加载指示器可见
             if (loadingTasks) loadingTasks.classList.remove('hidden');
             if (loadingProgress) {
                 loadingProgress.style.width = '20%';
                 loadingProgress.classList.add('animate-pulse');
             }
             if (loadingTitle) loadingTitle.innerText = 'Waiting for analysis...';
-            if (loadingSubtitle) loadingSubtitle.innerText = 'Another request is processing this video';
+            if (loadingSubtitle) loadingSubtitle.innerText = 'Crawling data, this may take a few minutes...';
 
             return new Promise((resolve) => {
                 const timer = setInterval(async () => {
@@ -630,20 +631,26 @@
                             return;
                         }
                         // 更新进度动画
-                        const progress = Math.min(20 + attempts * 2, 85);
+                        const progress = Math.min(20 + attempts * 1.5, 85);
                         if (loadingProgress) loadingProgress.style.width = `${progress}%`;
-                        if (loadingSubtitle) loadingSubtitle.innerText = `Waiting... ${attempts}/${maxAttempts}`;
+                        const elapsed = Math.round(attempts * pollInterval / 1000);
+                        if (loadingSubtitle) loadingSubtitle.innerText = `Crawling data... ${elapsed}s elapsed`;
                     } catch (err) {
                         console.error('[PollDashboard] 轮询错误:', err);
                     }
 
                     if (attempts >= maxAttempts) {
                         clearInterval(timer);
-                        console.warn('[PollDashboard] 轮询超时');
-                        if (loadingTasks) loadingTasks.classList.add('hidden');
-                        showLoading(false);
-                        await loadDashboard(bvId);
-                        resolve();
+                        console.warn('[PollDashboard] 轮询超时，加载现有数据');
+                        if (loadingProgress) loadingProgress.style.width = '95%';
+                        if (loadingTitle) loadingTitle.innerText = 'Still processing...';
+                        if (loadingSubtitle) loadingSubtitle.innerText = 'Backend may still be crawling. Click ↻ Refresh to check.';
+                        setTimeout(async () => {
+                            if (loadingTasks) loadingTasks.classList.add('hidden');
+                            showLoading(false);
+                            await loadDashboard(bvId);
+                            resolve();
+                        }, 2000);
                     }
                 }, pollInterval);
             });
@@ -743,52 +750,75 @@
                                 }
                             }
 
-                            // 延迟一点后加载 dashboard
+                            // 用 fetchDashboard 检查数据是否就绪
+                            // 以防任务完成后 DB 写入有延迟，数据仍为0时继续轮询
                             setTimeout(async () => {
                                 if (loadingTasks) loadingTasks.classList.add('hidden');
-                                showLoading(false);
-                                // 重新加载 dashboard
-                                await loadDashboard(bvId);
+                                const dash = await fetchDashboard(bvId);
+                                if (dash && dash.success) {
+                                    const pos = dash.sentiment?.distribution?.positive || 0;
+                                    const neu = dash.sentiment?.distribution?.neutral || 0;
+                                    const neg = dash.sentiment?.distribution?.negative || 0;
+                                    if (pos + neu + neg > 0) {
+                                        showLoading(false);
+                                        updateUI(dash);
+                                    } else {
+                                        // 数据还未写入，继续轮询（保持 loading 显示）
+                                        if (loadingTitle) loadingTitle.innerText = 'Waiting for data...';
+                                        if (loadingSubtitle) loadingSubtitle.innerText = 'Saving analysis results...';
+                                        await pollDashboardUntilReady(bvId);
+                                    }
+                                } else {
+                                    showLoading(false);
+                                    showError(dash?.error || 'Failed to load data');
+                                }
                             }, 1500);
                         }
 
                         // 超时处理
                         if (attempts >= maxAttempts) {
                             clearInterval(pollTimer);
-                            console.warn('[PollTasks] 轮询超时');
-                            if (loadingTitle) loadingTitle.innerText = 'Timeout';
-                            if (loadingSubtitle) loadingSubtitle.innerText = 'Taking longer than expected, showing available data...';
-                            setTimeout(async () => {
-                                if (loadingTasks) loadingTasks.classList.add('hidden');
-                                showLoading(false);
-                                await loadDashboard(bvId);
-                            }, 2000);
+                            console.warn('[PollTasks] 轮询超时，继续等待 dashboard 数据');
+                            if (loadingTasks) loadingTasks.classList.add('hidden');
+                            if (loadingTitle) loadingTitle.innerText = 'Waiting for backend...';
+                            if (loadingSubtitle) loadingSubtitle.innerText = 'Still crawling data, please hold on...';
+                            // 保持 loading 显示，继续轮询 dashboard 直到有数据
+                            await pollDashboardUntilReady(bvId);
                         }
                     }
                 } catch (err) {
                     console.error('[PollTasks] 轮询错误:', err);
-                    attempts++; // 超时计数
+                    // 注意：attempts 已在 try 之前自增，不要在此重复自增
                     if (attempts >= maxAttempts) {
                         clearInterval(pollTimer);
                         if (loadingTasks) loadingTasks.classList.add('hidden');
-                        showLoading(false);
-                        await loadDashboard(bvId);
+                        // 保持 loading 显示，继续等待 dashboard 数据
+                        await pollDashboardUntilReady(bvId);
                     }
                 }
             }, pollInterval);
         }
 
+        // === 获取 Dashboard 数据（不触发 updateUI，供调用方判断后决定下一步）===
+        async function fetchDashboard(bvId) {
+            try {
+                const response = await fetch(`http://118.25.39.91:8000/api/video/dashboard/${bvId}/`);
+                return await response.json();
+            } catch (error) {
+                console.error('fetchDashboard 失败:', error);
+                return null;
+            }
+        }
+
         // === 加载 Dashboard 数据 ===
         async function loadDashboard(bvId) {
             try {
-                const response = await fetch(`http://118.25.39.91:8000/api/video/dashboard/${bvId}/`);
-                const data = await response.json();
-
-                if (data.success) {
+                const data = await fetchDashboard(bvId);
+                if (data && data.success) {
                     updateUI(data);
                 } else {
-                    console.error('Dashboard 加载失败:', data.error);
-                    showError(data.error);
+                    console.error('Dashboard 加载失败:', data?.error);
+                    showError(data?.error || 'Failed to load dashboard');
                 }
             } catch (error) {
                 console.error('Dashboard 加载失败:', error);

@@ -1122,7 +1122,8 @@ def multimodal_emotion_analysis(request, bvid):
         if result['success']:
             return JsonResponse(result)
         else:
-            return JsonResponse(result, status=404)
+            status_code = 404 if result.get('error') == 'Video not found' else 500
+            return JsonResponse(result, status=status_code)
     else:
         return HttpResponseNotAllowed(['GET'])
 

@@ -633,8 +633,13 @@ def get_multimodal_emotion_analysis(bvid, video_type='general'):
         video = Video.objects.get(bvid=bvid)
 
         # === 0. 先尝试从数据库缓存读取（避免重复计算） ===
-        from .models import MultimodalSentiment, AudioSentiment as AudioSentimentModel
-        cached = MultimodalSentiment.objects.filter(video=video).first()
+        # 用独立 try 保护，避免表不存在（未迁移）时导致整个函数失败
+        cached = None
+        try:
+            from .models import MultimodalSentiment, AudioSentiment as AudioSentimentModel
+            cached = MultimodalSentiment.objects.filter(video=video).first()
+        except Exception as cache_err:
+            print(f"[Multimodal] 读取缓存失败（可能表未迁移）: {cache_err}")
         if cached and cached.overall_score is not None:
             # 有缓存数据，直接返回缓存结果
             print(f"[Multimodal] 使用缓存数据: {bvid}")

@@ -455,14 +455,15 @@
         // === 无任务ID时轮询 audio dashboard，等待数据就绪（already_processing 场景）===
         async function pollAudioDashboardUntilReady(bvId) {
             const pollInterval = 3000;
-            const maxAttempts = 60; // 音频分析可能更慢，给3分钟
+            const maxAttempts = 200; // 最多10分钟，音频分析较慢
             let attempts = 0;
 
             const loadingText = document.querySelector('#loading-indicator .text-lg');
             const loadingSubtext = document.querySelector('#loading-indicator .text-sm');
 
-            if (loadingText) loadingText.innerText = 'Waiting for analysis...';
-            if (loadingSubtext) loadingSubtext.innerText = 'Another request is processing this video';
+            showLoading(true);
+            if (loadingText) loadingText.innerText = 'Waiting for audio analysis...';
+            if (loadingSubtext) loadingSubtext.innerText = 'Audio processing may take a few minutes';
 
             return new Promise((resolve) => {
                 const timer = setInterval(async () => {
@@ -471,17 +472,19 @@
                         const resp = await fetch(`http://118.25.39.91:8000/api/video/audio-dashboard/${bvId}/`);
                         const data = await resp.json();
 
-                        // 修正：检查正确的数据结构 data.audio.status 和 data.audio.timeline
+                        if (loadingSubtext) loadingSubtext.innerText = `Waiting... ${attempts * 3}s elapsed`;
+
+                        // 检查音频数据是否就绪
                         if (data.success && data.audio &&
                             (data.audio.status === 'analyzed' ||
                              (data.audio.timeline && data.audio.timeline.length > 0))) {
                             clearInterval(timer);
-                            if (loadingText) loadingText.innerText = 'Analysis Complete!';
+                            if (loadingText) loadingText.innerText = 'Audio Analysis Complete!';
                             setTimeout(() => {
                                 showLoading(false);
                                 updateUI(data);
                                 resolve();
-                            }, 1000);
+                            }, 800);
                             return;
                         }
                     } catch (err) {
@@ -490,10 +493,14 @@
 
                     if (attempts >= maxAttempts) {
                         clearInterval(timer);
-                        console.warn('[PollAudioDashboard] 轮询超时');
-                        showLoading(false);
-                        await loadDashboard(bvId);
-                        resolve();
+                        console.warn('[PollAudioDashboard] 轮询超时，加载现有数据');
+                        if (loadingText) loadingText.innerText = 'Audio analysis is taking a while...';
+                        if (loadingSubtext) loadingSubtext.innerText = 'Showing available data. Click Refresh to check for audio results.';
+                        setTimeout(async () => {
+                            showLoading(false);
+                            await loadDashboard(bvId);
+                            resolve();
+                        }, 2000);
                     }
                 }, pollInterval);
             });
@@ -544,33 +551,31 @@
 
                         if (allCompleted) {
                             clearInterval(pollTimer);
-                            console.log('[PollTasks] 所有任务完成');
+                            console.log('[PollTasks] 所有任务完成，等待音频数据...');
 
-                            if (loadingText) loadingText.innerText = 'Analysis Complete!';
-                            if (loadingSubtext && data.summary) {
-                                loadingSubtext.innerText = `${data.summary.total_count} items processed`;
-                            }
+                            if (loadingText) loadingText.innerText = 'Tasks complete, loading audio...';
+                            if (loadingSubtext) loadingSubtext.innerText = 'Waiting for audio analysis results';
 
+                            // 用 pollAudioDashboardUntilReady 代替 loadDashboard 一次性加载
+                            // 避免音频数据写入DB有延迟时漏掉
                             setTimeout(async () => {
-                                showLoading(false);
-                                await loadDashboard(bvId);
-                            }, 1000);
+                                await pollAudioDashboardUntilReady(bvId);
+                            }, 500);
                         }
 
                         if (attempts >= maxAttempts) {
                             clearInterval(pollTimer);
-                            console.warn('[PollTasks] 轮询超时');
-                            showLoading(false);
-                            await loadDashboard(bvId);
+                            console.warn('[PollTasks] 轮询超时，继续等待音频数据');
+                            // 任务超时但音频可能还在处理，继续轮询音频
+                            await pollAudioDashboardUntilReady(bvId);
                         }
                     }
                 } catch (err) {
                     console.error('[PollTasks] 轮询错误:', err);
-                    attempts++;
+                    // 注意：attempts 已在 try 之前自增，不要在此重复自增
                     if (attempts >= maxAttempts) {
                         clearInterval(pollTimer);
-                        showLoading(false);
-                        await loadDashboard(bvId);
+                        await pollAudioDashboardUntilReady(bvId);
                     }
                 }
             }, pollInterval);
