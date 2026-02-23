@@ -1,0 +1,1374 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BiliMood - Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0d0d1a 0%, #1a1a2e 50%, #16213e 100%);
+            min-height: 100vh;
+            color: white;
+            overflow: hidden;
+        }
+
+        .glass-panel {
+            background: rgba(20, 20, 30, 0.6);
+            -webkit-backdrop-filter: blur(20px);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.15);
+        }
+
+        .glass-panel-light {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        /* 顶部栏拖拽 */
+        .drag-area { -webkit-app-region: drag; }
+        .no-drag   { -webkit-app-region: no-drag; }
+
+        /* 滚动条美化 */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+
+        /* Skeleton 加载动画 */
+        .skeleton {
+            background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
+            background-size: 200% 100%;
+            animation: skeleton-loading 1.5s infinite;
+            border-radius: 6px;
+        }
+        @keyframes skeleton-loading {
+            0%   { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        /* 分隔线 */
+        .divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+            margin: 12px 0;
+        }
+
+        /* 情感标签颜色 */
+        .tag-positive { color: #4ade80; background: rgba(74, 222, 128, 0.1); }
+        .tag-neutral  { color: #94a3b8; background: rgba(148, 163, 184, 0.1); }
+        .tag-negative { color: #f87171; background: rgba(248, 113, 113, 0.1); }
+
+        /* 进度条 */
+        .loading-bar {
+            height: 2px;
+            background: linear-gradient(90deg, #ec4899, #a855f7, #3b82f6);
+            background-size: 200% 100%;
+            animation: loading-slide 1.5s linear infinite;
+        }
+        @keyframes loading-slide {
+            0%   { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        /* 图表容器 */
+        .chart-container { width: 100%; position: relative; }
+
+        /* 三栏布局 */
+        .layout-grid {
+            display: grid;
+            grid-template-columns: 260px 1fr 280px;
+            gap: 12px;
+            height: calc(100vh - 52px);
+            padding: 12px;
+            overflow: hidden;
+        }
+
+        /* 每栏可滚动 */
+        .col-scroll {
+            overflow-y: auto;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* 统计卡片 */
+        .stat-card {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 10px;
+            padding: 10px 12px;
+        }
+
+        /* 评论条目 */
+        .comment-item {
+            padding: 8px 10px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.05);
+            transition: background 0.2s;
+        }
+        .comment-item:hover { background: rgba(255,255,255,0.06); }
+    </style>
+</head>
+
+<body class="h-screen flex flex-col overflow-hidden">
+
+    <!-- 顶部进度条（加载中显示） -->
+    <div id="top-loading-bar" class="loading-bar hidden" style="height: 2px; flex-shrink: 0;"></div>
+
+    <!-- 顶部标题栏 -->
+    <div class="drag-area flex-shrink-0 flex items-center px-4 gap-3"
+         style="height: 52px; background: rgba(0,0,0,0.3); border-bottom: 1px solid rgba(255,255,255,0.07);">
+
+        <!-- Logo -->
+        <div class="no-drag flex items-center gap-2 flex-shrink-0">
+            <div class="w-7 h-7 rounded-full flex items-center justify-center"
+                 style="background: linear-gradient(135deg, #ec4899, #8b5cf6);">
+                <i class="fa-solid fa-chart-pie text-white text-xs"></i>
+            </div>
+            <span class="text-sm font-semibold text-white/80">BiliMood</span>
+        </div>
+
+        <span class="text-white/20 text-xs flex-shrink-0">|</span>
+
+        <!-- 视频标题 -->
+        <span id="header-title" class="text-sm text-white/70 flex-1 truncate min-w-0">等待视频数据...</span>
+
+        <!-- 情感得分徽章 -->
+        <div id="score-badge" class="no-drag hidden flex items-center gap-1.5 px-3 py-1 rounded-full flex-shrink-0"
+             style="background: rgba(74, 222, 128, 0.15); border: 1px solid rgba(74, 222, 128, 0.3);">
+            <i class="fa-solid fa-face-smile text-green-400 text-xs"></i>
+            <span id="score-value" class="text-green-400 text-xs font-medium"></span>
+        </div>
+
+        <!-- 日期 -->
+        <span id="header-date" class="no-drag text-xs text-white/30 flex-shrink-0"></span>
+
+        <!-- Collapse 按钮 -->
+        <button onclick="collapse()"
+                class="no-drag flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-white/60
+                       hover:text-white hover:bg-white/10 transition-all flex-shrink-0">
+            <i class="fa-solid fa-compress"></i>
+            <span>Collapse</span>
+        </button>
+    </div>
+
+    <!-- 主内容区：三栏布局 -->
+    <div class="layout-grid flex-1">
+
+        <!-- ============ 左栏：视频信息 + 评论 ============ -->
+        <div class="col-scroll">
+
+            <!-- 视频信息卡 -->
+            <div class="glass-panel rounded-xl p-4">
+                <div class="flex items-center gap-2 mb-3">
+                    <i class="fa-brands fa-bilibili text-pink-400 text-sm"></i>
+                    <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Video Info</span>
+                </div>
+
+                <!-- Skeleton / 真实数据 -->
+                <div id="video-info-skeleton">
+                    <div class="skeleton h-4 w-full mb-2"></div>
+                    <div class="skeleton h-3 w-2/3 mb-4"></div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="skeleton h-10 rounded-lg"></div>
+                        <div class="skeleton h-10 rounded-lg"></div>
+                        <div class="skeleton h-10 rounded-lg"></div>
+                        <div class="skeleton h-10 rounded-lg"></div>
+                    </div>
+                </div>
+
+                <div id="video-info-content" class="hidden">
+                    <p id="vi-title" class="text-sm font-medium text-white leading-snug mb-1"></p>
+                    <p id="vi-bvid" class="text-xs text-white/40 mb-3"></p>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="stat-card text-center">
+                            <p class="text-lg font-bold text-white" id="vi-view">-</p>
+                            <p class="text-xs text-white/40">播放</p>
+                        </div>
+                        <div class="stat-card text-center">
+                            <p class="text-lg font-bold text-pink-400" id="vi-like">-</p>
+                            <p class="text-xs text-white/40">点赞</p>
+                        </div>
+                        <div class="stat-card text-center">
+                            <p class="text-lg font-bold text-yellow-400" id="vi-coin">-</p>
+                            <p class="text-xs text-white/40">投币</p>
+                        </div>
+                        <div class="stat-card text-center">
+                            <p class="text-lg font-bold text-blue-400" id="vi-fav">-</p>
+                            <p class="text-xs text-white/40">收藏</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 情感分布简卡 -->
+            <div class="glass-panel rounded-xl p-4">
+                <div class="flex items-center gap-2 mb-3">
+                    <i class="fa-solid fa-chart-pie text-purple-400 text-sm"></i>
+                    <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Sentiment Overview</span>
+                </div>
+
+                <div id="sentiment-skeleton">
+                    <div class="skeleton h-3 w-full mb-2"></div>
+                    <div class="skeleton h-3 w-3/4 mb-2"></div>
+                    <div class="skeleton h-3 w-1/2"></div>
+                </div>
+
+                <div id="sentiment-bars" class="hidden space-y-2">
+                    <!-- 动态生成 -->
+                </div>
+            </div>
+
+            <!-- 弹幕统计 -->
+            <div class="glass-panel rounded-xl p-4">
+                <div class="flex items-center gap-2 mb-3">
+                    <i class="fa-solid fa-comment-dots text-blue-400 text-sm"></i>
+                    <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Danmu Stats</span>
+                </div>
+                <div id="danmu-stats-skeleton">
+                    <div class="skeleton h-8 w-full rounded-lg mb-2"></div>
+                    <div class="skeleton h-8 w-full rounded-lg"></div>
+                </div>
+                <div id="danmu-stats-content" class="hidden grid grid-cols-2 gap-2">
+                    <div class="stat-card text-center">
+                        <p class="text-xl font-bold text-blue-400" id="danmu-count">-</p>
+                        <p class="text-xs text-white/40">弹幕数</p>
+                    </div>
+                    <div class="stat-card text-center">
+                        <p class="text-xl font-bold text-purple-400" id="danmu-positive">-</p>
+                        <p class="text-xs text-white/40">正面弹幕</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Top 5 高赞评论 -->
+            <div class="glass-panel rounded-xl p-4 flex-1" style="min-height: 0;">
+                <div class="flex items-center gap-2 mb-3">
+                    <i class="fa-solid fa-thumbs-up text-green-400 text-sm"></i>
+                    <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Top Comments</span>
+                </div>
+
+                <div id="comments-skeleton" class="space-y-2">
+                    <div class="skeleton h-12 rounded-lg"></div>
+                    <div class="skeleton h-12 rounded-lg"></div>
+                    <div class="skeleton h-12 rounded-lg"></div>
+                    <div class="skeleton h-12 rounded-lg"></div>
+                    <div class="skeleton h-12 rounded-lg"></div>
+                </div>
+
+                <div id="comments-list" class="hidden space-y-2 overflow-y-auto" style="max-height: 280px;">
+                    <!-- 动态生成 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ 中栏：主图表 ============ -->
+        <div class="col-scroll">
+
+            <!-- 实时情感趋势折线图 -->
+            <div class="glass-panel rounded-xl p-4 flex-shrink-0">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-chart-line text-pink-400 text-sm"></i>
+                        <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Real-time Emotional Flow</span>
+                    </div>
+                    <div class="flex gap-3 text-xs">
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-400 inline-block"></span>Positive</span>
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-gray-400 inline-block"></span>Neutral</span>
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-400 inline-block"></span>Negative</span>
+                    </div>
+                </div>
+                <div id="trend-chart-skeleton" class="skeleton rounded-lg" style="height: 200px;"></div>
+                <div id="trend-chart" class="chart-container hidden" style="height: 200px;"></div>
+            </div>
+
+            <!-- 24小时评论分布 -->
+            <div class="glass-panel rounded-xl p-4 flex-shrink-0">
+                <div class="flex items-center gap-2 mb-3">
+                    <i class="fa-solid fa-clock text-blue-400 text-sm"></i>
+                    <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">24H Comment Distribution</span>
+                </div>
+                <div id="hourly-chart-skeleton" class="skeleton rounded-lg" style="height: 160px;"></div>
+                <div id="hourly-chart" class="chart-container hidden" style="height: 160px;"></div>
+            </div>
+
+            <!-- 弹幕时间轴热力图 -->
+            <div class="glass-panel rounded-xl p-4 flex-shrink-0">
+                <div class="flex items-center gap-2 mb-3">
+                    <i class="fa-solid fa-fire text-orange-400 text-sm"></i>
+                    <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Danmu Timeline Heatmap</span>
+                </div>
+                <div id="heatmap-skeleton" class="skeleton rounded-lg" style="height: 180px;"></div>
+                <div id="heatmap-chart" class="chart-container hidden" style="height: 180px;"></div>
+            </div>
+
+            <!-- 音频情感时间轴 -->
+            <div class="glass-panel rounded-xl p-4 flex-shrink-0">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-waveform-lines text-purple-400 text-sm"></i>
+                        <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Audio Sentiment Timeline</span>
+                    </div>
+                    <span id="audio-status-badge" class="hidden text-xs px-2 py-0.5 rounded-full"
+                          style="background: rgba(168,85,247,0.15); color: #c084fc; border: 1px solid rgba(168,85,247,0.3);">
+                        Analyzed
+                    </span>
+                </div>
+                <div id="audio-timeline-skeleton" class="skeleton rounded-lg" style="height: 160px;"></div>
+                <div id="audio-timeline-chart" class="chart-container hidden" style="height: 160px;"></div>
+                <div id="audio-no-data" class="hidden text-center py-6 text-white/30 text-xs">
+                    <i class="fa-solid fa-microphone-slash text-2xl mb-2 block"></i>
+                    音频分析未完成，请在音频页面触发分析
+                </div>
+            </div>
+
+            <!-- 三模态情感对比 -->
+            <div class="glass-panel rounded-xl p-4 flex-1">
+                <div class="flex items-center gap-2 mb-3">
+                    <i class="fa-solid fa-layer-group text-indigo-400 text-sm"></i>
+                    <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Multimodal Comparison</span>
+                </div>
+                <div id="comparison-skeleton" class="skeleton rounded-lg" style="height: 180px;"></div>
+                <div id="comparison-chart" class="chart-container hidden" style="height: 180px;"></div>
+            </div>
+        </div>
+
+        <!-- ============ 右栏：分布图 + 用户画像 ============ -->
+        <div class="col-scroll">
+
+            <!-- 评论情感分布饼图 -->
+            <div class="glass-panel rounded-xl p-4 flex-shrink-0">
+                <div class="flex items-center gap-2 mb-3">
+                    <i class="fa-solid fa-circle-half-stroke text-purple-400 text-sm"></i>
+                    <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Comment Emotion Distribution</span>
+                </div>
+                <div id="pie-skeleton" class="skeleton rounded-lg" style="height: 180px;"></div>
+                <div id="pie-chart" class="chart-container hidden" style="height: 180px;"></div>
+            </div>
+
+            <!-- 用户画像摘要 -->
+            <div class="glass-panel rounded-xl p-4 flex-shrink-0">
+                <div class="flex items-center gap-2 mb-3">
+                    <i class="fa-solid fa-users text-cyan-400 text-sm"></i>
+                    <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">User Profile</span>
+                </div>
+
+                <div id="user-skeleton" class="space-y-2">
+                    <div class="skeleton h-10 rounded-lg"></div>
+                    <div class="skeleton h-10 rounded-lg"></div>
+                    <div class="skeleton h-10 rounded-lg"></div>
+                </div>
+
+                <div id="user-stats" class="hidden space-y-2">
+                    <div class="stat-card flex items-center justify-between">
+                        <span class="text-xs text-white/50">总用户数</span>
+                        <span class="text-sm font-bold text-cyan-400" id="u-total">-</span>
+                    </div>
+                    <div class="stat-card flex items-center justify-between">
+                        <span class="text-xs text-white/50">VIP 占比</span>
+                        <span class="text-sm font-bold text-yellow-400" id="u-vip">-</span>
+                    </div>
+                    <div class="stat-card flex items-center justify-between">
+                        <span class="text-xs text-white/50">平均等级</span>
+                        <span class="text-sm font-bold text-pink-400" id="u-level">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 地域 Top 5 -->
+            <div class="glass-panel rounded-xl p-4 flex-shrink-0">
+                <div class="flex items-center gap-2 mb-3">
+                    <i class="fa-solid fa-map-location-dot text-emerald-400 text-sm"></i>
+                    <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Location Top 5</span>
+                </div>
+                <div id="location-skeleton" class="space-y-2">
+                    <div class="skeleton h-5 rounded mb-1"></div>
+                    <div class="skeleton h-5 rounded mb-1"></div>
+                    <div class="skeleton h-5 rounded mb-1"></div>
+                    <div class="skeleton h-5 rounded mb-1"></div>
+                    <div class="skeleton h-5 rounded"></div>
+                </div>
+                <div id="location-list" class="hidden space-y-2">
+                    <!-- 动态生成 -->
+                </div>
+            </div>
+
+            <!-- VIP / 等级分布（小饼图）-->
+            <div class="glass-panel rounded-xl p-4 flex-shrink-0">
+                <div class="flex items-center gap-2 mb-3">
+                    <i class="fa-solid fa-crown text-yellow-400 text-sm"></i>
+                    <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">VIP Distribution</span>
+                </div>
+                <div id="vip-skeleton" class="skeleton rounded-lg" style="height: 150px;"></div>
+                <div id="vip-chart" class="chart-container hidden" style="height: 150px;"></div>
+            </div>
+
+            <!-- 多模态综合得分 -->
+            <div class="glass-panel rounded-xl p-4 flex-shrink-0">
+                <div class="flex items-center gap-2 mb-3">
+                    <i class="fa-solid fa-atom text-fuchsia-400 text-sm"></i>
+                    <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Multimodal Fusion</span>
+                </div>
+                <div id="multimodal-skeleton" class="space-y-2">
+                    <div class="skeleton h-12 rounded-lg"></div>
+                    <div class="skeleton h-8 rounded-lg"></div>
+                    <div class="skeleton h-8 rounded-lg"></div>
+                </div>
+                <div id="multimodal-content" class="hidden">
+                    <!-- 综合得分环 -->
+                    <div class="flex items-center gap-4 mb-3">
+                        <div class="relative flex-shrink-0" style="width: 60px; height: 60px;">
+                            <svg width="60" height="60" style="transform: rotate(-90deg);">
+                                <circle cx="30" cy="30" r="24" stroke="rgba(255,255,255,0.08)" stroke-width="6" fill="none"/>
+                                <circle id="mm-score-circle" cx="30" cy="30" r="24"
+                                        stroke="url(#mmGrad)" stroke-width="6" fill="none"
+                                        stroke-dasharray="150.8" stroke-dashoffset="150.8"
+                                        style="transition: stroke-dashoffset 1s ease;"/>
+                                <defs>
+                                    <linearGradient id="mmGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                        <stop offset="0%" stop-color="#a855f7"/>
+                                        <stop offset="100%" stop-color="#ec4899"/>
+                                    </linearGradient>
+                                </defs>
+                            </svg>
+                            <div class="absolute inset-0 flex items-center justify-center">
+                                <span id="mm-score-text" class="text-sm font-bold text-fuchsia-300">-</span>
+                            </div>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-xs text-white/40 mb-0.5">综合情感</p>
+                            <p id="mm-dominant" class="text-sm font-semibold text-white"></p>
+                            <p id="mm-strength" class="text-xs text-white/40"></p>
+                        </div>
+                    </div>
+                    <!-- 注意力权重 -->
+                    <div class="space-y-1.5">
+                        <p class="text-xs text-white/30 uppercase tracking-wider mb-1">Attention Weights</p>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-white/50 w-10">文本</span>
+                            <div class="flex-1 rounded-full" style="height: 5px; background: rgba(255,255,255,0.08);">
+                                <div id="w-text" class="rounded-full bg-blue-500" style="height: 5px; width: 0%; transition: width 0.8s;"></div>
+                            </div>
+                            <span id="w-text-val" class="text-xs text-blue-400 w-8 text-right">-</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-white/50 w-10">音频</span>
+                            <div class="flex-1 rounded-full" style="height: 5px; background: rgba(255,255,255,0.08);">
+                                <div id="w-audio" class="rounded-full bg-purple-500" style="height: 5px; width: 0%; transition: width 0.8s;"></div>
+                            </div>
+                            <span id="w-audio-val" class="text-xs text-purple-400 w-8 text-right">-</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-white/50 w-10">弹幕</span>
+                            <div class="flex-1 rounded-full" style="height: 5px; background: rgba(255,255,255,0.08);">
+                                <div id="w-danmu" class="rounded-full bg-cyan-500" style="height: 5px; width: 0%; transition: width 0.8s;"></div>
+                            </div>
+                            <span id="w-danmu-val" class="text-xs text-cyan-400 w-8 text-right">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 音频六分类情感 -->
+            <div class="glass-panel rounded-xl p-4 flex-shrink-0">
+                <div class="flex items-center gap-2 mb-3">
+                    <i class="fa-solid fa-music text-purple-400 text-sm"></i>
+                    <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Audio Emotion Detail</span>
+                </div>
+                <div id="audio-emotion-skeleton" class="skeleton rounded-lg" style="height: 150px;"></div>
+                <div id="audio-emotion-chart" class="chart-container hidden" style="height: 150px;"></div>
+            </div>
+
+            <!-- 情感冲突检测 -->
+            <div class="glass-panel rounded-xl p-4 flex-1">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-triangle-exclamation text-orange-400 text-sm"></i>
+                        <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Conflict Detection</span>
+                    </div>
+                    <span id="conflict-badge" class="hidden text-xs px-2 py-0.5 rounded-full"
+                          style="background: rgba(251,146,60,0.15); color: #fb923c; border: 1px solid rgba(251,146,60,0.3);"></span>
+                </div>
+                <div id="conflict-skeleton" class="space-y-2">
+                    <div class="skeleton h-8 rounded"></div>
+                    <div class="skeleton h-8 rounded"></div>
+                    <div class="skeleton h-8 rounded"></div>
+                </div>
+                <div id="conflict-content" class="hidden">
+                    <!-- 严重程度四格 -->
+                    <div class="grid grid-cols-4 gap-1.5 mb-3">
+                        <div class="text-center p-2 rounded-lg" style="background: rgba(255,255,255,0.04);">
+                            <div id="c-low" class="text-lg font-bold text-yellow-400">0</div>
+                            <div class="text-xs text-white/40">轻微</div>
+                        </div>
+                        <div class="text-center p-2 rounded-lg" style="background: rgba(255,255,255,0.04);">
+                            <div id="c-medium" class="text-lg font-bold text-orange-400">0</div>
+                            <div class="text-xs text-white/40">中等</div>
+                        </div>
+                        <div class="text-center p-2 rounded-lg" style="background: rgba(255,255,255,0.04);">
+                            <div id="c-high" class="text-lg font-bold text-red-400">0</div>
+                            <div class="text-xs text-white/40">严重</div>
+                        </div>
+                        <div class="text-center p-2 rounded-lg" style="background: rgba(255,255,255,0.04);">
+                            <div id="c-critical" class="text-lg font-bold text-red-600">0</div>
+                            <div class="text-xs text-white/40">极度</div>
+                        </div>
+                    </div>
+                    <!-- 冲突列表 -->
+                    <div id="conflict-list" class="space-y-1.5 overflow-y-auto" style="max-height: 160px;"></div>
+                    <div id="conflict-empty" class="text-center py-4 text-white/30 text-xs">暂无冲突</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+        const API_BASE = 'http://118.25.39.91:8000';
+
+        let currentBvId = null;
+        let charts = {};
+
+        // ==================== 初始化 ====================
+        document.addEventListener('DOMContentLoaded', () => {
+            updateDate();
+            setInterval(updateDate, 60000);
+        });
+
+        function updateDate() {
+            const now = new Date();
+            const opts = { year: 'numeric', month: 'long', day: 'numeric' };
+            document.getElementById('header-date').textContent =
+                now.toLocaleDateString('en-US', opts).toUpperCase();
+        }
+
+        // ==================== IPC 通信 ====================
+        ipcRenderer.on('video-change', (event, data) => {
+            const bvId = data?.bvId || data;
+            const title = data?.title || '';
+            if (bvId && bvId !== currentBvId) {
+                currentBvId = bvId;
+                document.getElementById('header-title').textContent = title || bvId;
+                loadAll(bvId);
+            }
+        });
+
+        ipcRenderer.on('task-complete', (event, data) => {
+            if (data?.bvid === currentBvId) {
+                // 任务完成后刷新数据
+                setTimeout(() => loadAll(currentBvId), 1500);
+            }
+        });
+
+        // ==================== Collapse ====================
+        function collapse() {
+            ipcRenderer.send('close-expanded-window');
+        }
+
+        // ==================== 数据加载 ====================
+        async function loadAll(bvId) {
+            showLoadingBar(true);
+            resetSkeletons();
+            try {
+                // 并行请求四个 API
+                const [dashRes, userRes, audioRes, multimodalRes] = await Promise.allSettled([
+                    fetch(`${API_BASE}/api/video/dashboard/${bvId}/`).then(r => r.json()),
+                    fetch(`${API_BASE}/api/video/user-profile/${bvId}/`).then(r => r.json()),
+                    fetch(`${API_BASE}/api/video/audio-dashboard/${bvId}/`).then(r => r.json()),
+                    fetch(`${API_BASE}/api/video/multimodal-emotion/${bvId}/`).then(r => r.json()),
+                ]);
+
+                if (dashRes.status === 'fulfilled' && dashRes.value?.success) {
+                    renderDashboard(dashRes.value);
+                }
+                if (userRes.status === 'fulfilled' && userRes.value?.success) {
+                    renderUserProfile(userRes.value);
+                }
+                if (audioRes.status === 'fulfilled' && audioRes.value?.success) {
+                    renderAudioDashboard(audioRes.value);
+                } else {
+                    showAudioNoData();
+                }
+                if (multimodalRes.status === 'fulfilled' && multimodalRes.value?.success) {
+                    renderMultimodal(multimodalRes.value);
+                } else {
+                    showMultimodalNoData();
+                }
+            } catch (e) {
+                console.error('[ExpandedView] 加载失败:', e);
+            } finally {
+                showLoadingBar(false);
+            }
+        }
+
+        function showLoadingBar(show) {
+            document.getElementById('top-loading-bar').classList.toggle('hidden', !show);
+        }
+
+        function resetSkeletons() {
+            const skeletonIds = [
+                'video-info-skeleton', 'sentiment-skeleton', 'danmu-stats-skeleton',
+                'comments-skeleton', 'trend-chart-skeleton', 'hourly-chart-skeleton',
+                'heatmap-skeleton', 'pie-skeleton', 'user-skeleton',
+                'location-skeleton', 'vip-skeleton',
+                'audio-timeline-skeleton', 'comparison-skeleton',
+                'multimodal-skeleton', 'audio-emotion-skeleton', 'conflict-skeleton',
+            ];
+            const contentIds = [
+                'video-info-content', 'sentiment-bars', 'danmu-stats-content',
+                'comments-list', 'trend-chart', 'hourly-chart',
+                'heatmap-chart', 'pie-chart', 'user-stats',
+                'location-list', 'vip-chart',
+                'audio-timeline-chart', 'audio-no-data', 'comparison-chart',
+                'multimodal-content', 'audio-emotion-chart', 'conflict-content',
+            ];
+            skeletonIds.forEach(id => document.getElementById(id)?.classList.remove('hidden'));
+            contentIds.forEach(id => document.getElementById(id)?.classList.add('hidden'));
+            document.getElementById('audio-status-badge')?.classList.add('hidden');
+            document.getElementById('conflict-badge')?.classList.add('hidden');
+        }
+
+        // ==================== 渲染 Dashboard 数据 ====================
+        function renderDashboard(data) {
+            renderVideoInfo(data.video_info);
+            renderSentimentBars(data.sentiment?.distribution);
+            renderDanmuStats(data.danmu?.stats);
+            renderTopComments(data.quality?.top_comments);
+            renderTrendChart(data.sentiment?.trend_by_time);
+            renderHourlyChart(data.time_analysis?.hourly_distribution);
+            renderHeatmapChart(data.danmu?.timeline_heatmap);
+            renderPieChart(data.sentiment?.distribution);
+
+            // 顶部情感得分徽章
+            const dist = data.sentiment?.distribution;
+            if (dist) {
+                const total = (dist.positive || 0) + (dist.neutral || 0) + (dist.negative || 0);
+                if (total > 0) {
+                    const posRatio = Math.round((dist.positive / total) * 100);
+                    document.getElementById('score-value').textContent = `${posRatio}% Positive`;
+                    document.getElementById('score-badge').classList.remove('hidden');
+                }
+            }
+        }
+
+        function renderVideoInfo(info) {
+            if (!info) return;
+            document.getElementById('vi-title').textContent = info.title || '-';
+            document.getElementById('vi-bvid').textContent = info.bvid || '';
+            document.getElementById('vi-view').textContent = formatNum(info.view);
+            document.getElementById('vi-like').textContent = formatNum(info.like);
+            document.getElementById('vi-coin').textContent = formatNum(info.coin);
+            document.getElementById('vi-fav').textContent = formatNum(info.favorite);
+            // 更新标题
+            if (info.title) {
+                document.getElementById('header-title').textContent = info.title;
+            }
+            showContent('video-info-skeleton', 'video-info-content');
+        }
+
+        function renderSentimentBars(dist) {
+            if (!dist) return;
+            const total = (dist.positive || 0) + (dist.neutral || 0) + (dist.negative || 0);
+            if (total === 0) return;
+
+            const items = [
+                { label: 'Positive', count: dist.positive, cls: 'bg-green-500', textCls: 'text-green-400' },
+                { label: 'Neutral',  count: dist.neutral,  cls: 'bg-gray-500',  textCls: 'text-gray-400' },
+                { label: 'Negative', count: dist.negative, cls: 'bg-red-500',   textCls: 'text-red-400' }
+            ];
+
+            const container = document.getElementById('sentiment-bars');
+            container.innerHTML = items.map(item => {
+                const pct = Math.round((item.count / total) * 100);
+                return `<div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="${item.textCls} font-medium">${item.label}</span>
+                        <span class="text-white/50">${item.count.toLocaleString()} (${pct}%)</span>
+                    </div>
+                    <div class="w-full rounded-full" style="height: 6px; background: rgba(255,255,255,0.08);">
+                        <div class="${item.cls} rounded-full" style="height: 6px; width: ${pct}%; transition: width 0.8s ease;"></div>
+                    </div>
+                </div>`;
+            }).join('');
+
+            showContent('sentiment-skeleton', 'sentiment-bars');
+        }
+
+        function renderDanmuStats(stats) {
+            if (!stats) return;
+            document.getElementById('danmu-count').textContent = formatNum(stats.total_count || stats.count || 0);
+            const pos = stats.positive_count || 0;
+            document.getElementById('danmu-positive').textContent = formatNum(pos);
+            showContent('danmu-stats-skeleton', 'danmu-stats-content');
+        }
+
+        function renderTopComments(comments) {
+            if (!comments || comments.length === 0) return;
+            const top5 = comments.slice(0, 5);
+            const container = document.getElementById('comments-list');
+            container.innerHTML = top5.map((c, i) => {
+                const sentiment = c.sentiment_label || 'neutral';
+                const dotCls = sentiment === 'positive' ? 'bg-green-400' : sentiment === 'negative' ? 'bg-red-400' : 'bg-gray-400';
+                return `<div class="comment-item">
+                    <div class="flex items-start gap-2">
+                        <span class="text-xs text-white/30 mt-0.5 flex-shrink-0">#${i+1}</span>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-xs text-white/80 leading-relaxed line-clamp-2">${escHtml(c.message || '')}</p>
+                            <div class="flex items-center gap-2 mt-1">
+                                <span class="flex items-center gap-1 text-xs text-pink-400">
+                                    <i class="fa-solid fa-thumbs-up text-xs"></i> ${formatNum(c.like_count || 0)}
+                                </span>
+                                <span class="w-1.5 h-1.5 rounded-full ${dotCls} inline-block"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+            showContent('comments-skeleton', 'comments-list');
+        }
+
+        // ==================== 渲染用户画像数据 ====================
+        function renderUserProfile(data) {
+            const stats = data.overview_stats;
+            if (stats) {
+                document.getElementById('u-total').textContent = formatNum(stats.total_users);
+                document.getElementById('u-vip').textContent = `${stats.vip_ratio}%`;
+                document.getElementById('u-level').textContent = `LV ${stats.avg_level}`;
+                showContent('user-skeleton', 'user-stats');
+            }
+
+            renderLocationList(data.location_distribution);
+            renderVipChart(data.vip_distribution);
+        }
+
+        function renderLocationList(locations) {
+            if (!locations || locations.length === 0) return;
+            const top5 = locations.slice(0, 5);
+            const maxCount = top5[0]?.count || 1;
+            const container = document.getElementById('location-list');
+            container.innerHTML = top5.map((loc, i) => {
+                const pct = Math.round((loc.count / maxCount) * 100);
+                const name = loc.location || loc.province || '未知';
+                return `<div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-white/60">${i+1}. ${name}</span>
+                        <span class="text-emerald-400">${formatNum(loc.count)}</span>
+                    </div>
+                    <div class="w-full rounded-full" style="height: 4px; background: rgba(255,255,255,0.06);">
+                        <div class="rounded-full bg-emerald-500" style="height: 4px; width: ${pct}%; transition: width 0.8s;"></div>
+                    </div>
+                </div>`;
+            }).join('');
+            showContent('location-skeleton', 'location-list');
+        }
+
+        // ==================== ECharts 图表 ====================
+        function initChart(id) {
+            if (charts[id]) {
+                charts[id].dispose();
+            }
+            const el = document.getElementById(id);
+            charts[id] = echarts.init(el, null, { renderer: 'canvas' });
+
+            // 响应窗口大小变化
+            const observer = new ResizeObserver(() => {
+                charts[id]?.resize();
+            });
+            observer.observe(el);
+
+            return charts[id];
+        }
+
+        const COLORS = {
+            positive: '#4ade80',
+            neutral:  '#94a3b8',
+            negative: '#f87171',
+            pink:     '#ec4899',
+            blue:     '#60a5fa',
+            purple:   '#a78bfa',
+            orange:   '#fb923c',
+        };
+
+        function renderTrendChart(trendData) {
+            if (!trendData || trendData.length === 0) return;
+            showContent('trend-chart-skeleton', 'trend-chart');
+
+            const chart = initChart('trend-chart');
+            const labels = trendData.map(d => d.time.slice(5, 16)); // MM-DD HH:00
+
+            chart.setOption({
+                backgroundColor: 'transparent',
+                grid: { top: 10, right: 16, bottom: 40, left: 40, containLabel: false },
+                tooltip: {
+                    trigger: 'axis',
+                    backgroundColor: 'rgba(20, 20, 30, 0.9)',
+                    borderColor: 'rgba(255,255,255,0.1)',
+                    textStyle: { color: '#fff', fontSize: 12 }
+                },
+                xAxis: {
+                    type: 'category',
+                    data: labels,
+                    axisLabel: { color: 'rgba(255,255,255,0.3)', fontSize: 10, interval: Math.floor(labels.length / 5) },
+                    axisLine: { lineStyle: { color: 'rgba(255,255,255,0.08)' } },
+                    splitLine: { show: false }
+                },
+                yAxis: {
+                    type: 'value',
+                    axisLabel: { color: 'rgba(255,255,255,0.3)', fontSize: 10 },
+                    splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } },
+                    axisLine: { show: false }
+                },
+                series: [
+                    { name: 'Positive', type: 'line', data: trendData.map(d => d.positive),
+                      smooth: true, symbol: 'none',
+                      lineStyle: { color: COLORS.positive, width: 2 },
+                      areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+                          colorStops: [{ offset: 0, color: 'rgba(74,222,128,0.2)' }, { offset: 1, color: 'rgba(74,222,128,0)' }] } } },
+                    { name: 'Neutral', type: 'line', data: trendData.map(d => d.neutral),
+                      smooth: true, symbol: 'none',
+                      lineStyle: { color: COLORS.neutral, width: 1.5, type: 'dashed' } },
+                    { name: 'Negative', type: 'line', data: trendData.map(d => d.negative),
+                      smooth: true, symbol: 'none',
+                      lineStyle: { color: COLORS.negative, width: 2 },
+                      areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+                          colorStops: [{ offset: 0, color: 'rgba(248,113,113,0.15)' }, { offset: 1, color: 'rgba(248,113,113,0)' }] } } },
+                ]
+            });
+        }
+
+        function renderHourlyChart(hourlyData) {
+            if (!hourlyData || hourlyData.length === 0) return;
+            showContent('hourly-chart-skeleton', 'hourly-chart');
+
+            const chart = initChart('hourly-chart');
+            chart.setOption({
+                backgroundColor: 'transparent',
+                grid: { top: 8, right: 8, bottom: 30, left: 36, containLabel: false },
+                tooltip: {
+                    trigger: 'axis',
+                    backgroundColor: 'rgba(20,20,30,0.9)',
+                    borderColor: 'rgba(255,255,255,0.1)',
+                    textStyle: { color: '#fff', fontSize: 12 },
+                    formatter: params => `${params[0].name}:00 — ${params[0].value} 条`
+                },
+                xAxis: {
+                    type: 'category',
+                    data: hourlyData.map(d => d.hour),
+                    axisLabel: { color: 'rgba(255,255,255,0.3)', fontSize: 10,
+                                 formatter: v => v % 6 === 0 ? `${v}h` : '' },
+                    axisLine: { lineStyle: { color: 'rgba(255,255,255,0.08)' } },
+                    splitLine: { show: false }
+                },
+                yAxis: {
+                    type: 'value',
+                    axisLabel: { color: 'rgba(255,255,255,0.3)', fontSize: 10 },
+                    splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } },
+                    axisLine: { show: false }
+                },
+                series: [{
+                    type: 'bar',
+                    data: hourlyData.map(d => d.count),
+                    barMaxWidth: 10,
+                    itemStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: '#60a5fa' },
+                            { offset: 1, color: '#6366f1' }
+                        ]),
+                        borderRadius: [3, 3, 0, 0]
+                    }
+                }]
+            });
+        }
+
+        function renderHeatmapChart(heatmapData) {
+            if (!heatmapData || heatmapData.length === 0) return;
+            showContent('heatmap-skeleton', 'heatmap-chart');
+
+            // 将弹幕热力图转成折线图（时间 vs 弹幕密度）
+            const chart = initChart('heatmap-chart');
+            const times = heatmapData.map(d => {
+                const sec = d.time_start ?? d.interval_start ?? 0;
+                const min = Math.floor(sec / 60);
+                const s = sec % 60;
+                return `${min}:${String(s).padStart(2, '0')}`;
+            });
+            const counts = heatmapData.map(d => d.count ?? d.danmu_count ?? 0);
+
+            chart.setOption({
+                backgroundColor: 'transparent',
+                grid: { top: 8, right: 8, bottom: 30, left: 36, containLabel: false },
+                tooltip: {
+                    trigger: 'axis',
+                    backgroundColor: 'rgba(20,20,30,0.9)',
+                    borderColor: 'rgba(255,255,255,0.1)',
+                    textStyle: { color: '#fff', fontSize: 12 },
+                    formatter: params => `${params[0].name} — ${params[0].value} 条弹幕`
+                },
+                xAxis: {
+                    type: 'category',
+                    data: times,
+                    axisLabel: { color: 'rgba(255,255,255,0.3)', fontSize: 10,
+                                 interval: Math.floor(times.length / 5) },
+                    axisLine: { lineStyle: { color: 'rgba(255,255,255,0.08)' } },
+                    splitLine: { show: false }
+                },
+                yAxis: {
+                    type: 'value',
+                    axisLabel: { color: 'rgba(255,255,255,0.3)', fontSize: 10 },
+                    splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } },
+                    axisLine: { show: false }
+                },
+                series: [{
+                    type: 'line',
+                    data: counts,
+                    smooth: true,
+                    symbol: 'none',
+                    lineStyle: { color: '#fb923c', width: 2 },
+                    areaStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: 'rgba(251,146,60,0.3)' },
+                            { offset: 1, color: 'rgba(251,146,60,0)' }
+                        ])
+                    }
+                }]
+            });
+        }
+
+        function renderPieChart(dist) {
+            if (!dist) return;
+            showContent('pie-skeleton', 'pie-chart');
+
+            const chart = initChart('pie-chart');
+            const total = (dist.positive || 0) + (dist.neutral || 0) + (dist.negative || 0);
+            chart.setOption({
+                backgroundColor: 'transparent',
+                tooltip: {
+                    backgroundColor: 'rgba(20,20,30,0.9)',
+                    borderColor: 'rgba(255,255,255,0.1)',
+                    textStyle: { color: '#fff', fontSize: 12 },
+                    formatter: p => `${p.name}<br/>${p.value} (${Math.round(p.percent)}%)`
+                },
+                legend: {
+                    bottom: 0, textStyle: { color: 'rgba(255,255,255,0.5)', fontSize: 11 }
+                },
+                series: [{
+                    type: 'pie',
+                    radius: ['42%', '70%'],
+                    center: ['50%', '45%'],
+                    label: { show: false },
+                    emphasis: { label: { show: true, fontSize: 13, fontWeight: 'bold' } },
+                    data: [
+                        { name: 'Positive', value: dist.positive || 0, itemStyle: { color: COLORS.positive } },
+                        { name: 'Neutral',  value: dist.neutral  || 0, itemStyle: { color: COLORS.neutral  } },
+                        { name: 'Negative', value: dist.negative || 0, itemStyle: { color: COLORS.negative } },
+                    ]
+                }]
+            });
+        }
+
+        function renderVipChart(vipDist) {
+            if (!vipDist) return;
+            showContent('vip-skeleton', 'vip-chart');
+
+            const chart = initChart('vip-chart');
+            const normal  = vipDist.normal || 0;
+            const monthly = vipDist.monthly_vip || 0;
+            const annual  = vipDist.annual_vip || 0;
+
+            chart.setOption({
+                backgroundColor: 'transparent',
+                tooltip: {
+                    backgroundColor: 'rgba(20,20,30,0.9)',
+                    borderColor: 'rgba(255,255,255,0.1)',
+                    textStyle: { color: '#fff', fontSize: 12 },
+                    formatter: p => `${p.name}: ${p.value}`
+                },
+                legend: {
+                    bottom: 0, textStyle: { color: 'rgba(255,255,255,0.5)', fontSize: 10 }
+                },
+                series: [{
+                    type: 'pie',
+                    radius: ['35%', '60%'],
+                    center: ['50%', '42%'],
+                    label: { show: false },
+                    data: [
+                        { name: '普通用户', value: normal,  itemStyle: { color: '#64748b' } },
+                        { name: '月度 VIP', value: monthly, itemStyle: { color: '#f59e0b' } },
+                        { name: '年度 VIP', value: annual,  itemStyle: { color: '#ef4444' } },
+                    ]
+                }]
+            });
+        }
+
+        // ==================== 音频分析渲染 ====================
+        function renderAudioDashboard(data) {
+            const timeline = data.audio?.timeline || [];
+            const status   = data.audio?.status;
+
+            // 状态徽章
+            if (status === 'analyzed') {
+                document.getElementById('audio-status-badge').classList.remove('hidden');
+            }
+
+            if (timeline.length > 0) {
+                showContent('audio-timeline-skeleton', 'audio-timeline-chart');
+                renderAudioTimelineChart(timeline);
+            } else {
+                // 无音频数据
+                showContent('audio-timeline-skeleton', 'audio-no-data');
+            }
+
+            // 三模态对比柱状图
+            const dist = data.distribution;
+            if (dist) {
+                showContent('comparison-skeleton', 'comparison-chart');
+                renderComparisonChart(dist, data.comparison);
+            }
+        }
+
+        function showAudioNoData() {
+            showContent('audio-timeline-skeleton', 'audio-no-data');
+            showContent('comparison-skeleton', 'comparison-chart');
+        }
+
+        function renderAudioTimelineChart(timeline) {
+            const chart = initChart('audio-timeline-chart');
+            const times  = timeline.map(d => {
+                const s = d.time ?? 0;
+                return `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+            });
+            const scores = timeline.map(d => +(d.score ?? 0).toFixed(3));
+
+            chart.setOption({
+                backgroundColor: 'transparent',
+                grid: { top: 8, right: 8, bottom: 30, left: 40, containLabel: false },
+                tooltip: {
+                    trigger: 'axis',
+                    backgroundColor: 'rgba(20,20,30,0.9)',
+                    borderColor: 'rgba(255,255,255,0.1)',
+                    textStyle: { color: '#fff', fontSize: 12 },
+                    formatter: params => {
+                        const p = params[0];
+                        const label = timeline[p.dataIndex]?.label || '';
+                        return `${p.name}<br/>情感得分: ${p.value}<br/>${label}`;
+                    }
+                },
+                xAxis: {
+                    type: 'category',
+                    data: times,
+                    axisLabel: { color: 'rgba(255,255,255,0.3)', fontSize: 10,
+                                 interval: Math.floor(times.length / 4) },
+                    axisLine: { lineStyle: { color: 'rgba(255,255,255,0.08)' } },
+                    splitLine: { show: false }
+                },
+                yAxis: {
+                    type: 'value',
+                    min: 0, max: 1,
+                    axisLabel: { color: 'rgba(255,255,255,0.3)', fontSize: 10 },
+                    splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } },
+                    axisLine: { show: false }
+                },
+                visualMap: {
+                    show: false,
+                    dimension: 1,
+                    pieces: [
+                        { gte: 0.6, color: '#4ade80' },
+                        { gte: 0.4, lt: 0.6, color: '#94a3b8' },
+                        { lt: 0.4, color: '#f87171' }
+                    ]
+                },
+                series: [{
+                    type: 'line',
+                    data: scores,
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 4,
+                    lineStyle: { width: 2 },
+                    areaStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: 'rgba(168,85,247,0.25)' },
+                            { offset: 1, color: 'rgba(168,85,247,0)' }
+                        ])
+                    }
+                }]
+            });
+        }
+
+        function renderComparisonChart(dist, comparison) {
+            const chart = initChart('comparison-chart');
+
+            // 三模态平均得分（底部 annotation 用）
+            const audioAvg   = comparison?.audio_avg_sentiment;
+            const commentAvg = comparison?.comment_avg_sentiment;
+            const danmuAvg   = comparison?.danmu_avg_sentiment;
+
+            const categories = ['Positive', 'Neutral', 'Negative'];
+            const audioData   = dist.audio   || [0, 0, 0];
+            const commentData = dist.comments || [0, 0, 0];
+            const danmuData   = dist.danmu    || [0, 0, 0];
+
+            chart.setOption({
+                backgroundColor: 'transparent',
+                grid: { top: 20, right: 8, bottom: 40, left: 36, containLabel: false },
+                legend: {
+                    bottom: 0,
+                    textStyle: { color: 'rgba(255,255,255,0.5)', fontSize: 10 }
+                },
+                tooltip: {
+                    trigger: 'axis',
+                    backgroundColor: 'rgba(20,20,30,0.9)',
+                    borderColor: 'rgba(255,255,255,0.1)',
+                    textStyle: { color: '#fff', fontSize: 12 },
+                    axisPointer: { type: 'shadow' }
+                },
+                xAxis: {
+                    type: 'category',
+                    data: categories,
+                    axisLabel: { color: 'rgba(255,255,255,0.4)', fontSize: 11 },
+                    axisLine: { lineStyle: { color: 'rgba(255,255,255,0.08)' } },
+                    splitLine: { show: false }
+                },
+                yAxis: {
+                    type: 'value',
+                    axisLabel: { color: 'rgba(255,255,255,0.3)', fontSize: 10 },
+                    splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } },
+                    axisLine: { show: false }
+                },
+                series: [
+                    { name: 'Audio',    type: 'bar', data: audioData,   barMaxWidth: 14,
+                      itemStyle: { color: '#a78bfa', borderRadius: [3,3,0,0] } },
+                    { name: 'Comments', type: 'bar', data: commentData, barMaxWidth: 14,
+                      itemStyle: { color: '#ec4899', borderRadius: [3,3,0,0] } },
+                    { name: 'Danmu',    type: 'bar', data: danmuData,   barMaxWidth: 14,
+                      itemStyle: { color: '#22d3ee', borderRadius: [3,3,0,0] } },
+                ]
+            });
+
+            // 在比较图下方渲染平均分卡片（如果有数据）
+            if (audioAvg != null || commentAvg != null || danmuAvg != null) {
+                renderAvgScoreCards(audioAvg, commentAvg, danmuAvg);
+            }
+        }
+
+        function renderAvgScoreCards(audioAvg, commentAvg, danmuAvg) {
+            // 在 comparison-chart 后动态插入平均分行（避免重复）
+            const existing = document.getElementById('avg-score-row');
+            if (existing) existing.remove();
+
+            const parent = document.getElementById('comparison-chart').parentElement;
+            const row = document.createElement('div');
+            row.id = 'avg-score-row';
+            row.className = 'grid grid-cols-3 gap-2 mt-2';
+
+            const cards = [
+                { label: 'Audio Avg',    value: audioAvg,   cls: 'text-purple-400' },
+                { label: 'Comment Avg',  value: commentAvg, cls: 'text-pink-400'   },
+                { label: 'Danmu Avg',    value: danmuAvg,   cls: 'text-cyan-400'   },
+            ];
+            row.innerHTML = cards.map(c => `
+                <div class="stat-card text-center">
+                    <p class="text-sm font-bold ${c.cls}">${c.value != null ? c.value.toFixed(2) : '--'}</p>
+                    <p class="text-xs text-white/40">${c.label}</p>
+                </div>`).join('');
+            parent.appendChild(row);
+        }
+
+        // ==================== 多模态分析渲染 ====================
+        function renderMultimodal(data) {
+            renderMultimodalScore(data);
+            renderAudioEmotionChart(data.audioEmotions);
+            renderConflicts(data.conflicts, data.conflict_info);
+        }
+
+        function showMultimodalNoData() {
+            showContent('multimodal-skeleton', 'multimodal-content');
+            showContent('audio-emotion-skeleton', 'audio-emotion-chart');
+            showContent('conflict-skeleton', 'conflict-content');
+        }
+
+        function renderMultimodalScore(data) {
+            const score    = data.overallScore ?? data.fused_emotion?.positive ?? 0;
+            const dominant = data.dominant_emotion || 'neutral';
+            const strength = data.emotion_strength;
+            const weights  = data.attention_weights;
+
+            // 环形进度
+            const pct = Math.round(score * 100);
+            const circumference = 150.8; // 2π×24
+            const offset = circumference * (1 - score);
+            document.getElementById('mm-score-circle').style.strokeDashoffset = offset;
+            document.getElementById('mm-score-text').textContent = `${pct}%`;
+
+            const dominantMap = { positive: '正面 😊', neutral: '中性 😐', negative: '负面 😔' };
+            document.getElementById('mm-dominant').textContent = dominantMap[dominant] || dominant;
+            if (strength != null) {
+                document.getElementById('mm-strength').textContent = `强度: ${(strength * 100).toFixed(0)}%`;
+            }
+
+            // 注意力权重进度条
+            if (weights) {
+                const tw = Math.round((weights.text  ?? 0) * 100);
+                const aw = Math.round((weights.audio ?? 0) * 100);
+                const dw = Math.round((weights.danmu ?? 0) * 100);
+                document.getElementById('w-text').style.width  = `${tw}%`;
+                document.getElementById('w-audio').style.width = `${aw}%`;
+                document.getElementById('w-danmu').style.width = `${dw}%`;
+                document.getElementById('w-text-val').textContent  = `${tw}%`;
+                document.getElementById('w-audio-val').textContent = `${aw}%`;
+                document.getElementById('w-danmu-val').textContent = `${dw}%`;
+            }
+
+            showContent('multimodal-skeleton', 'multimodal-content');
+        }
+
+        function renderAudioEmotionChart(audioEmotions) {
+            // audioEmotions: {happy, sad, angry, fearful, surprise, neutral} 或类似
+            if (!audioEmotions) {
+                showContent('audio-emotion-skeleton', 'audio-emotion-chart');
+                return;
+            }
+
+            showContent('audio-emotion-skeleton', 'audio-emotion-chart');
+            const chart = initChart('audio-emotion-chart');
+
+            // 统一键名映射（中英文）
+            const EMOTION_LABELS = {
+                happy:    '开心', sad: '悲伤', angry: '愤怒',
+                fearful:  '恐惧', surprise: '惊讶', neutral: '中性',
+                positive: '正面', negative: '负面'
+            };
+            const EMOTION_COLORS = {
+                happy: '#4ade80', sad: '#60a5fa', angry: '#f87171',
+                fearful: '#fb923c', surprise: '#facc15', neutral: '#94a3b8',
+                positive: '#4ade80', negative: '#f87171'
+            };
+
+            const entries = Object.entries(audioEmotions)
+                .filter(([, v]) => typeof v === 'number' && !isNaN(v))
+                .sort((a, b) => b[1] - a[1]);
+
+            chart.setOption({
+                backgroundColor: 'transparent',
+                tooltip: {
+                    backgroundColor: 'rgba(20,20,30,0.9)',
+                    borderColor: 'rgba(255,255,255,0.1)',
+                    textStyle: { color: '#fff', fontSize: 12 },
+                    formatter: p => `${p.name}: ${(p.value * 100).toFixed(1)}%`
+                },
+                legend: {
+                    bottom: 0,
+                    textStyle: { color: 'rgba(255,255,255,0.4)', fontSize: 9 },
+                    itemWidth: 8, itemHeight: 8
+                },
+                series: [{
+                    type: 'pie',
+                    radius: ['38%', '62%'],
+                    center: ['50%', '42%'],
+                    label: { show: false },
+                    emphasis: { label: { show: true, fontSize: 11 } },
+                    data: entries.map(([k, v]) => ({
+                        name: EMOTION_LABELS[k] || k,
+                        value: +v.toFixed(3),
+                        itemStyle: { color: EMOTION_COLORS[k] || '#94a3b8' }
+                    }))
+                }]
+            });
+        }
+
+        function renderConflicts(conflicts, conflictInfo) {
+            showContent('conflict-skeleton', 'conflict-content');
+
+            const total = conflicts?.length ?? 0;
+            const badge = document.getElementById('conflict-badge');
+            badge.textContent = `${total} 处冲突`;
+            badge.classList.remove('hidden');
+
+            // 严重程度统计
+            let low = 0, medium = 0, high = 0, critical = 0;
+            (conflicts || []).forEach(c => {
+                const sev = c.severity ?? c.type ?? '';
+                if (sev === 'low')      low++;
+                else if (sev === 'medium') medium++;
+                else if (sev === 'high')   high++;
+                else if (sev === 'critical') critical++;
+                else medium++; // 默认归入中等
+            });
+
+            // 也尝试从 conflict_info 读取
+            if (conflictInfo) {
+                if (conflictInfo.low_count    != null) low      = conflictInfo.low_count;
+                if (conflictInfo.medium_count != null) medium   = conflictInfo.medium_count;
+                if (conflictInfo.high_count   != null) high     = conflictInfo.high_count;
+                if (conflictInfo.critical_count != null) critical = conflictInfo.critical_count;
+            }
+
+            document.getElementById('c-low').textContent      = low;
+            document.getElementById('c-medium').textContent   = medium;
+            document.getElementById('c-high').textContent     = high;
+            document.getElementById('c-critical').textContent = critical;
+
+            // 冲突列表
+            const listEl   = document.getElementById('conflict-list');
+            const emptyEl  = document.getElementById('conflict-empty');
+
+            if (!conflicts || conflicts.length === 0) {
+                listEl.innerHTML = '';
+                emptyEl.classList.remove('hidden');
+            } else {
+                emptyEl.classList.add('hidden');
+                const sevColor = { low: 'text-yellow-400', medium: 'text-orange-400',
+                                   high: 'text-red-400', critical: 'text-red-600' };
+                listEl.innerHTML = conflicts.slice(0, 8).map(c => {
+                    const sev  = c.severity ?? c.type ?? 'medium';
+                    const time = c.time_start != null
+                        ? `${Math.floor(c.time_start / 60)}:${String(Math.round(c.time_start % 60)).padStart(2,'0')}`
+                        : (c.segment ?? '--');
+                    const desc = c.description ?? c.message ?? `音频与文本情感冲突`;
+                    return `<div class="flex items-start gap-2 px-2 py-1.5 rounded"
+                                 style="background: rgba(255,255,255,0.03);">
+                        <span class="text-xs font-mono text-white/30 flex-shrink-0 mt-0.5">${time}</span>
+                        <span class="text-xs text-white/60 flex-1 leading-snug">${escHtml(desc)}</span>
+                        <span class="text-xs ${sevColor[sev] || 'text-orange-400'} flex-shrink-0 capitalize">${sev}</span>
+                    </div>`;
+                }).join('');
+            }
+        }
+
+        // ==================== 工具函数 ====================
+        function showContent(skeletonId, contentId) {
+            document.getElementById(skeletonId)?.classList.add('hidden');
+            document.getElementById(contentId)?.classList.remove('hidden');
+        }
+
+        function formatNum(n) {
+            if (n == null) return '-';
+            if (n >= 10000) return (n / 10000).toFixed(1) + 'w';
+            return n.toLocaleString();
+        }
+
+        function escHtml(s) {
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        // ==================== 窗口 resize 时重绘图表 ====================
+        window.addEventListener('resize', () => {
+            Object.values(charts).forEach(c => c?.resize());
+        });
+    </script>
+</body>
+</html>

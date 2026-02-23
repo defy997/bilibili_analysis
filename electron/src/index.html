@@ -1021,8 +1021,7 @@
         }
 
         function expandWindow() {
-            // 展开功能
-            showToast('Expand feature coming soon', 'info');
+            ipcRenderer.send('open-expanded-window');
         }
 
         // === 打开B站扫码登录页面 ===

@@ -61,32 +61,15 @@ function createNotificationServer() {
 
 // 广播任务完成消息到所有窗口
 function broadcastTaskComplete(data) {
-    const { bvid, task_type, status, result } = data;
-
-    // 发送到主窗口
-    if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('task-complete', data);
-    }
-
-    // 发送到分析窗口
-    if (analysisWindow && !analysisWindow.isDestroyed()) {
-        analysisWindow.webContents.send('task-complete', data);
-    }
-
-    // 发送到用户画像窗口
-    if (userProfileWindow && !userProfileWindow.isDestroyed()) {
-        userProfileWindow.webContents.send('task-complete', data);
-    }
-
-    // 发送到视频音频分析窗口
-    if (videoAudioWindow && !videoAudioWindow.isDestroyed()) {
-        videoAudioWindow.webContents.send('task-complete', data);
-    }
-
-    // 发送到综合报告窗口
-    if (overallReportsWindow && !overallReportsWindow.isDestroyed()) {
-        overallReportsWindow.webContents.send('task-complete', data);
-    }
+    const windows = [
+        mainWindow, analysisWindow, userProfileWindow,
+        videoAudioWindow, overallReportsWindow, expandedWindow
+    ];
+    windows.forEach(win => {
+        if (win && !win.isDestroyed()) {
+            win.webContents.send('task-complete', data);
+        }
+    });
 }
 
 // 设置控制台输出编码为UTF-8(解决Windows终端中文乱码)
@@ -101,6 +84,7 @@ let analysisWindow; // 情感分析窗口
 let userProfileWindow; // 用户画像窗口
 let videoAudioWindow; // 视频音频分析窗口
 let overallReportsWindow; // 多模态情感分析报告窗口
+let expandedWindow; // 展开仪表盘窗口
 let bilibiliLoginWindow; // B站扫码登录窗口
 let wss; // WebSocket服务器，用于与Chrome插件通信
 let tray = null; // 系统托盘
@@ -343,6 +327,9 @@ function createTray() {
         if (overallReportsWindow && !overallReportsWindow.isDestroyed()) {
           overallReportsWindow.destroy();
         }
+        if (expandedWindow && !expandedWindow.isDestroyed()) {
+          expandedWindow.destroy();
+        }
         if (bilibiliLoginWindow && !bilibiliLoginWindow.isDestroyed()) {
           bilibiliLoginWindow.destroy();
         }
@@ -488,6 +475,9 @@ ipcMain.on('close-window', () => {
   }
   if (videoAudioWindow && !videoAudioWindow.isDestroyed()) {
     videoAudioWindow.destroy();
+  }
+  if (expandedWindow && !expandedWindow.isDestroyed()) {
+    expandedWindow.destroy();
   }
   if (bilibiliLoginWindow && !bilibiliLoginWindow.isDestroyed()) {
     bilibiliLoginWindow.destroy();
@@ -1055,6 +1045,66 @@ function closeOverallReportsWindow() {
 
 
 // ==========================================
+// 展开仪表盘窗口
+// ==========================================
+
+ipcMain.on('open-expanded-window', () => {
+    createExpandedWindow();
+});
+
+ipcMain.on('close-expanded-window', () => {
+    if (expandedWindow && !expandedWindow.isDestroyed()) {
+        expandedWindow.hide();
+    }
+});
+
+function createExpandedWindow() {
+    if (expandedWindow && !expandedWindow.isDestroyed()) {
+        expandedWindow.show();
+        expandedWindow.focus();
+        return;
+    }
+
+    const workArea = screen.getPrimaryDisplay().workArea;
+    const winWidth  = Math.min(1100, workArea.width  - 80);
+    const winHeight = Math.min(700,  workArea.height - 80);
+    const x = Math.floor(workArea.x + (workArea.width  - winWidth)  / 2);
+    const y = Math.floor(workArea.y + (workArea.height - winHeight) / 2);
+
+    expandedWindow = new BrowserWindow({
+        width:  winWidth,
+        height: winHeight,
+        x, y,
+        frame:       true,
+        resizable:   true,
+        skipTaskbar: false,
+        title: 'BiliMood Dashboard',
+        webPreferences: {
+            nodeIntegration:    true,
+            contextIsolation:   false,
+            enableRemoteModule: true,
+        }
+    });
+
+    expandedWindow.loadFile('src/expanded-view.html');
+
+    expandedWindow.once('ready-to-show', () => {
+        expandedWindow.show();
+        if (currentBvId) {
+            expandedWindow.webContents.send('video-change', {
+                bvId: currentBvId,
+                title: currentVideoTitle
+            });
+        }
+    });
+
+    expandedWindow.on('closed', () => {
+        expandedWindow = null;
+    });
+}
+
+
+// ==========================================
 // B站扫码登录窗口
 // ==========================================
 
@@ -1271,17 +1321,13 @@ ipcMain.on('main-video-change', (event, data) => {
 function broadcastVideoChange(bvId, title) {
     const videoData = { bvId, title: title || '未知标题' };
 
-    // 更新主窗口显示
-    if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('video-change', videoData);
-    }
-
-    // 广播到所有子窗口
-    const windows = [analysisWindow, userProfileWindow, videoAudioWindow];
+    const windows = [
+        mainWindow, analysisWindow, userProfileWindow,
+        videoAudioWindow, expandedWindow
+    ];
     windows.forEach(win => {
         if (win && !win.isDestroyed()) {
             win.webContents.send('video-change', videoData);
-            console.log(`[Main] 已发送 video-change 到 ${win === analysisWindow ? 'analysis' : win === userProfileWindow ? 'user-profile' : 'video-audio'}`);
         }
     });
 }
