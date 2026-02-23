@@ -497,7 +497,9 @@
                         console.log('[LoadData] 数据已缓存');
                         // 继续加载 dashboard
                     } else if (analyzeData.status === 'already_processing') {
-                        console.log('[LoadData] 视频正在被其他请求处理');
+                        console.log('[LoadData] 视频正在被其他请求处理，轮询 dashboard...');
+                        await pollDashboardUntilReady(bvId);
+                        return;
                     }
                 } catch (analyzeErr) {
                     console.warn('[LoadData] 异步分析触发失败，回退同步:', analyzeErr);
@@ -536,6 +538,68 @@
                     showError('Failed to load data: ' + error.message);
                 }
             }
+        }
+
+        // === 无任务ID时轮询 dashboard，等待数据就绪（already_processing 场景）===
+        async function pollDashboardUntilReady(bvId) {
+            const pollInterval = 3000;
+            const maxAttempts = 40; // 40 * 3s = 2分钟
+            let attempts = 0;
+
+            const loadingTasks = document.getElementById('loading-tasks');
+            const loadingProgress = document.getElementById('loading-progress');
+            const loadingTitle = document.getElementById('loading-title');
+            const loadingSubtitle = document.getElementById('loading-subtitle');
+
+            if (loadingTasks) loadingTasks.classList.remove('hidden');
+            if (loadingProgress) {
+                loadingProgress.style.width = '20%';
+                loadingProgress.classList.add('animate-pulse');
+            }
+            if (loadingTitle) loadingTitle.innerText = 'Waiting for analysis...';
+            if (loadingSubtitle) loadingSubtitle.innerText = 'Another request is processing this video';
+
+            return new Promise((resolve) => {
+                const timer = setInterval(async () => {
+                    attempts++;
+                    try {
+                        const resp = await fetch(`http://118.25.39.91:8000/api/video/dashboard/${bvId}/`);
+                        const data = await resp.json();
+
+                        if (data.success && data.data &&
+                            (data.data.comment_count > 0 || data.data.danmu_count > 0)) {
+                            clearInterval(timer);
+                            if (loadingProgress) {
+                                loadingProgress.style.width = '100%';
+                                loadingProgress.classList.remove('animate-pulse');
+                                loadingProgress.classList.add('bg-green-500');
+                            }
+                            if (loadingTitle) loadingTitle.innerText = 'Analysis Complete!';
+                            setTimeout(() => {
+                                if (loadingTasks) loadingTasks.classList.add('hidden');
+                                showLoading(false);
+                                updateUI(data);
+                                resolve();
+                            }, 1000);
+                            return;
+                        }
+                        // 更新进度动画
+                        const progress = Math.min(20 + attempts * 2, 85);
+                        if (loadingProgress) loadingProgress.style.width = `${progress}%`;
+                    } catch (err) {
+                        console.error('[PollDashboard] 轮询错误:', err);
+                    }
+
+                    if (attempts >= maxAttempts) {
+                        clearInterval(timer);
+                        console.warn('[PollDashboard] 轮询超时');
+                        if (loadingTasks) loadingTasks.classList.add('hidden');
+                        showLoading(false);
+                        await loadDashboard(bvId);
+                        resolve();
+                    }
+                }, pollInterval);
+            });
         }
 
         // === 轮询分析任务状态 ===

@@ -1,8 +1,6 @@
 from celery import Celery, group, chain, shared_task
 from celery.result import AsyncResult
 import celery
-import requests
-import os
 
 # 创建 Celery 应用实例（供其他模块导入）
 app = Celery('bilibili_analysis')
@@ -12,37 +10,11 @@ app.autodiscover_tasks()
 
 def notify_task_complete(bvid, task_type, status, result=None):
     """
-    任务完成时通知 Electron 前端
-    
-    Args:
-        bvid: 视频BV号
-        task_type: 任务类型 (comments, danmu, audio)
-        status: 任务状态 (success, error, no_data)
-        result: 任务结果 (可选)
+    任务完成时记录日志。
+    前端通过轮询 /api/video/task-status/ 获取进度，无需服务器主动推送。
+    （服务器上的 localhost 无法访问用户本地的 Electron，推送架构不可行）
     """
-    try:
-        # Electron HTTP 服务器地址
-        electron_host = os.environ.get('ELECTRON_HOST', 'http://localhost:3001')
-        url = f"{electron_host}/api/task-notify/"
-        
-        payload = {
-            'bvid': bvid,
-            'task_type': task_type,
-            'status': status,
-            'result': result or {}
-        }
-        
-        # 发送通知（超时设置短一些，避免阻塞）
-        response = requests.post(url, json=payload, timeout=2)
-        if response.status_code == 200:
-            print(f"[TaskNotify] 通知发送成功: {task_type} for {bvid}")
-        else:
-            print(f"[TaskNotify] 通知发送失败: {response.status_code}")
-    except requests.exceptions.ConnectionError:
-        # Electron 未运行，忽略（前端可以使用轮询作为后备）
-        print(f"[TaskNotify] 无法连接到 Electron (可能未运行)")
-    except Exception as e:
-        print(f"[TaskNotify] 通知发送异常: {e}")
+    print(f"[TaskNotify] 任务完成: {task_type} for {bvid}, status={status}")
 
 
 def get_valid_cookie():
