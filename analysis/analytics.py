@@ -632,6 +632,57 @@ def get_multimodal_emotion_analysis(bvid, video_type='general'):
     try:
         video = Video.objects.get(bvid=bvid)
 
+        # === 0. 先尝试从数据库缓存读取（避免重复计算） ===
+        from .models import MultimodalSentiment, AudioSentiment as AudioSentimentModel
+        cached = MultimodalSentiment.objects.filter(video=video).first()
+        if cached and cached.overall_score is not None:
+            # 有缓存数据，直接返回缓存结果
+            print(f"[Multimodal] 使用缓存数据: {bvid}")
+            
+            # 获取统计数据
+            total_comments = Comment.objects.filter(video_id=bvid).count()
+            total_danmus = Danmu.objects.filter(cid=video.cid).count()
+            total_audio_segments = AudioSentimentModel.objects.filter(video=video).count()
+            
+            return {
+                'success': True,
+                'fused_emotion': {
+                    'positive': round(cached.fused_positive, 3),
+                    'neutral': round(cached.fused_neutral, 3),
+                    'negative': round(cached.fused_negative, 3)
+                },
+                'attention_weights': {
+                    'audio': round(cached.audio_weight, 3),
+                    'text': round(cached.text_weight, 3),
+                    'danmu': round(cached.danmu_weight, 3)
+                },
+                'individual_emotions': {
+                    'audio': cached.audio_emotion or {'positive': 0.5, 'neutral': 0.3, 'negative': 0.2},
+                    'text': cached.text_emotion or {'positive': 0.33, 'neutral': 0.34, 'negative': 0.33},
+                    'danmu': cached.danmu_emotion or {'positive': 0.5, 'neutral': 0.3, 'negative': 0.2}
+                },
+                'dominant_emotion': cached.dominant_emotion,
+                'emotion_strength': round(cached.emotion_strength, 3),
+                'conflict_info': {
+                    'has_conflict': cached.has_conflict,
+                    'conflicts': cached.conflict_details or []
+                },
+                'video_type': cached.video_type,
+                'metadata': {
+                    'total_comments': total_comments,
+                    'total_danmus': total_danmus,
+                    'total_audio_segments': total_audio_segments
+                },
+                # 前端需要的字段
+                'overallScore': cached.overall_score,
+                'textScore': (cached.text_emotion or {}).get('positive', 0.5),
+                'audioScore': (cached.audio_emotion or {}).get('positive', 0.5),
+                'timeSegments': [],
+                'conflicts': cached.conflict_details or [],
+                'audioEmotions': (cached.audio_emotion or {}),
+                'textEmotions': cached.text_emotion or {}
+            }
+
         # 1. 获取文本情感（评论）
         comments = Comment.objects.filter(video_id=bvid)
         total_comments = comments.count()
@@ -826,8 +877,13 @@ def generate_time_segments(audio_sentiments, comments, cid, num_segments=10):
         end_time = (i + 1) * segment_duration
         
         # 统计该时间段的评论数量作为文本情感权重
+        # ctime 是 datetime 对象，需要转换为秒数
+        def ctime_to_seconds(dt):
+            if dt:
+                return dt.hour * 3600 + dt.minute * 60 + dt.second
+            return None
         segment_comments = [c for c in comments if c.ctime and 
-                          start_time <= (c.ctime % 86400) < end_time]
+                          start_time <= ctime_to_seconds(c.ctime) < end_time]
         
         if segment_comments:
             # 计算该时间段评论的情感倾向
