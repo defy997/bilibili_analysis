@@ -369,6 +369,7 @@
             position: absolute;
             inset: 0;
             background: rgba(0, 0, 0, 0.85);
+            -webkit-backdrop-filter: blur(8px);
             backdrop-filter: blur(8px);
             z-index: 40;
             display: flex;
@@ -885,7 +886,7 @@
                     </div>
                 </div>
                 <!-- 分页控件 -->
-                <div class="modal-footer flex items-center justify-between px-4 py-3 border-t border-white/10" id="history-pagination" style="display: none;">
+                <div class="modal-footer flex items-center justify-between px-4 py-3 border-t border-white/10 hidden" id="history-pagination">
                     <button onclick="changeHistoryPage(-1)" id="history-prev-btn" class="px-3 py-1 text-xs rounded bg-white/10 text-white/60 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed">
                         <i class="fa-solid fa-chevron-left mr-1"></i>上一页
                     </button>
@@ -1978,7 +1979,7 @@
                     `).join('');
 
                     // 显示分页控件
-                    paginationContainer.style.display = 'flex';
+                    paginationContainer.classList.remove('hidden');
                     pageInfo.textContent = `第 ${historyCurrentPage} / ${historyTotalPages} 页，共 ${result.data.total} 条`;
 
                     // 更新按钮状态

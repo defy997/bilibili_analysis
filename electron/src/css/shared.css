@@ -49,6 +49,9 @@ body {
     -webkit-app-region: no-drag;
 }
 
+/* ── Progress bar initial state (JS sets width dynamically) ───────── */
+#loading-progress { width: 0%; }
+
 /* ── Scrollbar (thumb color via CSS variable per page) ─────────────── */
 :root {
     --scrollbar-thumb:       rgba(244, 114, 182, 0.3);
