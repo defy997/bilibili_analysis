@@ -981,7 +981,9 @@ function createExpandedWindow() {
         }
     });
 
-    expandedWindow.loadFile('src/expanded-view.html');
+    expandedWindow.loadFile('src/expanded-view.html', {
+        query: currentBvId ? { bvid: currentBvId } : {}
+    });
 
     expandedWindow.once('ready-to-show', () => {
         expandedWindow.show();

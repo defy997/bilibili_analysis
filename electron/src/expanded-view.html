@@ -544,6 +544,15 @@
         document.addEventListener('DOMContentLoaded', () => {
             updateDate();
             setInterval(updateDate, 60000);
+            
+            // 检查 URL 参数中的 bvid，自动加载数据
+            const params = new URLSearchParams(window.location.search);
+            const bvIdFromUrl = params.get('bvid');
+            if (bvIdFromUrl) {
+                console.log('[ExpandedView] 自动加载 bvid:', bvIdFromUrl);
+                currentBvId = bvIdFromUrl;
+                loadAll(bvIdFromUrl);
+            }
         });
 
         function updateDate() {

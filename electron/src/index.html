@@ -1708,6 +1708,16 @@
             initRadarChart();
             // 初始化按钮状态（默认在线分析按钮常亮）
             updateButtonStates('online');
+            
+            // 检查 URL 参数中的 bvid，自动加载数据
+            const params = new URLSearchParams(window.location.search);
+            const bvIdFromUrl = params.get('bvid');
+            if (bvIdFromUrl) {
+                console.log('[Index] 自动加载 bvid:', bvIdFromUrl);
+                // 触发视频切换逻辑
+                currentBvId = bvIdFromUrl;
+                loadVideoStatsForRadar(bvIdFromUrl);
+            }
         });
 
         // === 初始化雷达图 ===
