@@ -358,7 +358,7 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    multimodalData = result.data;
+                    multimodalData = result;
                     renderMultimodalReport();
                 } else {
                     // 如果API不存在，使用模拟数据
