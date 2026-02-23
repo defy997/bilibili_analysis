@@ -222,6 +222,24 @@ def async_analyze_video(request):
             # 异步提交
             job_result = parallel_tasks.apply_async()
 
+            # 初始化进度状态（供 SSE 读取）
+            from .analytics import set_crawl_progress
+            set_crawl_progress(bvid, 'overall', {
+                'stage': 'crawling',
+                'percent': 5,
+                'message': '任务已提交，等待爬取开始...'
+            })
+            set_crawl_progress(bvid, 'comments', {
+                'status': 'pending',
+                'count': 0,
+                'message': '等待评论爬取...'
+            })
+            set_crawl_progress(bvid, 'danmu', {
+                'status': 'pending',
+                'count': 0,
+                'message': '等待弹幕爬取...'
+            })
+
             # 获取任务ID列表
             task_ids = [job_result.results[i].id for i in range(3)]
 

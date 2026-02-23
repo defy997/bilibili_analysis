@@ -746,16 +746,14 @@
 
                     if (attempts >= maxAttempts) {
                         clearInterval(timer);
-                        console.warn('[PollDashboard] 轮询超时，加载现有数据');
+                        console.warn('[PollDashboard] 轮询超时，显示提示信息');
                         if (loadingProgress) loadingProgress.style.width = '95%';
                         if (loadingTitle) loadingTitle.innerText = 'Still processing...';
                         if (loadingSubtitle) loadingSubtitle.innerText = 'Backend may still be crawling. Click ↻ Refresh to check.';
-                        setTimeout(async () => {
-                            if (loadingTasks) loadingTasks.classList.add('hidden');
-                            showLoading(false);
-                            await loadDashboard(bvId);
-                            resolve();
-                        }, 2000);
+                        // 不再递归调用 loadDashboard，避免无限循环
+                        if (loadingTasks) loadingTasks.classList.add('hidden');
+                        showLoading(false);
+                        resolve();
                     }
                 }, pollInterval);
             });

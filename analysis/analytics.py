@@ -49,7 +49,8 @@ def set_crawl_progress(bvid, progress_type, data):
             **data,
             'updated_at': datetime.now().isoformat()
         })
-        r.hmset(key, existing)
+        # 使用 hset 替代已弃用的 hmset
+        r.hset(key, mapping=existing)
         r.expire(key, 3600)  # 1小时过期
     except Exception as e:
         print(f"[Progress] 设置进度失败: {e}")
