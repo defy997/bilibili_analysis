@@ -18,6 +18,75 @@ def notify_task_complete(bvid, task_type, status, result=None):
     print(f"[TaskNotify] 任务完成: {task_type} for {bvid}, status={status}")
 
 
+def _update_overall_progress(bvid):
+    """
+    更新 overall 进度状态
+    检查所有子任务（comments, danmu, audio）的完成状态
+    """
+    from .analytics import get_crawl_progress, set_crawl_progress
+
+    try:
+        progress = get_crawl_progress(bvid)
+        if not progress:
+            return
+
+        # 检查各任务状态
+        comments = progress.get('comments', {})
+        danmu = progress.get('danmu', {})
+        audio = progress.get('audio', {})
+
+        completed_count = 0
+        total_count = 3
+
+        if comments.get('status') == 'completed':
+            completed_count += 1
+        if danmu.get('status') == 'completed':
+            completed_count += 1
+        if audio.get('status') == 'completed':
+            completed_count += 1
+
+        # 计算进度百分比
+        percent = int((completed_count / total_count) * 100)
+
+        if completed_count == total_count:
+            # 所有任务完成
+            set_crawl_progress(bvid, 'overall', {
+                'stage': 'completed',
+                'percent': 100,
+                'message': '所有分析任务已完成'
+            })
+        else:
+            # 仍在进行中
+            stage = 'analyzing' if completed_count > 0 else 'crawling'
+            set_crawl_progress(bvid, 'overall', {
+                'stage': stage,
+                'percent': percent,
+                'message': f'分析中... {completed_count}/{total_count}'
+            })
+
+        print(f"[OverallProgress] bvid={bvid}: {completed_count}/{total_count}, stage={'completed' if completed_count == total_count else stage}")
+        
+        # 如果所有任务完成，清除 dashboard 缓存
+        if completed_count == total_count:
+            clear_dashboard_cache(bvid)
+    except Exception as e:
+        print(f"[OverallProgress] 更新失败: {e}")
+
+
+def clear_dashboard_cache(bvid):
+    """
+    清除 dashboard 缓存（当数据更新后需要清除缓存）
+    """
+    try:
+        import redis as _redis
+        r = _redis.Redis(host='localhost', port=6379, decode_responses=False)
+        # 删除 dashboard 缓存
+        deleted = r.delete(f"dashboard:{bvid}")
+        print(f"[Cache] 清除 dashboard 缓存: {bvid}, deleted={deleted}")
+    except Exception as e:
+        print(f"[Cache] 清除缓存失败: {e}")
+
+
 def get_valid_cookie():
     """
     获取有效的 B站 Cookie
@@ -60,10 +129,23 @@ def analyze_audio_task(self, bvid, cookie=None):
 
     try:
         from .services import analyze_video_audio
+        from .analytics import set_crawl_progress
+
         result = analyze_video_audio(bvid, headers, cookie)
+
+        # 设置 audio 任务完成状态（供 overall 进度检查使用）
+        result_count = len(result.get('timeline', [])) if result.get('status') != 'cached' else 0
+        set_crawl_progress(bvid, 'audio', {
+            'status': 'completed',
+            'count': result_count,
+            'message': f'音频情感分析完成，共 {result_count} 条'
+        })
 
         # 通知 Electron 任务完成
         notify_task_complete(bvid, 'audio', 'success', result)
+
+        # 更新 overall 进度状态
+        _update_overall_progress(bvid)
 
         return result
     except Exception as e:
@@ -262,6 +344,9 @@ def crawl_and_analyze_comments(self, bvid, aid, headers=None, cookie=None):
 
         # 通知 Electron 任务完成
         notify_task_complete(bvid, 'comments', 'success', result)
+
+        # 更新 overall 进度状态
+        _update_overall_progress(bvid)
 
         return result
 
@@ -488,6 +573,9 @@ def crawl_and_analyze_danmu(self, bvid, cid, headers=None, cookie=None):
 
         # 通知 Electron 任务完成
         notify_task_complete(bvid, 'danmu', 'success', result)
+
+        # 更新 overall 进度状态
+        _update_overall_progress(bvid)
 
         return result
 

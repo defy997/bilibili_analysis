@@ -1163,8 +1163,9 @@ def crawl_progress_sse(request, bvid):
         import time
 
         last_data = None
+        last_progress_time = 0  # 上次发送进度的时间
         check_count = 0
-        max_checks = 300  # 最多5分钟 (5*60/1=300次)
+        max_checks = 600  # 最多10分钟 (10*60=600次)
 
         while check_count < max_checks:
             check_count += 1
@@ -1173,10 +1174,22 @@ def crawl_progress_sse(request, bvid):
             progress = get_crawl_progress(bvid)
 
             if progress:
-                # 检查是否有实质性进展
+                # 检查是否有实质性进展，或定期发送进度更新
                 current_data = json.dumps(progress)
+                should_send = False
+
+                # 情况1: 数据发生变化
                 if current_data != last_data:
+                    should_send = True
                     last_data = current_data
+                # 情况2: 每10秒定期发送进度更新（让前端知道还在运行）
+                elif check_count - last_progress_time >= 10:
+                    should_send = True
+                    # 添加一个时间戳，让前端知道是定期更新
+                    progress['_heartbeat'] = True
+
+                if should_send:
+                    last_progress_time = check_count
                     yield f"data: {current_data}\n\n"
 
                 # 检查是否全部完成

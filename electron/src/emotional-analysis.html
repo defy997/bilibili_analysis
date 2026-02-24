@@ -999,6 +999,12 @@
                 updateTopComments(data.quality.top_comments);
 
                 console.log('UI更新完成');
+
+                // === 隐藏 loading 容器 ===
+                const loadingIndicator = document.getElementById('loading-indicator');
+                if (loadingIndicator) {
+                    loadingIndicator.classList.add('hidden');
+                }
             } catch (error) {
                 console.error('更新UI时出错:', error);
             }
