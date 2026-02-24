@@ -275,8 +275,8 @@ app.whenReady().then(() => {
   // 用单个监听器同时处理登录和登出（Electron 每次调用 onHeadersReceived 会替换上一个监听器）
   mainSes.webRequest.onHeadersReceived(
     { urls: [
-        'http://118.25.39.91:8000/api/auth/login/',
-        'http://118.25.39.91:8000/api/auth/logout/'
+        'http://118.25.39.91/api/auth/login/',
+        'http://118.25.39.91/api/auth/logout/'
     ]},
     (details, callback) => {
       callback({ responseHeaders: details.responseHeaders });
@@ -302,7 +302,7 @@ app.whenReady().then(() => {
 
   // 对所有 API 请求，同步注入内存中的 sessionid 到 Cookie 头
   mainSes.webRequest.onBeforeSendHeaders(
-    { urls: ['http://118.25.39.91:8000/*'] },
+    { urls: ['http://118.25.39.91/*'] },
     (details, callback) => {
       const requestHeaders = { ...details.requestHeaders };
       if (storedSessionId) {
