@@ -1237,7 +1237,7 @@ function broadcastVideoChange(bvId, title) {
 
     const windows = [
         mainWindow, analysisWindow, userProfileWindow,
-        videoAudioWindow, expandedWindow
+        videoAudioWindow, expandedWindow, overallReportsWindow
     ];
     windows.forEach(win => {
         if (win && !win.isDestroyed()) {
