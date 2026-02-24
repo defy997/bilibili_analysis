@@ -477,12 +477,31 @@
 
         // 渲染时间轴图表
         function renderTimelineChart() {
-            if (!timelineChart || !multimodalData) return;
+            if (!timelineChart || !multimodalData) {
+                console.warn('[OverallReports] renderTimelineChart: timelineChart 或 multimodalData 不存在');
+                return;
+            }
             
-            const segments = multimodalData.timeSegments;
+            const segments = multimodalData.timeSegments || [];
+            console.log('[OverallReports] renderTimelineChart: segments 长度 =', segments.length, segments);
+            
+            // 如果数据为空，使用默认数据
+            if (segments.length === 0) {
+                console.log('[OverallReports] 时间轴数据为空，使用默认数据');
+                for (let i = 0; i < 10; i++) {
+                    segments.push({
+                        time: i * 60,
+                        textScore: 0.5,
+                        audioScore: 0.5,
+                        textWeight: 0.6,
+                        audioWeight: 0.4
+                    });
+                }
+            }
+            
             const times = segments.map(s => formatTime(s.time));
-            const textScores = segments.map(s => s.textScore);
-            const audioScores = segments.map(s => s.audioScore);
+            const textScores = segments.map(s => isNaN(s.textScore) ? 0.5 : s.textScore);
+            const audioScores = segments.map(s => isNaN(s.audioScore) ? 0.5 : s.audioScore);
             
             const option = {
                 backgroundColor: 'transparent',

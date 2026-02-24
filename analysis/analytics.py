@@ -725,6 +725,15 @@ def get_multimodal_emotion_analysis(bvid, video_type='general'):
             total_danmus = Danmu.objects.filter(cid=video.cid).count()
             total_audio_segments = AudioSentimentModel.objects.filter(video=video).count()
             
+            # 从数据库获取或重新生成时间轴数据
+            from .models import AudioSentiment as AudioSentimentModel2, Danmu as Danmu2
+            audio_sentiments = AudioSentimentModel2.objects.filter(video=video)
+            comments = Comment.objects.filter(video_id=bvid)
+            
+            # 重新生成时间轴数据（因为之前的缓存可能没有保存）
+            time_segments = generate_time_segments(audio_sentiments, comments, video.cid, num_segments=10)
+            conflicts = generate_conflict_details(time_segments)
+            
             return {
                 'success': True,
                 'fused_emotion': {
@@ -746,7 +755,7 @@ def get_multimodal_emotion_analysis(bvid, video_type='general'):
                 'emotion_strength': round(cached.emotion_strength, 3),
                 'conflict_info': {
                     'has_conflict': cached.has_conflict,
-                    'conflicts': cached.conflict_details or []
+                    'conflicts': conflicts
                 },
                 'video_type': cached.video_type,
                 'metadata': {
@@ -758,8 +767,8 @@ def get_multimodal_emotion_analysis(bvid, video_type='general'):
                 'overallScore': cached.overall_score,
                 'textScore': (cached.text_emotion or {}).get('positive', 0.5),
                 'audioScore': (cached.audio_emotion or {}).get('positive', 0.5),
-                'timeSegments': [],
-                'conflicts': cached.conflict_details or [],
+                'timeSegments': time_segments,
+                'conflicts': conflicts,
                 'audioEmotions': (cached.audio_emotion or {}),
                 'textEmotions': cached.text_emotion or {}
             }
@@ -956,32 +965,33 @@ def generate_time_segments(audio_sentiments, comments, cid, num_segments=10):
         max_danmu_time = Danmu.objects.filter(cid=cid).aggregate(Max('video_time'))['video_time__max']
         max_time = max_danmu_time if max_danmu_time else 600
     
+    # 如果没有音频和弹幕数据，使用默认时长
+    if not max_time:
+        max_time = 600
+        
+    print(f"[Multimodal] 生成时间轴: max_time={max_time}, audio_count={audio_sentiments.count()}, comments_count={len(comments)}")
+    
     segment_duration = max_time / num_segments
     
-    # 获取评论发布时间分布
-    comment_times = []
-    for c in comments:
-        if c.ctime:
-            comment_times.append(c.ctime)
+    # 获取弹幕情感数据用于时间轴
+    from .models import Danmu
+    danmu_sentiments = Danmu.objects.filter(cid=cid)
+    danmu_count = danmu_sentiments.count()
+    print(f"[Multimodal] 弹幕数量: {danmu_count}")
     
     for i in range(num_segments):
         start_time = i * segment_duration
         end_time = (i + 1) * segment_duration
         
-        # 统计该时间段的评论数量作为文本情感权重
-        # ctime 是 datetime 对象，需要转换为秒数
-        def ctime_to_seconds(dt):
-            if dt:
-                return dt.hour * 3600 + dt.minute * 60 + dt.second
-            return None
-        segment_comments = [c for c in comments if c.ctime and 
-                          start_time <= ctime_to_seconds(c.ctime) < end_time]
+        # 统计该时间段的弹幕数量作为文本情感权重
+        # 注意：弹幕有 video_time 字段表示视频内时间
+        segment_danmus = [d for d in danmu_sentiments if d.video_time and start_time <= d.video_time < end_time]
         
-        if segment_comments:
-            # 计算该时间段评论的情感倾向
-            pos_count = sum(1 for c in segment_comments if c.sentiment_label == 'positive')
-            neg_count = sum(1 for c in segment_comments if c.sentiment_label == 'negative')
-            total = len(segment_comments)
+        if segment_danmus:
+            # 计算该时间段弹幕的情感倾向
+            pos_count = sum(1 for d in segment_danmus if d.sentiment_label == 'positive')
+            neg_count = sum(1 for d in segment_danmus if d.sentiment_label == 'negative')
+            total = len(segment_danmus)
             
             text_score = (pos_count - neg_count) / total * 0.5 + 0.5  # 归一化到 0-1
         else:
@@ -994,13 +1004,14 @@ def generate_time_segments(audio_sentiments, comments, cid, num_segments=10):
                            a.time_offset and start_time <= a.time_offset < end_time]
             if segment_audio:
                 pos = sum(a.emotion_probs.get('happy', 0) + a.emotion_probs.get('surprise', 0) 
-                         for a in segment_audio)
+                         for a in segment_audio if a.emotion_probs)
                 neg = sum(a.emotion_probs.get('angry', 0) + a.emotion_probs.get('sad', 0) + a.emotion_probs.get('fearful', 0)
-                         for a in segment_audio)
-                audio_score = (pos - neg) * 0.5 + 0.5
+                         for a in segment_audio if a.emotion_probs)
+                total_emo = pos + neg + 0.001
+                audio_score = (pos - neg) / total_emo * 0.5 + 0.5
         
-        # 计算权重（评论数量越多，文本权重越高）
-        text_weight = min(0.8, 0.3 + len(segment_comments) * 0.05)
+        # 计算权重（弹幕数量越多，文本权重越高）
+        text_weight = min(0.8, 0.3 + len(segment_danmus) * 0.02)
         audio_weight = 1 - text_weight
         
         segments.append({
@@ -1009,9 +1020,10 @@ def generate_time_segments(audio_sentiments, comments, cid, num_segments=10):
             'audioScore': round(audio_score, 3),
             'textWeight': round(text_weight, 3),
             'audioWeight': round(audio_weight, 3),
-            'commentCount': len(segment_comments)
+            'commentCount': len(segment_danmus)  # 实际是弹幕数量
         })
     
+    print(f"[Multimodal] 生成时间轴完成: {len(segments)} 个段")
     return segments
 
 
