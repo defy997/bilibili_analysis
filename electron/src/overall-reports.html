@@ -340,7 +340,7 @@
                     console.log('[OverallReports] 数据加载成功, 渲染报表');
                     renderMultimodalReport();
                 } else {
-                    // 如果API不存在，使用模拟数据
+                    // 如果API返回失败，使用模拟数据
                     console.log('[OverallReports] API返回失败, 使用模拟数据进行演示, error:', result.error);
                     simulateData();
                     renderMultimodalReport();
@@ -348,6 +348,7 @@
             } catch (error) {
                 console.error('[OverallReports] 加载多模态数据失败:', error);
                 // 降级到模拟数据
+                console.log('[OverallReports] 使用模拟数据作为降级方案');
                 simulateData();
                 renderMultimodalReport();
             }
@@ -355,6 +356,7 @@
 
         // 模拟数据（用于演示）
         function simulateData() {
+            console.log('[OverallReports] 生成模拟数据');
             const timePoints = 10;
             const timeSegments = [];
             
@@ -383,16 +385,20 @@
                 }
             });
             
+            const textPositive = 0.45 + Math.random() * 0.2;
+            const textNegative = 0.2 + Math.random() * 0.15;
+            const textNeutral = Math.max(0, 1 - textPositive - textNegative);
+            
             multimodalData = {
                 overallScore: 0.65 + Math.random() * 0.2,
-                textScore: 0.7 + Math.random() * 0.2,
+                textScore: textPositive,
                 audioScore: 0.55 + Math.random() * 0.3,
                 timeSegments: timeSegments,
                 conflicts: conflicts,
                 textEmotions: {
-                    positive: 0.45 + Math.random() * 0.2,
-                    neutral: 0.25 + Math.random() * 0.15,
-                    negative: 0.2 + Math.random() * 0.15
+                    positive: textPositive,
+                    neutral: textNeutral,
+                    negative: textNegative
                 },
                 audioEmotions: {
                     happy: 0.2 + Math.random() * 0.2,
@@ -403,6 +409,7 @@
                     surprise: 0.05 + Math.random() * 0.1
                 }
             };
+            console.log('[OverallReports] 模拟数据生成完成:', multimodalData);
         }
 
         // 渲染多模态报告
@@ -417,7 +424,19 @@
 
         // 渲染综合得分
         function renderOverallScore() {
-            const score = multimodalData.overallScore;
+            // 安全检查：确保数值有效
+            const safeScore = (val) => {
+                if (val === undefined || val === null || isNaN(val)) {
+                    console.warn('[OverallReports] 发现无效数值:', val);
+                    return 0.5;
+                }
+                return val;
+            };
+            
+            const score = safeScore(multimodalData.overallScore);
+            const textScore = safeScore(multimodalData.textScore);
+            const audioScore = safeScore(multimodalData.audioScore);
+            
             const percentage = Math.round(score * 100);
             
             // 更新环形进度条
@@ -430,10 +449,10 @@
             const textBadge = document.getElementById('text-score-badge');
             const audioBadge = document.getElementById('audio-score-badge');
             
-            textBadge.textContent = multimodalData.textScore > 0.6 ? '正面' : (multimodalData.textScore < 0.4 ? '负面' : '中立');
+            textBadge.textContent = textScore > 0.6 ? '正面' : (textScore < 0.4 ? '负面' : '中立');
             textBadge.className = `px-2 py-0.5 rounded-full text-xs ${
-                multimodalData.textScore > 0.6 ? 'bg-green-500/30 text-green-400' :
-                multimodalData.textScore < 0.4 ? 'bg-red-500/30 text-red-400' :
+                textScore > 0.6 ? 'bg-green-500/30 text-green-400' :
+                textScore < 0.4 ? 'bg-red-500/30 text-red-400' :
                 'bg-yellow-500/30 text-yellow-400'
             }`;
             
@@ -452,8 +471,8 @@
             document.getElementById('audio-weight-bar').style.width = `${audioWeight * 100}%`;
             document.getElementById('text-weight-value').textContent = `${Math.round(textWeight * 100)}%`;
             document.getElementById('audio-weight-value').textContent = `${Math.round(audioWeight * 100)}%`;
-            document.getElementById('text-raw-score').textContent = multimodalData.textScore.toFixed(2);
-            document.getElementById('audio-raw-score').textContent = multimodalData.audioScore.toFixed(2);
+            document.getElementById('text-raw-score').textContent = textScore.toFixed(2);
+            document.getElementById('audio-raw-score').textContent = audioScore.toFixed(2);
         }
 
         // 渲染时间轴图表
@@ -669,7 +688,14 @@
                 return;
             }
             
-            container.innerHTML = conflicts.map(conf => `
+            container.innerHTML = conflicts.map(conf => {
+                // 安全处理冲突数据
+                const safeTextScore = isNaN(conf.textScore) ? 0.5 : conf.textScore;
+                const safeAudioScore = isNaN(conf.audioScore) ? 0.5 : conf.audioScore;
+                const safeDuration = isNaN(conf.duration) ? 60 : conf.duration;
+                const safeTime = isNaN(conf.time) ? 0 : conf.time;
+                
+                return `
                 <div class="bg-white/5 rounded-xl p-4 border-l-4 ${
                     conf.severity === 'critical' ? 'border-red-600' :
                     conf.severity === 'high' ? 'border-red-400' :
@@ -678,7 +704,7 @@
                 }">
                     <div class="flex items-center justify-between mb-2">
                         <div class="flex items-center gap-2">
-                            <span class="font-mono text-sm">${formatTime(conf.time)}</span>
+                            <span class="font-mono text-sm">${formatTime(safeTime)}</span>
                             <span class="px-2 py-0.5 rounded-full text-xs ${
                                 conf.severity === 'critical' ? 'bg-red-500/30 text-red-400' :
                                 conf.severity === 'high' ? 'bg-red-400/30 text-red-300' :
@@ -691,15 +717,15 @@
                                 '轻微冲突'
                             }</span>
                         </div>
-                        <span class="text-xs text-white/40">持续 ${conf.duration}秒</span>
+                        <span class="text-xs text-white/40">持续 ${safeDuration}秒</span>
                     </div>
                     <div class="flex items-center gap-4 text-sm">
-                        <span class="text-blue-400">文本: ${(conf.textScore * 100).toFixed(0)}%</span>
-                        <span class="text-pink-400">音频: ${(conf.audioScore * 100).toFixed(0)}%</span>
-                        <span class="text-white/60">差异: ${Math.abs(conf.textScore - conf.audioScore).toFixed(2)}</span>
+                        <span class="text-blue-400">文本: ${(safeTextScore * 100).toFixed(0)}%</span>
+                        <span class="text-pink-400">音频: ${(safeAudioScore * 100).toFixed(0)}%</span>
+                        <span class="text-white/60">差异: ${Math.abs(safeTextScore - safeAudioScore).toFixed(2)}</span>
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
         }
 
         // 辅助函数

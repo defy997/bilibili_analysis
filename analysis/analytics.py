@@ -705,6 +705,7 @@ def get_multimodal_emotion_analysis(bvid, video_type='general'):
     )
 
     try:
+        print(f"[Multimodal] 开始分析视频: {bvid}, type: {video_type}")
         video = Video.objects.get(bvid=bvid)
 
         # === 0. 先尝试从数据库缓存读取（避免重复计算） ===
@@ -887,17 +888,24 @@ def get_multimodal_emotion_analysis(bvid, video_type='general'):
         except Exception as save_err:
             print(f"[Multimodal] 保存数据库失败（不影响结果返回）: {save_err}")
 
-        return {
+        # 确保返回的数值不会是 NaN
+        def safe_float(val, default=0.5):
+            import math
+            if val is None or (isinstance(val, float) and math.isnan(val)):
+                return default
+            return val
+
+        result = {
             'success': True,
             'fused_emotion': {
-                'positive': round(fused_emotion['positive'], 3),
-                'neutral': round(fused_emotion['neutral'], 3),
-                'negative': round(fused_emotion['negative'], 3)
+                'positive': safe_float(round(fused_emotion['positive'], 3)),
+                'neutral': safe_float(round(fused_emotion['neutral'], 3)),
+                'negative': safe_float(round(fused_emotion['negative'], 3))
             },
             'attention_weights': {
-                'audio': round(attention_weights['audio'], 3),
-                'text': round(attention_weights['text'], 3),
-                'danmu': round(attention_weights['danmu'], 3)
+                'audio': safe_float(round(attention_weights['audio'], 3)),
+                'text': safe_float(round(attention_weights['text'], 3)),
+                'danmu': safe_float(round(attention_weights['danmu'], 3))
             },
             'individual_emotions': {
                 'audio': audio_emotion,
@@ -905,7 +913,7 @@ def get_multimodal_emotion_analysis(bvid, video_type='general'):
                 'danmu': danmu_emotion
             },
             'dominant_emotion': dominant_emotion,
-            'emotion_strength': round(emotion_strength, 3),
+            'emotion_strength': safe_float(round(emotion_strength, 3)),
             'conflict_info': conflict_info,
             'video_type': video_type,
             'metadata': {
@@ -914,14 +922,18 @@ def get_multimodal_emotion_analysis(bvid, video_type='general'):
                 'total_audio_segments': audio_sentiments.count()
             },
             # 前端需要的字段
-            'overallScore': overall_score,
-            'textScore': text_emotion.get('positive', 0.5),
-            'audioScore': audio_emotion.get('positive', 0.5),
+            'overallScore': safe_float(overall_score),
+            'textScore': safe_float(text_emotion.get('positive', 0.5)),
+            'audioScore': safe_float(audio_emotion.get('positive', 0.5)),
             'timeSegments': time_segments,
             'conflicts': conflicts,
             'audioEmotions': audio_emotion_detail,
             'textEmotions': text_emotion
         }
+        
+        print(f"[Multimodal] 返回数据: overallScore={result['overallScore']}, textScore={result['textScore']}, audioScore={result['audioScore']}")
+        
+        return result
 
     except Video.DoesNotExist:
         return {'success': False, 'error': 'Video not found'}
@@ -941,7 +953,7 @@ def generate_time_segments(audio_sentiments, comments, cid, num_segments=10):
     else:
         # 尝试从弹幕获取视频时长
         from .models import Danmu
-        max_danmu_time = Danmu.objects.filter(cid=cid).aggregate(Max('progress'))['progress__max']
+        max_danmu_time = Danmu.objects.filter(cid=cid).aggregate(Max('video_time'))['video_time__max']
         max_time = max_danmu_time if max_danmu_time else 600
     
     segment_duration = max_time / num_segments
