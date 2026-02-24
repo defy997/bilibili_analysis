@@ -581,6 +581,10 @@
             }
         });
 
+        ipcRenderer.on('apply-ui-settings', (event, settings) => {
+            applyTheme(settings.bgColor, settings.opacity);
+        });
+
         // ==================== Collapse ====================
         function collapse() {
             ipcRenderer.send('close-expanded-window');

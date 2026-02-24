@@ -90,6 +90,7 @@ let wss; // WebSocket服务器，用于与Chrome插件通信
 
 let lastWindowPosition = null; // 记录上次主窗口位置以便还原
 let currentBvId = null; // 当前正在观看的视频BV号
+let cachedUISettings = { bgColor: '#1a1a2e', opacity: 0.95 }; // 最新UI配置，随 broadcast-ui-settings 更新
 let currentVideoTitle = null; // 当前视频标题
 let analysisMode = 'online'; // 当前分析模式: 'online' (在线) 或 'history' (历史)
 
@@ -525,6 +526,7 @@ function createAnalysisWindow() {
         analysisWindow.show();
         analysisWindow.setAlwaysOnTop(true, 'pop-up-menu');
         analysisWindow.setVisibleOnAllWorkspaces(true);
+        analysisWindow.webContents.send('apply-ui-settings', cachedUISettings);
         // 发送当前正在观看的视频ID
         if (currentBvId) {
             analysisWindow.webContents.send('video-change', currentBvId);
@@ -648,6 +650,7 @@ function createUserProfileWindow() {
         userProfileWindow.show();
         userProfileWindow.setAlwaysOnTop(true, 'pop-up-menu');
         userProfileWindow.setVisibleOnAllWorkspaces(true);
+        userProfileWindow.webContents.send('apply-ui-settings', cachedUISettings);
         // 发送当前正在观看的视频ID
         if (currentBvId) {
             userProfileWindow.webContents.send('video-change', currentBvId);
@@ -767,6 +770,7 @@ function createVideoAudioWindow() {
         videoAudioWindow.show();
         videoAudioWindow.setAlwaysOnTop(true, 'pop-up-menu');
         videoAudioWindow.setVisibleOnAllWorkspaces(true);
+        videoAudioWindow.webContents.send('apply-ui-settings', cachedUISettings);
         // 发送当前正在观看的视频ID
         if (currentBvId) {
             videoAudioWindow.webContents.send('video-change', currentBvId);
@@ -891,6 +895,7 @@ function createOverallReportsWindow() {
         overallReportsWindow.show();
         overallReportsWindow.setAlwaysOnTop(true, 'pop-up-menu');
         overallReportsWindow.setVisibleOnAllWorkspaces(true);
+        overallReportsWindow.webContents.send('apply-ui-settings', cachedUISettings);
         // 发送当前视频数据
         if (currentBvId) {
             const videoData = { bvId: currentBvId, title: currentVideoTitle };
@@ -987,6 +992,7 @@ function createExpandedWindow() {
 
     expandedWindow.once('ready-to-show', () => {
         expandedWindow.show();
+        expandedWindow.webContents.send('apply-ui-settings', cachedUISettings);
         if (currentBvId) {
             expandedWindow.webContents.send('video-change', {
                 bvId: currentBvId,
@@ -1120,7 +1126,8 @@ function createBilibiliLoginWindow() {
 // ==========================================
 
 ipcMain.on('broadcast-ui-settings', (event, settings) => {
-    const windows = [analysisWindow, userProfileWindow, videoAudioWindow, overallReportsWindow];
+    cachedUISettings = settings; // 缓存最新UI配置
+    const windows = [analysisWindow, userProfileWindow, videoAudioWindow, overallReportsWindow, expandedWindow];
     windows.forEach(win => {
         if (win && !win.isDestroyed()) {
             win.webContents.send('apply-ui-settings', settings);

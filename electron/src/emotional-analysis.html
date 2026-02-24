@@ -13,7 +13,7 @@
 <body class="h-full w-full text-white overflow-hidden">
 
     <!-- 情感分析主容器 -->
-    <div class="h-full w-full flex flex-col">
+    <div id="main-container" class="h-full w-full flex flex-col">
         
         <!-- 顶部标题栏 (拖拽区域) -->
         <div class="h-12 flex items-center justify-between px-4 border-b border-white/10 bg-white/5 flex-shrink-0 drag-area select-none">
@@ -170,7 +170,6 @@
             initCharts();
             listenForVideoChange();
             listenForTaskComplete();  // 添加任务完成监听
-            loadThemeFromConfig();
 
             // 按 Ctrl+Shift+O 打开开发者工具调试
             document.addEventListener('keydown', (e) => {

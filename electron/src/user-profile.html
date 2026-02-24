@@ -18,7 +18,7 @@
 </head>
 <body class="h-full w-full text-white overflow-hidden">
 
-    <div class="h-full w-full flex flex-col">
+    <div id="main-container" class="h-full w-full flex flex-col">
 
         <!-- 顶部标题栏 -->
         <div class="h-12 flex items-center justify-between px-4 border-b border-white/10 bg-blue-500/10 flex-shrink-0 drag-area select-none">
@@ -161,7 +161,6 @@
         document.addEventListener('DOMContentLoaded', () => {
             initCharts();
             listenForVideoChange();
-            loadThemeFromConfig();
         });
 
         function initCharts() {

@@ -22,10 +22,16 @@ function applyTheme(bgColor, opacity) {
     const b = parseInt(hex.substring(4, 6), 16);
 
     const bg = `rgba(${r}, ${g}, ${b}, ${opacity})`;
-    document.body.style.backgroundColor = bg;
+    console.log('[Theme] applyTheme called:', bgColor, opacity, '→', bg);
+    document.body.style.background = bg;  // overrides any CSS gradient
+    console.log('[Theme] body.style.background after set:', document.body.style.background);
 
     const container = document.getElementById('main-container');
-    if (container) container.style.backgroundColor = bg;
+    console.log('[Theme] #main-container found:', !!container);
+    if (container) {
+        container.style.background = bg;
+        console.log('[Theme] container.style.background after set:', container.style.background);
+    }
 
     // Inject / update dynamic overrides for glass-panel, drag-area, stat-card
     let style = document.getElementById('dynamic-theme');
@@ -44,13 +50,21 @@ function applyTheme(bgColor, opacity) {
 /** Fetch theme config and apply it. Called during DOMContentLoaded. */
 async function loadThemeFromConfig() {
     try {
-        const resp = await fetch(`${API_BASE}/api/config/`);
+        console.log('[Theme] loadThemeFromConfig: fetching', `${API_BASE}/api/config/`);
+        const resp = await fetch(`${API_BASE}/api/config/`, { credentials: 'include' });
+        console.log('[Theme] fetch status:', resp.status);
         const result = await resp.json();
+        console.log('[Theme] api/config/ response:', JSON.stringify(result).substring(0, 200));
         if (result.success && result.data?.ui_config) {
             const { background_color, opacity } = result.data.ui_config;
+            console.log('[Theme] ui_config:', background_color, opacity);
             if (background_color && opacity !== undefined) {
                 applyTheme(background_color, opacity);
+            } else {
+                console.warn('[Theme] background_color or opacity missing');
             }
+        } else {
+            console.warn('[Theme] result.success=', result.success, 'ui_config=', result.data?.ui_config);
         }
     } catch (err) {
         console.error('[Theme] Failed to load config:', err);
