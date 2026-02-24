@@ -911,6 +911,10 @@ function createOverallReportsWindow() {
             const videoData = { bvId: currentBvId, title: currentVideoTitle };
             overallReportsWindow.webContents.send('video-change', videoData);
         }
+        // 开发环境下打开开发者工具
+        if (process.env.NODE_ENV === 'development') {
+            overallReportsWindow.openDevTools({ mode: 'detach' });
+        }
     });
 
     // 兜底：3秒后强制显示
@@ -1187,6 +1191,9 @@ ipcMain.on('open-devtools', (event, windowName = 'all') => {
     }
     if (windowName === 'all' || windowName === 'video') {
         if (videoAudioWindow && !videoAudioWindow.isDestroyed()) windows.push(videoAudioWindow);
+    }
+    if (windowName === 'all' || windowName === 'overall') {
+        if (overallReportsWindow && !overallReportsWindow.isDestroyed()) windows.push(overallReportsWindow);
     }
 
     windows.forEach(win => {

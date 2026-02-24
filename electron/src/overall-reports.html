@@ -228,22 +228,31 @@
 
         // 页面加载
         document.addEventListener('DOMContentLoaded', () => {
+            console.log('[OverallReports] 页面加载完成');
             initCharts();
             setupIpcListeners();
             
+            // 临时调试：自动打开开发者工具
+            setTimeout(() => {
+                console.log('[OverallReports] 请求打开开发者工具');
+                ipcRenderer.send('open-devtools');
+            }, 1500);
+            
             // 兜底：定期请求当前视频ID（每3秒请求一次，直到收到数据）
+            console.log('[OverallReports] 开始监听视频变化...');
             const requestVideoId = () => {
-                if (!currentBvId) {
-                    ipcRenderer.send('get-current-video-id');
-                }
+                console.log('[OverallReports] 请求当前视频ID, currentBvId:', currentBvId);
+                ipcRenderer.send('get-current-video-id');
             };
             
             // 等待 1 秒后开始请求（给主窗口时间准备好）
             setTimeout(() => {
                 if (!currentBvId) {
+                    console.log('[OverallReports] 未收到视频ID，开始请求');
                     requestVideoId();  // 立即请求一次
                     
                     const intervalId = setInterval(() => {
+                        console.log('[OverallReports] 轮询检查 currentBvId:', currentBvId);
                         if (currentBvId) {
                             clearInterval(intervalId);  // 收到视频ID后停止请求
                         } else {
@@ -254,6 +263,8 @@
                     // 显示提示
                     const videoTitleEl = document.getElementById('video-title');
                     if (videoTitleEl) videoTitleEl.textContent = '请在主窗口播放视频';
+                } else {
+                    console.log('[OverallReports] 已有视频ID:', currentBvId);
                 }
             }, 1000);
         });
@@ -279,6 +290,7 @@
         // IPC 监听
         function setupIpcListeners() {
             ipcRenderer.on('video-change', (event, data) => {
+                console.log('[OverallReports] 收到 video-change 事件:', data);
                 let bvId, title;
                 if (typeof data === 'object' && data !== null) {
                     bvId = data.bvId;
@@ -288,11 +300,16 @@
                     title = null;
                 }
                 
+                console.log('[OverallReports] 解析后的 bvId:', bvId, 'title:', title);
+                
                 if (bvId && bvId !== '--') {
                     currentBvId = bvId;
                     currentVideoTitle = title;
                     updateVideoInfo(bvId, title);
+                    console.log('[OverallReports] 开始加载多模态数据:', bvId);
                     loadMultimodalData(bvId);
+                } else {
+                    console.log('[OverallReports] bvId 无效，跳过');
                 }
             });
         }
@@ -310,21 +327,26 @@
 
         // 加载多模态数据
         async function loadMultimodalData(bvId) {
+            console.log('[OverallReports] loadMultimodalData 被调用, bvId:', bvId);
             try {
-                const response = await fetch(`${API_BASE}/api/video/multimodal-emotion/${bvId}/`);
+                const apiUrl = `${API_BASE}/api/video/multimodal-emotion/${bvId}/`;
+                console.log('[OverallReports] 请求API:', apiUrl);
+                const response = await fetch(apiUrl);
                 const result = await response.json();
+                console.log('[OverallReports] API响应:', result);
                 
                 if (result.success) {
                     multimodalData = result;
+                    console.log('[OverallReports] 数据加载成功, 渲染报表');
                     renderMultimodalReport();
                 } else {
                     // 如果API不存在，使用模拟数据
-                    console.log('使用模拟数据进行演示');
+                    console.log('[OverallReports] API返回失败, 使用模拟数据进行演示, error:', result.error);
                     simulateData();
                     renderMultimodalReport();
                 }
             } catch (error) {
-                console.error('加载多模态数据失败:', error);
+                console.error('[OverallReports] 加载多模态数据失败:', error);
                 // 降级到模拟数据
                 simulateData();
                 renderMultimodalReport();
