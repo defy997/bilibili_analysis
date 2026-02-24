@@ -448,7 +448,10 @@
                             console.log('[LoadData] SSE 失败，回退到轮询');
                             await pollAnalysisTasks(analyzeData.tasks, bvId);
                         }
-                        return; // 完成后会自动加载 dashboard
+                        // SSE/轮询完成后，加载 dashboard
+                        console.log('[LoadData] 爬取完成，加载 dashboard');
+                        await loadDashboard(bvId);
+                        return;
                     } else if (analyzeData.status === 'cached') {
                         console.log('[LoadData] 数据已缓存，检查数据是否有效...');
                         // 即使是cached，也可能数据正在爬取中，需要检查dashboard数据是否有效
@@ -460,6 +463,9 @@
                             if (sseResult === 'fallback') {
                                 await pollDashboardUntilReady(bvId);
                             }
+                            // SSE/轮询完成后，加载 dashboard
+                            console.log('[LoadData] 爬取完成，加载 dashboard');
+                            await loadDashboard(bvId);
                             return;
                         }
                         // 数据有效，继续加载dashboard
@@ -470,6 +476,9 @@
                         if (sseResult === 'fallback') {
                             await pollDashboardUntilReady(bvId);
                         }
+                        // SSE/轮询完成后，加载 dashboard
+                        console.log('[LoadData] 爬取完成，加载 dashboard');
+                        await loadDashboard(bvId);
                         return;
                     }
                 } catch (analyzeErr) {
