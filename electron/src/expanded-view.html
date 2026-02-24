@@ -118,22 +118,44 @@
             transition: background 0.2s;
         }
         .comment-item:hover { background: rgba(255,255,255,0.06); }
+
+        /* ── 消除 inline-style 警告 ────────────────────────────── */
+        .loading-bar          { flex-shrink: 0; }          /* height already set above */
+        #app-header           { height: 52px; background: rgba(0,0,0,0.3); border-bottom: 1px solid rgba(255,255,255,0.07); }
+        .logo-icon-bg         { background: linear-gradient(135deg, #ec4899, #8b5cf6); }
+        #score-badge          { background: rgba(74,222,128,0.15); border: 1px solid rgba(74,222,128,0.3); }
+        #comments-list        { max-height: 280px; }
+        #trend-chart-skeleton, #trend-chart           { height: 200px; }
+        #hourly-chart-skeleton, #hourly-chart         { height: 160px; }
+        #heatmap-skeleton, #heatmap-chart             { height: 180px; }
+        #audio-timeline-skeleton, #audio-timeline-chart { height: 160px; }
+        #comparison-skeleton, #comparison-chart       { height: 180px; }
+        #pie-skeleton, #pie-chart                     { height: 180px; }
+        #vip-skeleton, #vip-chart                     { height: 150px; }
+        #audio-emotion-skeleton, #audio-emotion-chart { height: 150px; }
+        #audio-status-badge   { background: rgba(168,85,247,0.15); color: #c084fc; border: 1px solid rgba(168,85,247,0.3); }
+        .score-ring-container { width: 60px; height: 60px; }
+        .score-ring-svg       { transform: rotate(-90deg); }
+        #mm-score-circle      { transition: stroke-dashoffset 1s ease; }
+        .weight-track         { height: 5px; background: rgba(255,255,255,0.08); }
+        .weight-fill          { height: 5px; width: 0%; transition: width 0.8s; }
+        #conflict-badge       { background: rgba(251,146,60,0.15); color: #fb923c; border: 1px solid rgba(251,146,60,0.3); }
+        .conflict-cell        { background: rgba(255,255,255,0.04); }
+        #conflict-list        { max-height: 160px; }
     </style>
 </head>
 
 <body class="h-screen flex flex-col overflow-hidden">
 
     <!-- 顶部进度条（加载中显示） -->
-    <div id="top-loading-bar" class="loading-bar hidden" style="height: 2px; flex-shrink: 0;"></div>
+    <div id="top-loading-bar" class="loading-bar hidden"></div>
 
     <!-- 顶部标题栏 -->
-    <div class="drag-area flex-shrink-0 flex items-center px-4 gap-3"
-         style="height: 52px; background: rgba(0,0,0,0.3); border-bottom: 1px solid rgba(255,255,255,0.07);">
+    <div id="app-header" class="drag-area flex-shrink-0 flex items-center px-4 gap-3">
 
         <!-- Logo -->
         <div class="no-drag flex items-center gap-2 flex-shrink-0">
-            <div class="w-7 h-7 rounded-full flex items-center justify-center"
-                 style="background: linear-gradient(135deg, #ec4899, #8b5cf6);">
+            <div class="logo-icon-bg w-7 h-7 rounded-full flex items-center justify-center">
                 <i class="fa-solid fa-chart-pie text-white text-xs"></i>
             </div>
             <span class="text-sm font-semibold text-white/80">BiliMood</span>
@@ -145,8 +167,7 @@
         <span id="header-title" class="text-sm text-white/70 flex-1 truncate min-w-0">等待视频数据...</span>
 
         <!-- 情感得分徽章 -->
-        <div id="score-badge" class="no-drag hidden flex items-center gap-1.5 px-3 py-1 rounded-full flex-shrink-0"
-             style="background: rgba(74, 222, 128, 0.15); border: 1px solid rgba(74, 222, 128, 0.3);">
+        <div id="score-badge" class="no-drag hidden flex items-center gap-1.5 px-3 py-1 rounded-full flex-shrink-0">
             <i class="fa-solid fa-face-smile text-green-400 text-xs"></i>
             <span id="score-value" class="text-green-400 text-xs font-medium"></span>
         </div>
@@ -253,7 +274,7 @@
             </div>
 
             <!-- Top 5 高赞评论 -->
-            <div class="glass-panel rounded-xl p-4 flex-1" style="min-height: 0;">
+            <div class="glass-panel rounded-xl p-4 flex-1 min-h-0">
                 <div class="flex items-center gap-2 mb-3">
                     <i class="fa-solid fa-thumbs-up text-green-400 text-sm"></i>
                     <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Top Comments</span>
@@ -267,7 +288,7 @@
                     <div class="skeleton h-12 rounded-lg"></div>
                 </div>
 
-                <div id="comments-list" class="hidden space-y-2 overflow-y-auto" style="max-height: 280px;">
+                <div id="comments-list" class="hidden space-y-2 overflow-y-auto">
                     <!-- 动态生成 -->
                 </div>
             </div>
@@ -289,8 +310,8 @@
                         <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-400 inline-block"></span>Negative</span>
                     </div>
                 </div>
-                <div id="trend-chart-skeleton" class="skeleton rounded-lg" style="height: 200px;"></div>
-                <div id="trend-chart" class="chart-container hidden" style="height: 200px;"></div>
+                <div id="trend-chart-skeleton" class="skeleton rounded-lg"></div>
+                <div id="trend-chart" class="chart-container hidden"></div>
             </div>
 
             <!-- 24小时评论分布 -->
@@ -299,8 +320,8 @@
                     <i class="fa-solid fa-clock text-blue-400 text-sm"></i>
                     <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">24H Comment Distribution</span>
                 </div>
-                <div id="hourly-chart-skeleton" class="skeleton rounded-lg" style="height: 160px;"></div>
-                <div id="hourly-chart" class="chart-container hidden" style="height: 160px;"></div>
+                <div id="hourly-chart-skeleton" class="skeleton rounded-lg"></div>
+                <div id="hourly-chart" class="chart-container hidden"></div>
             </div>
 
             <!-- 弹幕时间轴热力图 -->
@@ -309,8 +330,8 @@
                     <i class="fa-solid fa-fire text-orange-400 text-sm"></i>
                     <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Danmu Timeline Heatmap</span>
                 </div>
-                <div id="heatmap-skeleton" class="skeleton rounded-lg" style="height: 180px;"></div>
-                <div id="heatmap-chart" class="chart-container hidden" style="height: 180px;"></div>
+                <div id="heatmap-skeleton" class="skeleton rounded-lg"></div>
+                <div id="heatmap-chart" class="chart-container hidden"></div>
             </div>
 
             <!-- 音频情感时间轴 -->
@@ -320,13 +341,12 @@
                         <i class="fa-solid fa-waveform-lines text-purple-400 text-sm"></i>
                         <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Audio Sentiment Timeline</span>
                     </div>
-                    <span id="audio-status-badge" class="hidden text-xs px-2 py-0.5 rounded-full"
-                          style="background: rgba(168,85,247,0.15); color: #c084fc; border: 1px solid rgba(168,85,247,0.3);">
+                    <span id="audio-status-badge" class="hidden text-xs px-2 py-0.5 rounded-full">
                         Analyzed
                     </span>
                 </div>
-                <div id="audio-timeline-skeleton" class="skeleton rounded-lg" style="height: 160px;"></div>
-                <div id="audio-timeline-chart" class="chart-container hidden" style="height: 160px;"></div>
+                <div id="audio-timeline-skeleton" class="skeleton rounded-lg"></div>
+                <div id="audio-timeline-chart" class="chart-container hidden"></div>
                 <div id="audio-no-data" class="hidden text-center py-6 text-white/30 text-xs">
                     <i class="fa-solid fa-microphone-slash text-2xl mb-2 block"></i>
                     音频分析未完成，请在音频页面触发分析
@@ -339,8 +359,8 @@
                     <i class="fa-solid fa-layer-group text-indigo-400 text-sm"></i>
                     <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Multimodal Comparison</span>
                 </div>
-                <div id="comparison-skeleton" class="skeleton rounded-lg" style="height: 180px;"></div>
-                <div id="comparison-chart" class="chart-container hidden" style="height: 180px;"></div>
+                <div id="comparison-skeleton" class="skeleton rounded-lg"></div>
+                <div id="comparison-chart" class="chart-container hidden"></div>
             </div>
         </div>
 
@@ -353,8 +373,8 @@
                     <i class="fa-solid fa-circle-half-stroke text-purple-400 text-sm"></i>
                     <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Comment Emotion Distribution</span>
                 </div>
-                <div id="pie-skeleton" class="skeleton rounded-lg" style="height: 180px;"></div>
-                <div id="pie-chart" class="chart-container hidden" style="height: 180px;"></div>
+                <div id="pie-skeleton" class="skeleton rounded-lg"></div>
+                <div id="pie-chart" class="chart-container hidden"></div>
             </div>
 
             <!-- 用户画像摘要 -->
@@ -410,8 +430,8 @@
                     <i class="fa-solid fa-crown text-yellow-400 text-sm"></i>
                     <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">VIP Distribution</span>
                 </div>
-                <div id="vip-skeleton" class="skeleton rounded-lg" style="height: 150px;"></div>
-                <div id="vip-chart" class="chart-container hidden" style="height: 150px;"></div>
+                <div id="vip-skeleton" class="skeleton rounded-lg"></div>
+                <div id="vip-chart" class="chart-container hidden"></div>
             </div>
 
             <!-- 多模态综合得分 -->
@@ -428,13 +448,12 @@
                 <div id="multimodal-content" class="hidden">
                     <!-- 综合得分环 -->
                     <div class="flex items-center gap-4 mb-3">
-                        <div class="relative flex-shrink-0" style="width: 60px; height: 60px;">
-                            <svg width="60" height="60" style="transform: rotate(-90deg);">
+                        <div class="score-ring-container relative flex-shrink-0">
+                            <svg class="score-ring-svg" width="60" height="60">
                                 <circle cx="30" cy="30" r="24" stroke="rgba(255,255,255,0.08)" stroke-width="6" fill="none"/>
                                 <circle id="mm-score-circle" cx="30" cy="30" r="24"
                                         stroke="url(#mmGrad)" stroke-width="6" fill="none"
-                                        stroke-dasharray="150.8" stroke-dashoffset="150.8"
-                                        style="transition: stroke-dashoffset 1s ease;"/>
+                                        stroke-dasharray="150.8" stroke-dashoffset="150.8"/>
                                 <defs>
                                     <linearGradient id="mmGrad" x1="0%" y1="0%" x2="100%" y2="0%">
                                         <stop offset="0%" stop-color="#a855f7"/>
@@ -457,22 +476,22 @@
                         <p class="text-xs text-white/30 uppercase tracking-wider mb-1">Attention Weights</p>
                         <div class="flex items-center gap-2">
                             <span class="text-xs text-white/50 w-10">文本</span>
-                            <div class="flex-1 rounded-full" style="height: 5px; background: rgba(255,255,255,0.08);">
-                                <div id="w-text" class="rounded-full bg-blue-500" style="height: 5px; width: 0%; transition: width 0.8s;"></div>
+                            <div class="weight-track flex-1 rounded-full">
+                                <div id="w-text" class="weight-fill rounded-full bg-blue-500"></div>
                             </div>
                             <span id="w-text-val" class="text-xs text-blue-400 w-8 text-right">-</span>
                         </div>
                         <div class="flex items-center gap-2">
                             <span class="text-xs text-white/50 w-10">音频</span>
-                            <div class="flex-1 rounded-full" style="height: 5px; background: rgba(255,255,255,0.08);">
-                                <div id="w-audio" class="rounded-full bg-purple-500" style="height: 5px; width: 0%; transition: width 0.8s;"></div>
+                            <div class="weight-track flex-1 rounded-full">
+                                <div id="w-audio" class="weight-fill rounded-full bg-purple-500"></div>
                             </div>
                             <span id="w-audio-val" class="text-xs text-purple-400 w-8 text-right">-</span>
                         </div>
                         <div class="flex items-center gap-2">
                             <span class="text-xs text-white/50 w-10">弹幕</span>
-                            <div class="flex-1 rounded-full" style="height: 5px; background: rgba(255,255,255,0.08);">
-                                <div id="w-danmu" class="rounded-full bg-cyan-500" style="height: 5px; width: 0%; transition: width 0.8s;"></div>
+                            <div class="weight-track flex-1 rounded-full">
+                                <div id="w-danmu" class="weight-fill rounded-full bg-cyan-500"></div>
                             </div>
                             <span id="w-danmu-val" class="text-xs text-cyan-400 w-8 text-right">-</span>
                         </div>
@@ -486,8 +505,8 @@
                     <i class="fa-solid fa-music text-purple-400 text-sm"></i>
                     <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Audio Emotion Detail</span>
                 </div>
-                <div id="audio-emotion-skeleton" class="skeleton rounded-lg" style="height: 150px;"></div>
-                <div id="audio-emotion-chart" class="chart-container hidden" style="height: 150px;"></div>
+                <div id="audio-emotion-skeleton" class="skeleton rounded-lg"></div>
+                <div id="audio-emotion-chart" class="chart-container hidden"></div>
             </div>
 
             <!-- 情感冲突检测 -->
@@ -497,8 +516,7 @@
                         <i class="fa-solid fa-triangle-exclamation text-orange-400 text-sm"></i>
                         <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Conflict Detection</span>
                     </div>
-                    <span id="conflict-badge" class="hidden text-xs px-2 py-0.5 rounded-full"
-                          style="background: rgba(251,146,60,0.15); color: #fb923c; border: 1px solid rgba(251,146,60,0.3);"></span>
+                    <span id="conflict-badge" class="hidden text-xs px-2 py-0.5 rounded-full"></span>
                 </div>
                 <div id="conflict-skeleton" class="space-y-2">
                     <div class="skeleton h-8 rounded"></div>
@@ -508,25 +526,25 @@
                 <div id="conflict-content" class="hidden">
                     <!-- 严重程度四格 -->
                     <div class="grid grid-cols-4 gap-1.5 mb-3">
-                        <div class="text-center p-2 rounded-lg" style="background: rgba(255,255,255,0.04);">
+                        <div class="conflict-cell text-center p-2 rounded-lg">
                             <div id="c-low" class="text-lg font-bold text-yellow-400">0</div>
                             <div class="text-xs text-white/40">轻微</div>
                         </div>
-                        <div class="text-center p-2 rounded-lg" style="background: rgba(255,255,255,0.04);">
+                        <div class="conflict-cell text-center p-2 rounded-lg">
                             <div id="c-medium" class="text-lg font-bold text-orange-400">0</div>
                             <div class="text-xs text-white/40">中等</div>
                         </div>
-                        <div class="text-center p-2 rounded-lg" style="background: rgba(255,255,255,0.04);">
+                        <div class="conflict-cell text-center p-2 rounded-lg">
                             <div id="c-high" class="text-lg font-bold text-red-400">0</div>
                             <div class="text-xs text-white/40">严重</div>
                         </div>
-                        <div class="text-center p-2 rounded-lg" style="background: rgba(255,255,255,0.04);">
+                        <div class="conflict-cell text-center p-2 rounded-lg">
                             <div id="c-critical" class="text-lg font-bold text-red-600">0</div>
                             <div class="text-xs text-white/40">极度</div>
                         </div>
                     </div>
                     <!-- 冲突列表 -->
-                    <div id="conflict-list" class="space-y-1.5 overflow-y-auto" style="max-height: 160px;"></div>
+                    <div id="conflict-list" class="space-y-1.5 overflow-y-auto"></div>
                     <div id="conflict-empty" class="text-center py-4 text-white/30 text-xs">暂无冲突</div>
                 </div>
             </div>

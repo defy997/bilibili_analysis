@@ -26,10 +26,13 @@
         .weight-bar-fill    { transition: width 0.5s ease; }
         .timeline-marker    { transition: all 0.2s ease; }
         .timeline-marker:hover { transform: scale(1.2); }
+        #main-container     { background: rgba(20, 20, 30, 0.95); }
+        #text-weight-bar    { width: 70%; }
+        #audio-weight-bar   { width: 30%; }
     </style>
 </head>
 <body class="h-full w-full text-white overflow-hidden">
-    <div id="main-container" class="h-full w-full flex flex-col" style="background: rgba(20, 20, 30, 0.95);">
+    <div id="main-container" class="h-full w-full flex flex-col">
         <!-- 顶部标题栏 -->
         <div class="h-12 flex items-center justify-between px-4 border-b border-white/10 bg-gradient-to-r from-purple-500/10 to-pink-500/10 flex-shrink-0 drag-area select-none">
             <div class="flex items-center gap-3">
@@ -96,7 +99,7 @@
                             <span id="text-score-badge" class="px-2 py-0.5 rounded-full text-xs bg-white/10">--</span>
                         </div>
                         <div class="weight-bar bg-white/10 rounded-full h-2 overflow-hidden">
-                            <div id="text-weight-bar" class="weight-bar-fill bg-gradient-to-r from-blue-500 to-cyan-400 h-full" style="width: 70%"></div>
+                            <div id="text-weight-bar" class="weight-bar-fill bg-gradient-to-r from-blue-500 to-cyan-400 h-full"></div>
                         </div>
                         <div class="flex justify-between mt-1 text-xs text-white/40">
                             <span>得分: <span id="text-raw-score">--</span></span>
@@ -109,7 +112,7 @@
                             <span id="audio-score-badge" class="px-2 py-0.5 rounded-full text-xs bg-white/10">--</span>
                         </div>
                         <div class="weight-bar bg-white/10 rounded-full h-2 overflow-hidden">
-                            <div id="audio-weight-bar" class="weight-bar-fill bg-gradient-to-r from-purple-500 to-pink-400 h-full" style="width: 30%"></div>
+                            <div id="audio-weight-bar" class="weight-bar-fill bg-gradient-to-r from-purple-500 to-pink-400 h-full"></div>
                         </div>
                         <div class="flex justify-between mt-1 text-xs text-white/40">
                             <span>得分: <span id="audio-raw-score">--</span></span>
@@ -142,13 +145,13 @@
                     </div>
                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <label class="text-xs text-white/60 mb-1 block">文本权重: <span id="manual-text-weight">70%</span></label>
+                            <label for="text-weight-slider" class="text-xs text-white/60 mb-1 block">文本权重: <span id="manual-text-weight">70%</span></label>
                             <input type="range" id="text-weight-slider" min="0" max="100" value="70"
                                    class="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
                                    oninput="updateManualWeight('text', this.value)">
                         </div>
                         <div>
-                            <label class="text-xs text-white/60 mb-1 block">音频权重: <span id="manual-audio-weight">30%</span></label>
+                            <label for="audio-weight-slider" class="text-xs text-white/60 mb-1 block">音频权重: <span id="manual-audio-weight">30%</span></label>
                             <input type="range" id="audio-weight-slider" min="0" max="100" value="30"
                                    class="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500"
                                    oninput="updateManualWeight('audio', this.value)">
