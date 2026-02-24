@@ -230,6 +230,32 @@
         document.addEventListener('DOMContentLoaded', () => {
             initCharts();
             setupIpcListeners();
+            
+            // 兜底：定期请求当前视频ID（每3秒请求一次，直到收到数据）
+            const requestVideoId = () => {
+                if (!currentBvId) {
+                    ipcRenderer.send('get-current-video-id');
+                }
+            };
+            
+            // 等待 1 秒后开始请求（给主窗口时间准备好）
+            setTimeout(() => {
+                if (!currentBvId) {
+                    requestVideoId();  // 立即请求一次
+                    
+                    const intervalId = setInterval(() => {
+                        if (currentBvId) {
+                            clearInterval(intervalId);  // 收到视频ID后停止请求
+                        } else {
+                            requestVideoId();
+                        }
+                    }, 3000);
+                    
+                    // 显示提示
+                    const videoTitleEl = document.getElementById('video-title');
+                    if (videoTitleEl) videoTitleEl.textContent = '请在主窗口播放视频';
+                }
+            }, 1000);
         });
 
         // applyTheme() + loadThemeFromConfig() → shared.js

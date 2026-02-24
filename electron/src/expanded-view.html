@@ -553,6 +553,26 @@
                 console.log('[ExpandedView] 自动加载 bvid:', bvIdFromUrl);
                 currentBvId = bvIdFromUrl;
                 loadAll(bvIdFromUrl);
+            } else {
+                // 兜底：定期请求当前视频ID
+                setTimeout(() => {
+                    if (!currentBvId) {
+                        const requestVideoId = () => {
+                            if (!currentBvId) {
+                                ipcRenderer.send('get-current-video-id');
+                            }
+                        };
+                        requestVideoId();
+                        
+                        const intervalId = setInterval(() => {
+                            if (currentBvId) {
+                                clearInterval(intervalId);
+                            } else {
+                                requestVideoId();
+                            }
+                        }, 3000);
+                    }
+                }, 1000);
             }
         });
 

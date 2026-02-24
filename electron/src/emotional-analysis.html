@@ -177,6 +177,30 @@
                     ipcRenderer.send('open-devtools', 'analysis');
                 }
             });
+            
+            // 兜底：定期请求当前视频ID（每3秒请求一次，直到收到数据）
+            setTimeout(() => {
+                if (!currentBvId) {
+                    const requestVideoId = () => {
+                        if (!currentBvId) {
+                            ipcRenderer.send('get-current-video-id');
+                        }
+                    };
+                    requestVideoId();  // 立即请求一次
+                    
+                    const intervalId = setInterval(() => {
+                        if (currentBvId) {
+                            clearInterval(intervalId);
+                        } else {
+                            requestVideoId();
+                        }
+                    }, 3000);
+                    
+                    // 显示提示
+                    const videoTitleEl = document.getElementById('video-title');
+                    if (videoTitleEl) videoTitleEl.textContent = '请在主窗口播放视频';
+                }
+            }, 1000);
         });
 
         // === 初始化图表 ===

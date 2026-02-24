@@ -393,6 +393,16 @@ ipcMain.on('close-window', () => {
   app.quit();
 });
 
+// ==========================================
+// 获取当前视频ID（供子窗口查询）
+// ==========================================
+ipcMain.on('get-current-video-id', (event) => {
+  if (currentBvId) {
+    const videoData = { bvId: currentBvId, title: currentVideoTitle || '' };
+    event.sender.send('video-change', videoData);
+  }
+});
+
 ipcMain.on('toggle-window', () => {
   if (mainWindow) {
     if (mainWindow.isVisible()) {

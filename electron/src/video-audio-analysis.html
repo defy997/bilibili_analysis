@@ -172,6 +172,27 @@
                         loadData(bvIdFromUrl);
                     } else {
                         console.log('No BV id found in URL, listening for ipc event...');
+                        
+                        // 兜底：定期请求当前视频ID（每3秒请求一次，直到收到数据）
+                        const requestVideoId = () => {
+                            if (!currentBvId) {
+                                ipcRenderer.send('get-current-video-id');
+                            }
+                        };
+                        requestVideoId();  // 立即请求一次
+                        const intervalId = setInterval(() => {
+                            if (currentBvId) {
+                                clearInterval(intervalId);  // 收到视频ID后停止请求
+                            } else {
+                                requestVideoId();
+                            }
+                        }, 3000);
+                        
+                        // 显示提示信息
+                        const videoTitle = document.getElementById('video-title');
+                        const videoBvid = document.getElementById('video-bvid');
+                        if (videoTitle) videoTitle.textContent = '请在主窗口播放视频';
+                        if (videoBvid) videoBvid.textContent = '等待视频数据...';
                     }
                 }
             }, 500);
