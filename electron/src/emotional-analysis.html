@@ -442,13 +442,14 @@
                         // 有任务在进行中，使用 SSE 监听进度
                         console.log('[LoadData] 异步任务已提交，开始 SSE 监听:', analyzeData.tasks);
                         const sseResult = await listenCrawlProgress(bvId);
-                        
                         // 如果 SSE 失败，回退到轮询
+                        // pollAnalysisTasks 内部会处理加载 dashboard，不需要额外调用
                         if (sseResult === 'fallback') {
                             console.log('[LoadData] SSE 失败，回退到轮询');
                             await pollAnalysisTasks(analyzeData.tasks, bvId);
+                            return; // pollAnalysisTasks 内部已经加载了 dashboard
                         }
-                        // SSE/轮询完成后，加载 dashboard
+                        // SSE 成功后，加载 dashboard
                         console.log('[LoadData] 爬取完成，加载 dashboard');
                         await loadDashboard(bvId);
                         return;
@@ -461,11 +462,17 @@
                             console.log('[LoadData] 数据无效，使用 SSE 监听进度...');
                             const sseResult = await listenCrawlProgress(bvId);
                             if (sseResult === 'fallback') {
-                                await pollDashboardUntilReady(bvId);
+                                const loaded = await pollDashboardUntilReady(bvId);
+                                if (!loaded) {
+                                    // pollDashboard 超时未加载，手动加载 dashboard
+                                    console.log('[LoadData] pollDashboard 超时，手动加载 dashboard');
+                                    await loadDashboard(bvId);
+                                }
+                            } else {
+                                // SSE 成功完成（收到 complete 信号），加载 dashboard
+                                console.log('[LoadData] SSE 完成，加载 dashboard');
+                                await loadDashboard(bvId);
                             }
-                            // SSE/轮询完成后，加载 dashboard
-                            console.log('[LoadData] 爬取完成，加载 dashboard');
-                            await loadDashboard(bvId);
                             return;
                         }
                         // 数据有效，继续加载dashboard
@@ -474,11 +481,17 @@
                         console.log('[LoadData] 视频正在被其他请求处理，使用 SSE 监听...');
                         const sseResult = await listenCrawlProgress(bvId);
                         if (sseResult === 'fallback') {
-                            await pollDashboardUntilReady(bvId);
+                            const loaded = await pollDashboardUntilReady(bvId);
+                            if (!loaded) {
+                                // pollDashboard 超时未加载，手动加载 dashboard
+                                console.log('[LoadData] pollDashboard 超时，手动加载 dashboard');
+                                await loadDashboard(bvId);
+                            }
+                        } else {
+                            // SSE 成功完成（收到 complete 信号），加载 dashboard
+                            console.log('[LoadData] SSE 完成，加载 dashboard');
+                            await loadDashboard(bvId);
                         }
-                        // SSE/轮询完成后，加载 dashboard
-                        console.log('[LoadData] 爬取完成，加载 dashboard');
-                        await loadDashboard(bvId);
                         return;
                     }
                 } catch (analyzeErr) {
@@ -496,8 +509,11 @@
 
                 if (data.success) {
                     // 额外检查：如果数据为空，可能还在爬取，再轮询一次
-                    const commentCount = data.sentiment?.distribution?.positive + data.sentiment?.distribution?.neutral + data.sentiment?.distribution?.negative || 0;
-                    const danmuCount = data.danmu?.timeline_heatmap?.length || 0;
+                    const sentimentDist = data.sentiment?.distribution;
+                    const commentCount = ((sentimentDist?.positive != null) ? sentimentDist.positive : 0) + 
+                                        ((sentimentDist?.neutral != null) ? sentimentDist.neutral : 0) + 
+                                        ((sentimentDist?.negative != null) ? sentimentDist.negative : 0);
+                    const danmuCount = (data.danmu?.timeline_heatmap != null) ? data.danmu.timeline_heatmap.length : 0;
                     if (commentCount === 0 && danmuCount === 0) {
                         console.log('[LoadData] 初始数据为空，尝试轮询等待...');
                         await pollDashboardUntilReady(bvId);
@@ -535,8 +551,11 @@
                 const resp = await fetch(`http://118.25.39.91/api/video/dashboard/${bvId}/`);
                 const data = await resp.json();
                 if (data.success) {
-                    const commentCount = data.sentiment?.distribution?.positive + data.sentiment?.distribution?.neutral + data.sentiment?.distribution?.negative || 0;
-                    const danmuCount = data.danmu?.timeline_heatmap?.length || 0;
+                    const sentimentDist = data.sentiment?.distribution;
+                    const commentCount = ((sentimentDist?.positive != null) ? sentimentDist.positive : 0) + 
+                                        ((sentimentDist?.neutral != null) ? sentimentDist.neutral : 0) + 
+                                        ((sentimentDist?.negative != null) ? sentimentDist.negative : 0);
+                    const danmuCount = (data.danmu?.timeline_heatmap != null) ? data.danmu.timeline_heatmap.length : 0;
                     console.log(`[checkDashboardDataValid] commentCount: ${commentCount}, danmuCount: ${danmuCount}`);
                     return commentCount > 0 || danmuCount > 0;
                 }
@@ -583,14 +602,15 @@
                             const totalCount = (comments.count || 0) + (danmu.count || 0);
                             if (loadingSubtitle) loadingSubtitle.innerText = `${totalCount} items processed`;
                             
-                            // 等待一小段时间后加载 dashboard
-                            setTimeout(() => resolve(), 1000);
+                            // 等待一小段时间后返回成功状态
+                            setTimeout(() => resolve('complete'), 1000);
+                            return;
                         }
                         else if (data.type === 'timeout') {
                             // 超时
                             eventSource.close();
                             console.warn('[SSE] 进度监听超时');
-                            resolve(); // 仍然 resolve，让后续逻辑处理
+                            resolve('timeout'); // 返回 timeout 状态
                         }
                         else {
                             // 正常进度更新
@@ -640,6 +660,7 @@
         }
 
         // === 无任务ID时轮询 dashboard，等待数据就绪（already_processing 场景）===
+        // 返回 true 表示已加载数据，false 表示超时或未加载
         async function pollDashboardUntilReady(bvId) {
             const pollInterval = 3000;
             const maxAttempts = 200; // 最多10分钟，等待后端爬取完成
@@ -668,11 +689,12 @@
                         console.log(`[PollDashboard] attempt ${attempts}:`, data);
 
                         // 检查正确的API返回结构
-                        const pos = data.sentiment?.distribution?.positive || 0;
-                        const neu = data.sentiment?.distribution?.neutral || 0;
-                        const neg = data.sentiment?.distribution?.negative || 0;
+                        const sentimentDist = data.sentiment?.distribution;
+                        const pos = (sentimentDist?.positive != null) ? sentimentDist.positive : 0;
+                        const neu = (sentimentDist?.neutral != null) ? sentimentDist.neutral : 0;
+                        const neg = (sentimentDist?.negative != null) ? sentimentDist.negative : 0;
                         const commentCount = pos + neu + neg;
-                        const danmuCount = data.danmu?.timeline_heatmap?.length || 0;
+                        const danmuCount = (data.danmu?.timeline_heatmap != null) ? data.danmu.timeline_heatmap.length : 0;
 
                         console.log(`[PollDashboard] commentCount: ${commentCount}, danmuCount: ${danmuCount}`);
 
@@ -689,7 +711,7 @@
                                 if (loadingTasks) loadingTasks.classList.add('hidden');
                                 showLoading(false);
                                 updateUI(data);
-                                resolve();
+                                resolve(true); // 返回 true 表示已加载数据
                             }, 1000);
                             return;
                         }
@@ -711,7 +733,7 @@
                         // 不再递归调用 loadDashboard，避免无限循环
                         if (loadingTasks) loadingTasks.classList.add('hidden');
                         showLoading(false);
-                        resolve();
+                        resolve(false); // 返回 false 表示超时
                     }
                 }, pollInterval);
             });
@@ -817,9 +839,10 @@
                                 if (loadingTasks) loadingTasks.classList.add('hidden');
                                 const dash = await fetchDashboard(bvId);
                                 if (dash && dash.success) {
-                                    const pos = dash.sentiment?.distribution?.positive || 0;
-                                    const neu = dash.sentiment?.distribution?.neutral || 0;
-                                    const neg = dash.sentiment?.distribution?.negative || 0;
+                                    const sentimentDist = dash.sentiment?.distribution;
+                                    const pos = (sentimentDist?.positive != null) ? sentimentDist.positive : 0;
+                                    const neu = (sentimentDist?.neutral != null) ? sentimentDist.neutral : 0;
+                                    const neg = (sentimentDist?.negative != null) ? sentimentDist.negative : 0;
                                     if (pos + neu + neg > 0) {
                                         showLoading(false);
                                         updateUI(dash);
