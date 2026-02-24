@@ -665,6 +665,7 @@
             const pollInterval = 3000;
             const maxAttempts = 200; // 最多10分钟，等待后端爬取完成
             let attempts = 0;
+            let zeroDataAttempts = 0; // 局部变量：记录连续数据为 0 的次数
 
             const loadingTasks = document.getElementById('loading-tasks');
             const loadingProgress = document.getElementById('loading-progress');
@@ -697,6 +698,40 @@
                         const danmuCount = (data.danmu?.timeline_heatmap != null) ? data.danmu.timeline_heatmap.length : 0;
 
                         console.log(`[PollDashboard] commentCount: ${commentCount}, danmuCount: ${danmuCount}`);
+
+                        // 如果 API 返回失败，或者数据为 0
+                        if (!data.success || (commentCount === 0 && danmuCount === 0)) {
+                            zeroDataAttempts++;
+                            console.log(`[PollDashboard] 数据为空尝试次数: ${zeroDataAttempts}`);
+
+                            // 如果连续 10 次数据都是 0，认为数据确实为空（视频可能没有评论/弹幕，或爬取失败）
+                            if (zeroDataAttempts >= 10) {
+                                clearInterval(timer);
+                                console.warn('[PollDashboard] 数据持续为空，停止轮询');
+                                if (loadingProgress) loadingProgress.style.width = '95%';
+                                if (loadingTitle) {
+                                    if (!data.success) {
+                                        loadingTitle.innerText = 'Analysis Failed';
+                                    } else {
+                                        loadingTitle.innerText = 'No Data Found';
+                                    }
+                                }
+                                if (loadingSubtitle) {
+                                    if (!data.success) {
+                                        loadingSubtitle.innerText = data.error || 'Backend error';
+                                    } else {
+                                        loadingSubtitle.innerText = 'This video may have no comments or danmu, or crawling failed.';
+                                    }
+                                }
+                                if (loadingTasks) loadingTasks.classList.add('hidden');
+                                showLoading(false);
+                                resolve(false);
+                                return;
+                            }
+                        } else {
+                            // 有数据，重置计数器
+                            zeroDataAttempts = 0;
+                        }
 
                         if (data.success && (commentCount > 0 || danmuCount > 0)) {
                             clearInterval(timer);

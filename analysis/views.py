@@ -1148,6 +1148,7 @@ def multimodal_emotion_analysis(request, bvid):
 
 # ==================== 爬取进度 SSE 流 ====================
 
+@csrf_exempt
 def crawl_progress_sse(request, bvid):
     """
     爬取进度 Server-Sent Events (SSE) 端点

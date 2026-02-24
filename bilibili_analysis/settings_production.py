@@ -13,7 +13,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DEBUG = os.environ.get('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
 # 安全设置：只允许指定的域名
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '10.0.0.2').split(',')
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '118.25.39.91,127.0.0.1,localhost').split(',')
 
 # 密钥管理：生产环境必须使用环境变量
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-y%&)nd6gy4b*b&b%f(z4!)2@98*vqv$i+79w(q+%^z+mozgnpd')
@@ -31,12 +31,9 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-# CORS 配置（生产环境建议限制来源）
-CORS_ALLOW_ALL_ORIGINS = DEBUG  # 生产环境关闭，改用白名单
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+# CORS 配置 - 允许 SSE 流跨域
+CORS_ALLOW_ALL_ORIGINS = True  # SSE 需要跨域支持
+CORS_ALLOW_CREDENTIALS = True
 
 # ========== 应用定义 ==========
 INSTALLED_APPS = [
