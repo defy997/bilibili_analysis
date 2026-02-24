@@ -79,6 +79,11 @@ def get_crawl_progress(bvid):
         
         result = {}
         for k, v in data.items():
+            # 处理 bytes 类型（Redis 返回 bytes）
+            if isinstance(k, bytes):
+                k = k.decode('utf-8')
+            if isinstance(v, bytes):
+                v = v.decode('utf-8')
             result[k] = json.loads(v) if isinstance(v, str) else v
         return result
     except Exception as e:
