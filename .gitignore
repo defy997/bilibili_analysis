@@ -106,3 +106,14 @@ nul
 sync-*.ps1
 sync-*.sh
 .syncignore
+
+# ===================
+# 生产环境配置 (不提交到仓库)
+# ===================
+deploy_production.sh
+gunicorn_config.py
+nginx.conf
+supervisor.conf
+*settings_production*.py
+crawler_service/build/
+crawler_service/third_party/

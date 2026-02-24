@@ -1158,7 +1158,7 @@
         }
 
         // === API 基础配置 ===
-        const API_BASE = 'http://118.25.39.91:8000';
+        const API_BASE = 'http://118.25.39.91';
         
         // === 通用 API 调用函数 ===
         async function apiCall(endpoint, options = {}) {
@@ -1305,7 +1305,7 @@
                     }
                 };
 
-                const response = await fetch('http://118.25.39.91:8000/api/config/save/', {
+                const response = await fetch('http://118.25.39.91/api/config/save/', {
                     method: 'POST',
                     credentials: 'include',  // 携带 cookie
                     headers: { 'Content-Type': 'application/json' },

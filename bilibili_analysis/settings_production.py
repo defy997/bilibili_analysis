@@ -105,8 +105,12 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')  # 收集静态文件目录
 
 # 额外静态文件目录
 STATICFILES_DIRS = [
-    # os.path.join(BASE_DIR, 'static'),
+    os.path.join(BASE_DIR, 'electron', 'src'),
 ]
+
+# Media 文件（用户上传）
+MEDIA_URL = "/media/"
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # WhiteNoise 配置（可选，用于直接服务静态文件）
 # INSTALLED_APPS 添加 "whitenoise"

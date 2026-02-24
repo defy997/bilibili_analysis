@@ -336,7 +336,7 @@
                 // 优先检查音频数据是否存在，这是最可靠的判断方式
                 let audioData = null;
                 try {
-                    const audioResp = await fetch(`http://118.25.39.91:8000/api/video/audio-dashboard/${bvId}/`);
+                    const audioResp = await fetch(`http://118.25.39.91/api/video/audio-dashboard/${bvId}/`);
                     audioData = await audioResp.json();
                     console.log('[LoadData] Audio dashboard response:', JSON.stringify(audioData, null, 2));
 
@@ -360,7 +360,7 @@
 
                 // 2. 如果没有音频数据，尝试触发异步分析
                 try {
-                    const analyzeResp = await fetch(`http://118.25.39.91:8000/api/video/async-analyze/`, {
+                    const analyzeResp = await fetch(`http://118.25.39.91/api/video/async-analyze/`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ bvid: bvId })
@@ -393,7 +393,7 @@
 
                 // 3. 调用 audio dashboard API 获取数据
                 // 重新获取，因为上面可能已经有新数据
-                const response = await fetch(`http://118.25.39.91:8000/api/video/audio-dashboard/${bvId}/`);
+                const response = await fetch(`http://118.25.39.91/api/video/audio-dashboard/${bvId}/`);
                 const data = await response.json();
                 console.log('API Response:', JSON.stringify(data, null, 2));
                 showLoading(false);
@@ -427,7 +427,7 @@
                 const timer = setInterval(async () => {
                     attempts++;
                     try {
-                        const resp = await fetch(`http://118.25.39.91:8000/api/video/audio-dashboard/${bvId}/`);
+                        const resp = await fetch(`http://118.25.39.91/api/video/audio-dashboard/${bvId}/`);
                         const data = await resp.json();
 
                         if (loadingSubtext) loadingSubtext.innerText = `Waiting... ${attempts * 3}s elapsed`;
@@ -488,7 +488,7 @@
                 attempts++;
 
                 try {
-                    const resp = await fetch(`http://118.25.39.91:8000/api/video/task-status/?task_ids=${taskIds.join(',')}`);
+                    const resp = await fetch(`http://118.25.39.91/api/video/task-status/?task_ids=${taskIds.join(',')}`);
                     const data = await resp.json();
 
                     if (data.success && data.tasks) {
@@ -542,7 +542,7 @@
         // === 加载 Dashboard 数据 ===
         async function loadDashboard(bvId) {
             try {
-                const response = await fetch(`http://118.25.39.91:8000/api/video/audio-dashboard/${bvId}/`);
+                const response = await fetch(`http://118.25.39.91/api/video/audio-dashboard/${bvId}/`);
                 const data = await response.json();
                 if (data.success) {
                     updateUI(data);
@@ -669,7 +669,7 @@
             showLoading(true);
 
             try {
-                const resp = await fetch(`http://118.25.39.91:8000/api/video/audio-dashboard/${bvId}/`, {
+                const resp = await fetch(`http://118.25.39.91/api/video/audio-dashboard/${bvId}/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ force_refresh: false })
@@ -717,7 +717,7 @@
                 analyzeBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Analyzing...';
                 showLoading(true);
 
-                const resp = await fetch(`http://118.25.39.91:8000/api/video/audio-dashboard/${currentBvId}/`, {
+                const resp = await fetch(`http://118.25.39.91/api/video/audio-dashboard/${currentBvId}/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ force_refresh: forceRefresh })
@@ -752,7 +752,7 @@
         function pollTaskStatus(taskId) {
             const interval = setInterval(async () => {
                 try {
-                    const resp = await fetch(`http://118.25.39.91:8000/api/video/audio-task/${taskId}/`);
+                    const resp = await fetch(`http://118.25.39.91/api/video/audio-task/${taskId}/`);
                     const data = await resp.json();
 
                     if (data.status === 'SUCCESS') {

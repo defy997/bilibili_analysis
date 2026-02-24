@@ -314,7 +314,7 @@ levelChart.setOption({
             try {
                 showLoading(true);
 
-                const response = await fetch(`http://118.25.39.91:8000/api/video/user-profile/${bvId}/`);
+                const response = await fetch(`http://118.25.39.91/api/video/user-profile/${bvId}/`);
 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);

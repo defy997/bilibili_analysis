@@ -1,18 +1,38 @@
-# B站视频评论情感分析一体化系统
+# B站视频评论情感分析系统
 
-这是一个完整的B站视频评论情感分析系统，采用前后端分离架构，实现"浏览器插件 + 悬浮窗口 + Django后端"的无缝联动体验。
+一个完整的 B 站视频评论情感分析系统，支持实时监控、情感分析、数据可视化等功能。
 
 ## 🏗️ 系统架构
 
 ```
-┌─────────────────┐    WebSocket    ┌─────────────────┐    HTTP     ┌─────────────────┐
-│   Chrome扩展     │◄──────────────►│   Electron悬浮窗  │◄──────────►│   Django后端     │
-│                 │                │                 │             │                 │
-│ • 监控视频变化   │                │ • 显示分析结果   │             │ • 爬取评论数据   │
-│ • 提取BV号       │                │ • 实时更新       │             │ • 情感分析       │
-│ • 发送通知       │                │ • 悬浮界面       │             │ • 数据缓存       │
-└─────────────────┘                └─────────────────┘             └─────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              系统架构图                                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   ┌──────────────┐      ┌──────────────┐      ┌────────────────────────┐   │
+│   │  Chrome 扩展  │      │ Electron    │      │      Django 后端       │   │
+│   │  (监控视频)   │◄────►│  (悬浮窗口)  │◄────►│                        │   │
+│   └──────────────┘      └──────────────┘      │  • 爬虫模块 (C++)       │   │
+│                                                │  • 情感分析 (Python)     │   │
+│                                                │  • API 服务 (Django)     │   │
+│                                                │  • 任务队列 (Celery)     │   │
+│                                                └────────────────────────┘   │
+│                                                           │                  │
+│                                                           ▼                  │
+│                                                ┌────────────────────────┐   │
+│                                                │   Redis (缓存/队列)     │   │
+│                                                └────────────────────────┘   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+### 技术选型
+- **后端**: Django + Django REST Framework + Celery
+- **爬虫**: C++ (libcurl + nlohmann/json)
+- **分析**: ONNX Runtime + SnowNLP + jieba
+- **前端**: Electron + Vue 3 + ECharts
+- **缓存**: Redis
+- **部署**: Nginx + Supervisor
 
 ## ✨ 核心特性
 
@@ -33,13 +53,21 @@
 - **智能缓存**：相同视频直接返回缓存结果
 - **高准确率**：集成多种情感分析算法
 
+### ⚡ 高性能爬虫
+- **C++ 实现**：高效的数据爬取
+- **代理池**：自动切换代理IP
+- **异步处理**：Celery 任务队列
+- **SSE 推送**：实时推送爬取进度
+
 ## 🚀 快速开始
 
 ### 环境要求
 - Python 3.10+
 - Node.js 16+
-- Chrome浏览器
-- MySQL数据库
+- C++ 编译器 (GCC 9+)
+- Chrome 浏览器
+- MySQL 8.0+
+- Redis 7.0+
 
 ### 1. 后端部署 (Django)
 
@@ -48,8 +76,9 @@
 cd bilibili_analysis
 
 # 创建虚拟环境
-conda create -n bilibili_env python=3.10 -y
-conda activate bilibili_env
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# venv\Scripts\activate   # Windows
 
 # 安装依赖
 pip install -r requirements.txt
@@ -57,12 +86,8 @@ pip install -r requirements.txt
 # 启动 Redis (Celery 消息队列)
 redis-server
 
-
 # 启动 Celery 任务队列 (4 个 worker 并行处理)
 celery -A bilibili_analysis worker -c 4 -l info
-
-# 或自动根据 CPU 核心数设置
-# celery -A bilibili_analysis worker -l info
 
 # 数据库迁移
 python manage.py makemigrations
@@ -72,27 +97,26 @@ python manage.py migrate
 python manage.py runserver 0.0.0.0:8000
 ```
 
-### 2. 悬浮窗口部署 (Electron)
+### 2. C++ 爬虫服务编译
 
 ```bash
-# 安装依赖
+cd crawler_service
+mkdir -p build && cd build
+cmake ..
+make
+./crawler_service
+```
+
+### 3. 悬浮窗口部署 (Electron)
+
+```bash
 cd electron
 npm install
-
-# 启动悬浮窗口
 npm start
-# 或使用便捷脚本
-../start_floating_window.bat
 ```
 
-### 3. 浏览器扩展安装
+### 4. 浏览器扩展安装
 
-运行安装脚本：
-```bash
-install_chrome_extension.bat
-```
-
-或手动安装：
 1. 打开 `chrome://extensions/`
 2. 开启"开发者模式"
 3. 加载 `chrome_extension` 文件夹
@@ -109,50 +133,78 @@ install_chrome_extension.bat
 
 ```
 bilibili_analysis/
-├── bilibili_analysis/          # Django项目主目录
-│   ├── settings.py            # Django设置
-│   ├── urls.py                # URL配置
-│   └── wsgi.py               # WSGI配置
-├── analysis/                  # Django应用
+├── bilibili_analysis/          # Django 项目主目录
+│   ├── settings.py            # Django 设置
+│   ├── settings_production.py # 生产环境配置
+│   ├── urls.py                # URL 配置
+│   └── wsgi.py               # WSGI 配置
+├── analysis/                  # Django 应用
 │   ├── models.py             # 数据模型
-│   ├── views.py              # API视图
-│   ├── crawler.py            # 爬虫模块
+│   ├── views.py              # API 视图
+│   ├── serializers.py        # DRF 序列化器
+│   ├── tasks.py              # Celery 异步任务
+│   ├── crawler.py            # Python 爬虫辅助
 │   └── sentiment.py          # 情感分析模块
-├── electron/                 # Electron悬浮窗口
+├── crawler_service/           # C++ 爬虫服务
+│   ├── src/                  # 源代码
+│   ├── include/              # 头文件
+│   ├── third_party/          # 第三方库
+│   ├── build/                # 编译产物 ⚠️ 不提交
+│   └── CMakeLists.txt        # CMake 配置
+├── electron/                  # Electron 悬浮窗口
 │   ├── main.js               # 主进程
 │   ├── src/
-│   │   └── index.html        # 悬浮窗界面
-│   └── package.json          # 依赖配置
-├── chrome_extension/         # Chrome扩展
+│   │   ├── index.html       # 主界面
+│   │   ├── emotional-analysis.html  # 情感分析页
+│   │   ├── video-audio-analysis.html # 音视频分析页
+│   │   ├── user-profile.html          # 用户画像页
+│   │   ├── bilibili-login.html       # 登录页面
+│   │   └── js/
+│   │       └── shared.js    # 共享 JS
+│   └── package.json         # 依赖配置
+├── chrome_extension/          # Chrome 扩展
 │   ├── manifest.json         # 扩展配置
-│   ├── content.js            # 内容脚本
-│   ├── background.js         # 后台脚本
-│   └── welcome.html          # 欢迎页面
-├── requirements.txt          # Python依赖
-├── manage.py                 # Django管理脚本
-├── start_floating_window.bat # 悬浮窗启动脚本
-└── install_chrome_extension.bat # 扩展安装脚本
+│   ├── content.js           # 内容脚本
+│   ├── background.js        # 后台脚本
+│   └── welcome.html         # 欢迎页面
+├── models/                    # AI 模型目录
+│   └── text_sentiment/       # 文本情感模型
+├── requirements.txt           # Python 依赖
+├── manage.py                 # Django 管理脚本
+├── gunicorn_config.py        # Gunicorn 配置 ⚠️ 不提交
+├── nginx.conf                # Nginx 配置 ⚠️ 不提交
+├── supervisor.conf           # Supervisor 配置 ⚠️ 不提交
+└── deploy_production.sh     # 部署脚本 ⚠️ 不提交
 ```
+
+### ⚠️ 不提交到仓库的文件
+以下文件包含服务器配置信息，已在 `.gitignore` 中排除：
+- `deploy_production.sh` - 部署脚本
+- `gunicorn_config.py` - Gunicorn 配置
+- `nginx.conf` - Nginx 配置
+- `supervisor.conf` - Supervisor 配置
+- `crawler_service/build/` - C++ 编译产物
+- `venv/` - Python 虚拟环境
 
 ## 🔧 技术栈
 
 ### 后端 (Django)
 - **框架**: Django 4.2 + Django REST Framework
-- **数据库**: MySQL + Redis缓存
-- **爬虫**: Requests + BeautifulSoup4
-- **分析**: PaddleNLP / SnowNLP / jieba
-- **任务队列**: Celery (可选)
+- **数据库**: MySQL + Redis 缓存
+- **爬虫**: C++ (libcurl) + Python (requests)
+- **AI 分析**: ONNX Runtime + SnowNLP + jieba
+- **任务队列**: Celery + Redis
 
-### 前端 (Electron + Vue)
+### 前端 (Electron)
 - **桌面应用**: Electron 25+
-- **UI框架**: Vue.js 3 + 原生JavaScript
+- **UI**: 原生 JavaScript + CSS3
 - **图表库**: ECharts 5
-- **样式**: CSS3 + 毛玻璃效果
+- **特效**: 毛玻璃效果
 
-### 扩展 (Chrome)
-- **Manifest**: V3
-- **通信**: WebSocket
-- **监控**: URL变化检测
+### 基础设施
+- **Web 服务器**: Nginx
+- **进程管理**: Supervisor
+- **消息队列**: Redis
 
 ## 📡 API接口
 
@@ -259,4 +311,4 @@ MIT License - 详见LICENSE文件
 
 **问题反馈**: [Issues](https://github.com/your-repo/bilibili-sentiment-analysis/issues)
 
-**文档更新**: 最后更新时间 - 2026年1月
+**文档更新**: 最后更新时间 - 2026年2月
