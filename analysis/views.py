@@ -1160,24 +1160,24 @@ def crawl_progress_sse(request, bvid):
     
     def event_stream():
         import time
-        
+
         last_data = None
         check_count = 0
         max_checks = 300  # 最多5分钟 (5*60/1=300次)
-        
+
         while check_count < max_checks:
             check_count += 1
-            
+
             # 获取当前进度
             progress = get_crawl_progress(bvid)
-            
+
             if progress:
                 # 检查是否有实质性进展
                 current_data = json.dumps(progress)
                 if current_data != last_data:
                     last_data = current_data
                     yield f"data: {current_data}\n\n"
-                
+
                 # 检查是否全部完成
                 overall = progress.get('overall', {})
                 if overall.get('stage') == 'completed':
@@ -1188,9 +1188,13 @@ def crawl_progress_sse(request, bvid):
                 # 首次检查，发送初始状态
                 if check_count == 1:
                     yield f"data: {json.dumps({'type': 'starting', 'message': 'Waiting for crawl to start...'})}\n\n"
-            
+
+            # 每15秒发一次心跳注释，防止 Nginx proxy_read_timeout (默认60s) 断连
+            if check_count % 15 == 0:
+                yield ': heartbeat\n\n'
+
             time.sleep(1)  # 每秒检查一次
-        
+
         # 发送超时信号
         yield f"data: {json.dumps({'type': 'timeout', 'message': 'Progress check timeout'})}\n\n"
     
