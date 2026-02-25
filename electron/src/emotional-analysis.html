@@ -171,13 +171,6 @@
             listenForVideoChange();
             listenForTaskComplete();  // 添加任务完成监听
 
-            // 按 Ctrl+Shift+O 打开开发者工具调试
-            document.addEventListener('keydown', (e) => {
-                if (e.ctrlKey && e.shiftKey && e.key === 'O') {
-                    ipcRenderer.send('open-devtools', 'analysis');
-                }
-            });
-            
             // 兜底：定期请求当前视频ID（每3秒请求一次，直到收到数据）
             setTimeout(() => {
                 if (!currentBvId) {

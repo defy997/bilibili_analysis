@@ -14,9 +14,47 @@
     "sentiment-analysis",
     "floating-window"
   ],
-  "author": "",
+  "author": "BiliMood",
   "license": "ISC",
   "type": "commonjs",
+  "build": {
+    "appId": "com.bilimood.app",
+    "productName": "BiliMood",
+    "copyright": "Copyright © 2025 BiliMood",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "src/**/*",
+      "assets/**/*",
+      "node_modules/**/*",
+      "!node_modules/.cache/**/*",
+      "!**/*.md",
+      "!dist/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "BiliMood",
+      "artifactName": "BiliMood-Setup-${version}.exe",
+      "language": "2052"
+    }
+  },
   "devDependencies": {
     "electron": "^25.0.0",
     "electron-builder": "^24.0.0",

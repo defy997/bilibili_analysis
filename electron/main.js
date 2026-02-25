@@ -179,8 +179,8 @@ function createWindow() {
   mainWindow.setVisibleOnAllWorkspaces(true);
   mainWindow.setMovable(true);
 
-  // 开发环境下打开开发者工具
-  if (process.env.NODE_ENV === 'development') {
+  // 开发环境下打开开发者工具（仅在非打包模式下）
+  if (!app.isPackaged && process.env.NODE_ENV === 'development') {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
 
@@ -477,10 +477,12 @@ ipcMain.on('open-analysis-window', () => {
 });
 
 
-// 开发环境下的热重载 (尝试加载)
-try {
-    require('electron-reloader')(module);
-} catch (_) {}
+// 开发环境下的热重载
+if (process.env.NODE_ENV === 'development') {
+    try {
+        require('electron-reloader')(module);
+    } catch (_) {}
+}
 
 // ==========================================
 // 情感分析窗口函数
@@ -542,8 +544,8 @@ function createAnalysisWindow() {
             analysisWindow.webContents.send('video-change', currentBvId);
         }
 
-        // 开发环境下打开开发者工具
-        if (process.env.NODE_ENV === 'development') {
+        // 开发环境下打开开发者工具（仅在非打包模式下）
+        if (!app.isPackaged && process.env.NODE_ENV === 'development') {
             analysisWindow.webContents.openDevTools({ mode: 'detach' });
         }
     });
@@ -911,8 +913,8 @@ function createOverallReportsWindow() {
             const videoData = { bvId: currentBvId, title: currentVideoTitle };
             overallReportsWindow.webContents.send('video-change', videoData);
         }
-        // 开发环境下打开开发者工具
-        if (process.env.NODE_ENV === 'development') {
+        // 开发环境下打开开发者工具（仅在非打包模式下）
+        if (!app.isPackaged && process.env.NODE_ENV === 'development') {
             overallReportsWindow.openDevTools({ mode: 'detach' });
         }
     });
@@ -1173,10 +1175,16 @@ ipcMain.on('broadcast-login-status', (event, status) => {
 });
 
 // ==========================================
-// 调试：打开开发者工具
+// 调试：打开开发者工具（仅在非打包模式下可用）
 // ==========================================
 
 ipcMain.on('open-devtools', (event, windowName = 'all') => {
+    // 打包后禁止打开开发者工具
+    if (app.isPackaged) {
+        console.log('打包模式下禁止打开开发者工具');
+        return;
+    }
+
     // 为指定窗口或所有窗口打开开发者工具
     const windows = [];
 

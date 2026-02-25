@@ -235,12 +235,6 @@
             initCharts();
             setupIpcListeners();
             
-            // 临时调试：自动打开开发者工具
-            setTimeout(() => {
-                console.log('[OverallReports] 请求打开开发者工具');
-                ipcRenderer.send('open-devtools');
-            }, 1500);
-            
             // 兜底：定期请求当前视频ID（每3秒请求一次，直到收到数据）
             console.log('[OverallReports] 开始监听视频变化...');
             const requestVideoId = () => {

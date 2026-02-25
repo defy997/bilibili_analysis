@@ -153,12 +153,6 @@
             listenForVideoChange();
             listenForTaskComplete();  // 添加任务完成监听
             
-            // 临时调试：自动打开开发者工具
-            setTimeout(() => {
-                // 通过 ipcRenderer 请求主进程帮忙打开
-                ipcRenderer.send('open-devtools');
-            }, 1000);
-            
             // Auto-load data on page open (fallback when ipc event not received)
             console.log('Page loaded, checking for BV id...');
             setTimeout(() => {
