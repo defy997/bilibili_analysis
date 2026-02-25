@@ -33,6 +33,13 @@
       "!**/*.md",
       "!dist/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "../chrome_extension",
+        "to": "chrome_extension",
+        "filter": ["**/*"]
+      }
+    ],
     "win": {
       "target": [
         {

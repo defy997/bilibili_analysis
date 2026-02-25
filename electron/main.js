@@ -970,7 +970,16 @@ ipcMain.on('close-expanded-window', () => {
 });
 
 ipcMain.on('open-extension-folder', () => {
-    const extensionPath = path.join(__dirname, '..', 'chrome_extension');
+    // 打包后和开发模式下路径不同
+    let extensionPath;
+    if (app.isPackaged) {
+        // 打包后：应用资源目录
+        extensionPath = path.join(process.resourcesPath, 'chrome_extension');
+    } else {
+        // 开发模式：项目根目录
+        extensionPath = path.join(__dirname, '..', 'chrome_extension');
+    }
+    console.log('[Extension] 扩展文件夹路径:', extensionPath);
     shell.openPath(extensionPath);
 });
 
