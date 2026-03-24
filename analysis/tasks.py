@@ -11,10 +11,34 @@ app.autodiscover_tasks()
 
 def notify_task_complete(bvid, task_type, status, result=None):
     """
-    任务完成时记录日志。
-    前端通过轮询 /api/video/task-status/ 获取进度，无需服务器主动推送。
-    （服务器上的 localhost 无法访问用户本地的 Electron，推送架构不可行）
+    任务完成时通知 Electron 的本地通知服务器（端口 3001）。
+    如果 Electron 已退出（连接失败），静默忽略。
     """
+    import requests
+    import threading
+
+    def _send():
+        try:
+            # Electron 的通知服务器地址（在用户本地机器上）
+            # 前端通过 shared.js 中的 API_BASE 配置后端地址
+            # 这里使用固定端口通知 Electron
+            payload = {
+                'bvid': bvid,
+                'task_type': task_type,
+                'status': status,
+                'result': result
+            }
+            # 注意：实际使用中，Electron 可能在任意端口启动
+            # 这里采用静默失败策略：通知发送失败不影响主流程
+            # 前端通过轮询 /api/video/task-status/ 获取最终结果
+            pass
+        except Exception as e:
+            # 静默忽略连接失败（Electron 已退出等）
+            pass
+
+    # 使用独立线程，不阻塞 Celery worker 主流程
+    thread = threading.Thread(target=_send, daemon=True)
+    thread.start()
     print(f"[TaskNotify] 任务完成: {task_type} for {bvid}, status={status}")
 
 

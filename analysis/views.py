@@ -1256,3 +1256,36 @@ def get_sessdata_for_crawler(request):
             }, status=500)
     else:
         return HttpResponseNotAllowed(['GET'])
+
+
+@csrf_exempt
+def client_status(request):
+    """
+    接收客户端状态通知（如 Electron 退出通知）
+    POST /api/client-status/
+
+    Body: {"event": "electron_exit", "timestamp": 1234567890}
+    """
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            event = data.get('event', '')
+
+            if event == 'electron_exit':
+                print(f"[ClientStatus] 收到 Electron 退出通知，时间戳: {data.get('timestamp')}")
+                # 可以在这里清理该客户端相关的资源：
+                # 1. 标记客户端为离线
+                # 2. 取消该客户端的 SSE 连接
+                # 3. 清理 Redis 中该客户端的临时数据
+                # 4. 通知 Celery 取消相关任务（如果需要）
+                return JsonResponse({"success": True, "message": "退出通知已收到"})
+            else:
+                return JsonResponse({"success": False, "message": "未知事件类型"})
+
+        except Exception as e:
+            print(f"[ClientStatus] 处理客户端状态失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({"success": False, "message": str(e)}, status=500)
+    else:
+        return HttpResponseNotAllowed(['POST'])

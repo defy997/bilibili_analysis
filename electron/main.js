@@ -3,6 +3,7 @@ app.isQuitting = false;
 const path = require('path');
 const WebSocket = require('ws');
 const http = require('http');
+const https = require('https');
 
 // 配置 session 以支持跨域 Cookie
 // 使用默认 session
@@ -332,6 +333,9 @@ app.on('window-all-closed', () => {
   // 在macOS上，除非用户用Cmd + Q确定地退出，
   // 否则绝大部分应用及其菜单栏会保持激活
   if (process.platform !== 'darwin') {
+    // 通知后端 Electron 即将退出
+    notifyBackendExit();
+
     app.quit();
   }
 
@@ -358,6 +362,9 @@ ipcMain.on('close-window', () => {
   // 直接退出应用
   console.log('收到关闭窗口请求');
   app.isQuitting = true;
+
+  // 通知后端 Electron 即将退出（静默失败，不阻塞退出流程）
+  notifyBackendExit();
 
   // 关闭所有窗口
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -392,6 +399,52 @@ ipcMain.on('close-window', () => {
   // 退出应用
   app.quit();
 });
+
+// ==========================================
+// 通知后端 Electron 即将退出
+// ==========================================
+function notifyBackendExit() {
+    // 后端 API 地址
+    const backendHost = '118.25.39.91';
+    const backendPort = '8000';
+
+    // 发送退出通知到后端
+    const postData = JSON.stringify({
+        event: 'electron_exit',
+        timestamp: Date.now()
+    });
+
+    const options = {
+        hostname: backendHost,
+        port: backendPort,
+        path: '/api/client-status/',
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(postData)
+        },
+        timeout: 3000  // 3秒超时，避免阻塞退出
+    };
+
+    const req = http.request(options, (res) => {
+        console.log('后端退出通知已发送，状态码:', res.statusCode);
+        res.on('data', () => {});  // 消费响应数据
+        res.on('end', () => {});
+    });
+
+    req.on('error', (e) => {
+        // 后端不可达时静默忽略，不影响 Electron 退出
+        console.log('后端退出通知发送失败（可能后端已关闭）:', e.code);
+    });
+
+    req.on('timeout', () => {
+        req.destroy();
+        console.log('后端退出通知超时');
+    });
+
+    req.write(postData);
+    req.end();
+}
 
 // ==========================================
 // 获取当前视频ID（供子窗口查询）
