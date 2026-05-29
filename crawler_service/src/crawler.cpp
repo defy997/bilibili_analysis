@@ -26,8 +26,13 @@ Crawler::Crawler(const Config& cfg) : config_(cfg), current_proxy_(""), current_
     wbi.set_sessdata_api(config_.django_api_url, config_.sessdata_api);
     std::cout << "[Crawler] WBI SESSDATA API: " << full_api_url << std::endl;
     
-    // 启动时用本地 IP，412 后再切代理池
-    std::cout << "Starting with local IP (proxy on standby)" << std::endl;
+    // 启动时直接获取独享代理，不再用本地 IP
+    try {
+        rotate_proxy();
+    } catch (const std::exception& e) {
+        std::cerr << "[Crawler] Warning: failed to initialize proxy at startup: " << e.what() << std::endl;
+    }
+    std::cout << "[Crawler] Startup complete" << std::endl;
 }
 
 Crawler::~Crawler() {
@@ -238,100 +243,16 @@ std::string Crawler::fetch_short_proxy() {
 }
 
 std::string Crawler::fetch_proxy() {
-    // 1. 先尝试加载已保存的独享代理
-    auto saved_proxies = load_saved_proxies();
-    if (!saved_proxies.empty()) {
-        // 随机选择一个
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<> dis(0, saved_proxies.size() - 1);
-        std::string proxy = saved_proxies[dis(gen)];
-        std::cout << "[Proxy] Using saved exclusive proxy: " << proxy << std::endl;
-        return proxy;
+    // 隧道代理：固定地址，直接返回
+    std::string proxy = config_.proxy_server;
+    // 去掉 http:// 前缀，只保留 host:port
+    if (proxy.find("http://") == 0) {
+        proxy = proxy.substr(7);
+    } else if (proxy.find("https://") == 0) {
+        proxy = proxy.substr(8);
     }
-    
-    // 2. 获取新的独享代理
-    try {
-        std::string body = http_get_direct(config_.proxy_pool_url);
-
-        // 去除首尾空白和换行
-        auto trim = [](std::string& s) {
-            size_t start = s.find_first_not_of(" \t\r\n");
-            size_t end = s.find_last_not_of(" \t\r\n");
-            if (start == std::string::npos) { s.clear(); return; }
-            s = s.substr(start, end - start + 1);
-        };
-        trim(body);
-
-        // 检查是否是JSON格式
-        if (!body.empty() && body[0] == '{') {
-            try {
-                json j = json::parse(body);
-                // 检查是否是错误响应
-                if (j.contains("code")) {
-                    int code = j["code"].get<int>();
-                    if (code != 0 && code != 200) {
-                        std::string msg = j.contains("message") ? j["message"].get<std::string>() : "unknown";
-                        if (msg.find("DELETE_LIMIT_EXCEEDED") != std::string::npos) {
-                            std::cout << "[Proxy] Exclusive proxy rate limited, trying short proxy..." << std::endl;
-                            return fetch_short_proxy();
-                        }
-                        throw std::runtime_error("Proxy API error: " + msg);
-                    }
-                }
-                // 解析JSON获取代理
-                if (j.contains("data") && j["data"].contains("ips") && 
-                    !j["data"]["ips"].empty()) {
-                    std::string proxy = j["data"]["ips"][0]["server"];
-                    std::cout << "Fetched exclusive proxy (JSON): " << proxy << std::endl;
-                    save_proxy(proxy);
-                    return proxy;
-                }
-                throw std::runtime_error("JSON missing ips field: " + body.substr(0, 100));
-            } catch (const json::exception& e) {
-                throw std::runtime_error("Failed to parse proxy JSON: " + std::string(e.what()));
-            }
-        }
-
-        // 原有纯文本格式处理
-        if (body.empty() || body[0] == '<') {
-            throw std::runtime_error("Proxy pool returned error: " + body.substr(0, 200));
-        }
-
-        // 简单校验 ip:port 格式
-        auto colon_pos = body.find(':');
-        if (colon_pos == std::string::npos || colon_pos == 0 || colon_pos == body.size() - 1) {
-            throw std::runtime_error("Invalid proxy format: " + body.substr(0, 100));
-        }
-
-        // 检查冒号前是否像 IP（以数字开头）
-        if (!std::isdigit(static_cast<unsigned char>(body[0]))) {
-            throw std::runtime_error("Proxy pool returned non-IP: " + body.substr(0, 100));
-        }
-
-        std::cout << "Fetched exclusive proxy: " << body << std::endl;
-        
-        // 保存到文件
-        save_proxy(body);
-        
-        return body;  // "ip:port"
-    } catch (const std::exception& e) {
-        std::string err_msg = e.what();
-        // 如果是限速错误，尝试短效代理（如果启用）
-        if ((err_msg.find("DELETE_LIMIT_EXCEEDED") != std::string::npos || 
-             err_msg.find("rate limited") != std::string::npos) && config_.enable_short_proxy) {
-            std::cout << "[Proxy] Exclusive proxy failed: " << err_msg << std::endl;
-            std::cout << "[Proxy] Trying short proxy as fallback..." << std::endl;
-            try {
-                return fetch_short_proxy();
-            } catch (...) {
-                throw std::runtime_error("Both exclusive and short proxy failed");
-            }
-        } else {
-            // 短效代理被禁用或不是限速错误，直接抛出异常
-            throw;
-        }
-    }
+    std::cout << "[Proxy] Using tunnel proxy: " << proxy << std::endl;
+    return proxy;
 }
 
 std::string Crawler::get_proxy() {
@@ -360,6 +281,19 @@ void Crawler::rotate_proxy() {
         } else {
             remove_failed_short_proxy(current_proxy_);
         }
+    }
+    
+    // 隧道代理是固定地址，不会失效，无需切换
+    // 如果配置了固定代理服务器地址，直接使用它
+    if (!config_.proxy_server.empty()) {
+        std::string proxy = config_.proxy_server;
+        // 去掉 http:// 前缀
+        if (proxy.find("http://") == 0) proxy = proxy.substr(7);
+        else if (proxy.find("https://") == 0) proxy = proxy.substr(8);
+        current_proxy_ = proxy;
+        current_proxy_type_ = "exclusive";  // 复用独享代理的认证方式
+        std::cout << "[Proxy] Using fixed tunnel proxy: " << current_proxy_ << std::endl;
+        return;
     }
     
     // 1. 如果启用短效代理，尝试从已保存的短效代理中获取
@@ -395,9 +329,9 @@ void Crawler::rotate_proxy() {
         current_proxy_type_ = "exclusive";  // 独享代理
         std::cout << "[Proxy] Switched to exclusive proxy: " << current_proxy_ << std::endl;
     } catch (const std::exception& e) {
-        std::cout << "[Proxy] All proxy methods failed: " << e.what() << ", staying on local IP" << std::endl;
-        current_proxy_.clear();  // 切换回直连
-        current_proxy_type_.clear();
+        // 不再降级到直连（服务器 IP 会触发 B站风控 412）
+        std::cerr << "[Proxy] Failed to get exclusive proxy: " << e.what() << std::endl;
+        throw std::runtime_error(std::string("[Proxy] rotate failed: ") + e.what());
     }
 }
 
@@ -533,9 +467,6 @@ void Crawler::backoff_delay(int retry) {
 // ============================================================
 
 json Crawler::crawl_video(const std::string& bvid, const std::string& cookie) {
-    // 每个视频开始时重置为直连模式
-    reset_to_direct();
-
     // Wbi 签名
     WbiSigner& wbi = WbiSigner::get_instance();
     wbi.init();
@@ -578,9 +509,6 @@ json Crawler::crawl_video(const std::string& bvid, const std::string& cookie) {
 // ============================================================
 
 json Crawler::crawl_comments(int64_t aid, const std::string& cookie) {
-    // 每个视频开始时重置为直连模式
-    reset_to_direct();
-
     // Wbi 签名
     WbiSigner& wbi = WbiSigner::get_instance();
     wbi.init();
@@ -726,9 +654,6 @@ json Crawler::crawl_comments(int64_t aid, const std::string& cookie) {
 // ============================================================
 
 json Crawler::crawl_audio_url(const std::string& bvid, int64_t cid, const std::string& cookie) {
-    // 每个视频开始时重置为直连模式
-    reset_to_direct();
-
     // Wbi 签名
     WbiSigner& wbi = WbiSigner::get_instance();
     wbi.init();
@@ -783,9 +708,6 @@ json Crawler::crawl_audio_url(const std::string& bvid, int64_t cid, const std::s
 // ============================================================
 
 json Crawler::crawl_danmaku(int64_t cid, const std::string& cookie) {
-    // 每个视频开始时重置为直连模式
-    reset_to_direct();
-
     json danmaku_list = json::array();
 
     try {

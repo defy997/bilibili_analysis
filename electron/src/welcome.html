@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BiliMood - B站视频评论情感分析</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #00A1D6;
+            --primary-dark: #0084B4;
+            --secondary: #FB7299;
+            --accent: #FF9B2F;
+            --bg-dark: #0f1419;
+            --bg-card: #1a1f2e;
+            --text-primary: #ffffff;
+            --text-secondary: #8B949E;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* 动态背景 */
+        .bg-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            background: 
+                radial-gradient(ellipse at 20% 20%, rgba(0, 161, 214, 0.15) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(251, 114, 153, 0.1) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(255, 155, 47, 0.05) 0%, transparent 70%);
+        }
+
+        .particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: var(--primary);
+            border-radius: 50%;
+            opacity: 0.3;
+            animation: float 15s infinite ease-in-out;
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(100vh) scale(0);
+                opacity: 0;
+            }
+            10% {
+                opacity: 0.3;
+            }
+            90% {
+                opacity: 0.3;
+            }
+            100% {
+                transform: translateY(-100vh) scale(1);
+                opacity: 0;
+            }
+        }
+
+        /* 容器 */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* 头部 */
+        .header {
+            text-align: center;
+            margin-bottom: 60px;
+            animation: fadeInDown 0.8s ease-out;
+        }
+
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .logo-icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            box-shadow: 0 10px 40px rgba(0, 161, 214, 0.3);
+            animation: pulse 3s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 10px 40px rgba(0, 161, 214, 0.3);
+            }
+            50% {
+                transform: scale(1.05);
+                box-shadow: 0 15px 50px rgba(0, 161, 214, 0.5);
+            }
+        }
+
+        .logo-text {
+            font-size: 48px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .tagline {
+            font-size: 20px;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+        }
+
+        .version-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            background: rgba(0, 161, 214, 0.1);
+            border: 1px solid rgba(0, 161, 214, 0.3);
+            border-radius: 20px;
+            font-size: 14px;
+            color: var(--primary);
+        }
+
+        /* 下载区域 */
+        .download-section {
+            margin-bottom: 60px;
+            animation: fadeInUp 0.8s ease-out 0.2s backwards;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 28px;
+            margin-bottom: 32px;
+            position: relative;
+        }
+
+        .section-title::after {
+            content: '';
+            position: absolute;
+            bottom: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            border-radius: 2px;
+        }
+
+        .download-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 24px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .download-card {
+            background: var(--bg-card);
+            border-radius: 20px;
+            padding: 40px 32px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .download-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .download-card:hover {
+            transform: translateY(-8px);
+            border-color: rgba(0, 161, 214, 0.3);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .download-card:hover::before {
+            opacity: 1;
+        }
+
+        .card-icon {
+            width: 100px;
+            height: 100px;
+            margin: 0 auto 24px;
+            background: linear-gradient(135deg, rgba(0, 161, 214, 0.1), rgba(251, 114, 153, 0.1));
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+        }
+
+        .card-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .card-desc {
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+            line-height: 1.6;
+        }
+
+        .card-version {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+        }
+
+        .download-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 32px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+
+        .download-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 30px rgba(0, 161, 214, 0.4);
+        }
+
+        .download-btn.secondary {
+            background: transparent;
+            border: 2px solid var(--primary);
+            color: var(--primary);
+        }
+
+        .download-btn.secondary:hover {
+            background: var(--primary);
+            color: white;
+        }
+
+        .platform-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background: rgba(255, 155, 47, 0.1);
+            color: var(--accent);
+            border-radius: 6px;
+            font-size: 12px;
+            margin-top: 16px;
+        }
+
+        /* 功能特性 */
+        .features-section {
+            margin-bottom: 60px;
+            animation: fadeInUp 0.8s ease-out 0.4s backwards;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .feature-card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 28px;
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            transition: all 0.3s ease;
+        }
+
+        .feature-card:hover {
+            border-color: rgba(0, 161, 214, 0.2);
+            transform: translateY(-4px);
+        }
+
+        .feature-icon {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, rgba(0, 161, 214, 0.15), rgba(251, 114, 153, 0.15));
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-bottom: 16px;
+        }
+
+        .feature-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .feature-desc {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        /* 使用指南 */
+        .guide-section {
+            background: var(--bg-card);
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 60px;
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            animation: fadeInUp 0.8s ease-out 0.6s backwards;
+        }
+
+        .guide-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .guide-step {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+        }
+
+        .step-number {
+            flex-shrink: 0;
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .step-content {
+            flex: 1;
+        }
+
+        .step-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .step-desc {
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .step-link {
+            color: var(--primary);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .step-link:hover {
+            color: var(--secondary);
+        }
+
+        /* 页脚 */
+        .footer {
+            text-align: center;
+            padding: 32px 0;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            color: var(--text-secondary);
+            font-size: 14px;
+            animation: fadeInUp 0.8s ease-out 0.8s backwards;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            margin-bottom: 16px;
+        }
+
+        .footer-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .footer-link:hover {
+            color: var(--primary);
+        }
+
+        /* 加载状态 */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 20, 25, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+
+        .loading-overlay.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(0, 161, 214, 0.1);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* 通知提示 */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: var(--bg-card);
+            padding: 16px 32px;
+            border-radius: 12px;
+            border: 1px solid var(--primary);
+            color: white;
+            font-size: 15px;
+            z-index: 1001;
+            opacity: 0;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        .toast.error {
+            border-color: #f85149;
+            background: rgba(248, 81, 73, 0.1);
+        }
+
+        .toast.success {
+            border-color: #3fb950;
+            background: rgba(63, 185, 80, 0.1);
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .logo-icon {
+                width: 60px;
+                height: 60px;
+                font-size: 30px;
+            }
+
+            .logo-text {
+                font-size: 32px;
+            }
+
+            .tagline {
+                font-size: 16px;
+            }
+
+            .section-title {
+                font-size: 22px;
+            }
+
+            .download-card {
+                padding: 28px 24px;
+            }
+
+            .guide-section {
+                padding: 24px;
+            }
+        }
+
+        /* 构建状态指示器 */
+        .build-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            background: var(--bg-card);
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 100;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #3fb950;
+            animation: blink 2s infinite;
+        }
+
+        .status-dot.building {
+            background: var(--accent);
+        }
+
+        .status-dot.error {
+            background: #f85149;
+            animation: none;
+        }
+
+        @keyframes blink {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.3;
+            }
+        }
+
+        /* GitHub链接按钮 */
+        .github-link {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            padding: 10px 18px;
+            background: var(--bg-card);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            color: white;
+            text-decoration: none;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s;
+            z-index: 100;
+        }
+
+        .github-link:hover {
+            border-color: var(--primary);
+            background: rgba(0, 161, 214, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-animation"></div>
+    
+    <div class="particles" id="particles"></div>
+
+    <!-- GitHub链接 -->
+    <a href="https://github.com" target="_blank" class="github-link">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+        </svg>
+        源代码
+    </a>
+
+    <!-- 构建状态 -->
+    <div class="build-status" id="buildStatus">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">检查客户端状态...</span>
+    </div>
+
+    <!-- 加载遮罩 -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+    </div>
+
+    <!-- 提示消息 -->
+    <div class="toast" id="toast"></div>
+
+    <div class="container">
+        <!-- 头部 -->
+        <header class="header">
+            <div class="logo">
+                <div class="logo-icon">📊</div>
+                <span class="logo-text">BiliMood</span>
+            </div>
+            <p class="tagline">B站视频评论情感分析工具</p>
+            <span class="version-badge">v2.0.0</span>
+        </header>
+
+        <!-- 下载区域 -->
+        <section class="download-section">
+            <h2 class="section-title">下载客户端</h2>
+            <div class="download-cards">
+                <!-- Windows下载 -->
+                <div class="download-card">
+                    <div class="card-icon">🪟</div>
+                    <h3 class="card-title">Windows 客户端</h3>
+                    <p class="card-desc">适用于 Windows 10/11 系统，提供完整的桌面端体验</p>
+                    <p class="card-version" id="winVersion">v2.0.0</p>
+                    <button class="download-btn" id="downloadWin" onclick="downloadClient('win')">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        下载 Windows 版本
+                    </button>
+                    <span class="platform-badge">Windows x64</span>
+                </div>
+
+                <!-- macOS下载 -->
+                <div class="download-card">
+                    <div class="card-icon">🍎</div>
+                    <h3 class="card-title">macOS 客户端</h3>
+                    <p class="card-desc">适用于 macOS 11+ 系统，支持 Apple Silicon</p>
+                    <p class="card-version">即将推出</p>
+                    <button class="download-btn secondary" disabled>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        即将推出
+                    </button>
+                    <span class="platform-badge">macOS (开发中)</span>
+                </div>
+
+                <!-- Linux下载 -->
+                <div class="download-card">
+                    <div class="card-icon">🐧</div>
+                    <h3 class="card-title">Linux 客户端</h3>
+                    <p class="card-desc">适用于主流 Linux 发行版</p>
+                    <p class="card-version">即将推出</p>
+                    <button class="download-btn secondary" disabled>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        即将推出
+                    </button>
+                    <span class="platform-badge">Linux (开发中)</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- 功能特性 -->
+        <section class="features-section">
+            <h2 class="section-title">功能特性</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">💭</div>
+                    <h3 class="feature-title">情感分析</h3>
+                    <p class="feature-desc">基于深度学习模型，自动分析B站视频评论的情感倾向，正面/负面/中性</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📈</div>
+                    <h3 class="feature-title">数据可视化</h3>
+                    <p class="feature-desc">多维度图表展示分析结果，包括情感分布、关键词云、情绪趋势等</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🎵</div>
+                    <h3 class="feature-title">音视频分析</h3>
+                    <p class="feature-desc">支持UP主音视频内容的多模态情感分析</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔍</div>
+                    <h3 class="feature-title">弹幕评论</h3>
+                    <p class="feature-desc">自动采集视频弹幕和评论，支持大规模数据处理</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⏰</div>
+                    <h3 class="feature-title">定时任务</h3>
+                    <p class="feature-desc">支持自动定时采集和增量更新，省时省力</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔐</div>
+                    <h3 class="feature-title">账号管理</h3>
+                    <p class="feature-desc">扫码登录B站账号，保护你的隐私安全</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 使用指南 -->
+        <section class="guide-section">
+            <h2 class="section-title">快速开始</h2>
+            <div class="guide-steps">
+                <div class="guide-step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3 class="step-title">下载并安装客户端</h3>
+                        <p class="step-desc">点击上方的"下载 Windows 版本"按钮，下载安装包后双击运行，按照提示完成安装。</p>
+                    </div>
+                </div>
+                <div class="guide-step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3 class="step-title">启动客户端</h3>
+                        <p class="step-desc">安装完成后，点击桌面或开始菜单中的 <strong>BiliMood</strong> 图标启动程序。</p>
+                    </div>
+                </div>
+                <div class="guide-step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3 class="step-title">登录B站账号</h3>
+                        <p class="step-desc">首次使用需要扫描二维码登录你的B站账号，以获取评论数据访问权限。</p>
+                    </div>
+                </div>
+                <div class="guide-step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h3 class="step-title">开始分析</h3>
+                        <p class="step-desc">在输入框中粘贴B站视频链接或BV号，即可开始分析评论情感。</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 页脚 -->
+        <footer class="footer">
+            <div class="footer-links">
+                <a href="#" class="footer-link">使用文档</a>
+                <a href="#" class="footer-link">API 接口</a>
+                <a href="#" class="footer-link">问题反馈</a>
+                <a href="#" class="footer-link">更新日志</a>
+            </div>
+            <p>BiliMood - 开源B站视频评论情感分析工具</p>
+            <p style="margin-top: 8px;">© 2025 BiliMood. 基于 Apache-2.0 许可证开源</p>
+        </footer>
+    </div>
+
+    <script>
+        // 创建粒子效果
+        function createParticles() {
+            const container = document.getElementById('particles');
+            const colors = ['#00A1D6', '#FB7299', '#FF9B2F'];
+            
+            for (let i = 0; i < 30; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.animationDelay = Math.random() * 15 + 's';
+                particle.style.animationDuration = (15 + Math.random() * 10) + 's';
+                particle.style.background = colors[Math.floor(Math.random() * colors.length)];
+                container.appendChild(particle);
+            }
+        }
+
+        // 显示提示消息
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast ' + type;
+            toast.classList.add('show');
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // 下载客户端
+        async function downloadClient(platform) {
+            const btn = document.getElementById('download' + platform.charAt(0).toUpperCase() + platform.slice(1));
+            const overlay = document.getElementById('loadingOverlay');
+            
+            overlay.classList.add('active');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading-spinner" style="width:20px;height:20px;border-width:2px;"></span> 正在获取下载链接...';
+            
+            try {
+                // 尝试从服务端获取下载链接
+                const response = await fetch('/api/client/download-url?platform=' + platform);
+                const data = await response.json();
+                
+                if (data.url) {
+                    // 触发下载
+                    const link = document.createElement('a');
+                    link.href = data.url;
+                    link.download = data.filename || 'BiliMood-' + platform + '.exe';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    showToast('下载已开始', 'success');
+                } else {
+                    // 如果没有预配置的下载链接，尝试直接下载
+                    showToast('正在准备下载，请稍候...', 'info');
+                    
+                    // 延迟一下再触发下载
+                    setTimeout(() => {
+                        const link = document.createElement('a');
+                        link.href = '/static/BiliMood-Setup-' + platform + '.exe';
+                        link.download = 'BiliMood-Setup.exe';
+                        link.click();
+                    }, 1000);
+                }
+            } catch (error) {
+                console.error('获取下载链接失败:', error);
+                // 降级：直接尝试下载静态文件
+                showToast('正在准备下载...', 'info');
+                
+                setTimeout(() => {
+                    const link = document.createElement('a');
+                    link.href = '/static/BiliMood-Setup-win64.exe';
+                    link.download = 'BiliMood-Setup.exe';
+                    link.click();
+                }, 1000);
+            } finally {
+                overlay.classList.remove('active');
+                btn.disabled = false;
+                btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 下载 Windows 版本';
+            }
+        }
+
+        // 检查客户端构建状态
+        async function checkBuildStatus() {
+            const statusDot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
+            
+            try {
+                // 尝试获取服务端状态
+                const response = await fetch('/api/client/status');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.build_available) {
+                        statusDot.className = 'status-dot';
+                        statusText.textContent = '客户端已就绪';
+                        
+                        // 更新下载按钮状态
+                        if (data.version) {
+                            document.getElementById('winVersion').textContent = 'v' + data.version;
+                        }
+                        return;
+                    }
+                }
+                
+                // 降级：检查静态文件是否存在
+                const staticResponse = await fetch('/static/BiliMood-Setup-win64.exe', { method: 'HEAD' });
+                if (staticResponse.ok) {
+                    statusDot.className = 'status-dot';
+                    statusText.textContent = '客户端已就绪';
+                    return;
+                }
+            } catch (e) {
+                console.log('检查客户端状态失败:', e);
+            }
+            
+            // 默认状态
+            statusDot.className = 'status-dot building';
+            statusText.textContent = '正在构建客户端...';
+        }
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            createParticles();
+            checkBuildStatus();
+            
+            // 每30秒检查一次状态
+            setInterval(checkBuildStatus, 30000);
+        });
+    </script>
+</body>
+</html>

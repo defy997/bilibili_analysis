@@ -11,12 +11,13 @@ struct Config {
     double max_delay = 15.0;  // 最大延迟（秒）
     int max_retries = 3;
 
-    // 独享代理配置
-    std::string proxy_pool_url =
-        "https://exclusive.proxy.qg.net/replace?key=6A26857D&num=1&area=&isp=0&format=txt&seq=\\r\\n&distinct=false&keep_alive=1440";
+    // 隧道代理配置（固定地址，无需API获取）
+    // 代理服务地址
+    std::string proxy_server = "http://tun-oolotr.qg.net:14855";
     bool use_proxy = true;
-    std::string proxy_user = "6A26857D";  // 独享代理key作为用户名
-    std::string proxy_pass = "A86FED6E742B";
+    // 代理认证信息（HTTP Basic Auth）
+    std::string proxy_user = "2D443FF0";  // Authkey
+    std::string proxy_pass = "D7C4F61E0E54";  // Authpwd
     
     // 短效代理配置（备用）- 已禁用
     std::string short_proxy_pool_url = 

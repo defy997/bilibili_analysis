@@ -1289,3 +1289,64 @@ def client_status(request):
             return JsonResponse({"success": False, "message": str(e)}, status=500)
     else:
         return HttpResponseNotAllowed(['POST'])
+
+
+def client_download_status(request):
+    """
+    检查客户端构建状态和下载链接
+    GET /api/client/status
+    """
+    import os
+    
+    if request.method == 'GET':
+        try:
+            # 检查是否有预构建的客户端
+            dist_path = '/root/bilibili_analysis/electron/dist'
+            win_exe_path = os.path.join(dist_path, 'BiliMood-Setup-win64.exe')
+            win_unpacked = os.path.join(dist_path, 'win-unpacked')
+            
+            # 检查各种可能的客户端文件
+            possible_paths = [
+                '/root/bilibili_analysis/electron/dist/BiliMood-Setup-win64.exe',
+                '/root/bilibili_analysis/electron/dist/win-unpacked/BiliMood.exe',
+                '/root/bilibili_analysis/electron/dist/BiliMood-2.0.0.exe',
+            ]
+            
+            available_client = None
+            for path in possible_paths:
+                if os.path.exists(path):
+                    available_client = path
+                    break
+            
+            # 检查 win-unpacked 目录下的文件
+            if not available_client and os.path.exists(win_unpacked):
+                for root, dirs, files in os.walk(win_unpacked):
+                    for f in files:
+                        if f.endswith('.exe'):
+                            available_client = os.path.join(root, f)
+                            break
+                    if available_client:
+                        break
+            
+            if available_client:
+                return JsonResponse({
+                    "success": True,
+                    "build_available": True,
+                    "version": "2.0.0",
+                    "filename": os.path.basename(available_client),
+                    "path": available_client
+                })
+            else:
+                return JsonResponse({
+                    "success": True,
+                    "build_available": False,
+                    "message": "客户端尚未构建，请稍后再试或从源码构建"
+                })
+                
+        except Exception as e:
+            return JsonResponse({
+                "success": False,
+                "error": str(e)
+            }, status=500)
+    else:
+        return HttpResponseNotAllowed(['GET'])

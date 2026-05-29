@@ -4,20 +4,21 @@
 
 1. [项目概述](#1-项目概述)
 2. [系统架构](#2-系统架构)
-3. [技术栈详解](#3-技术栈详解)
-4. [核心模块实现](#4-核心模块实现)
-5. [数据模型设计](#5-数据模型设计)
-6. [API接口文档](#6-api接口文档)
-7. [关键技术实现](#7-关键技术实现)
-   - [7.1 API请求认证机制](#71-api请求认证机制)
-   - [7.2 代理池实现](#72-代理池实现)
-   - [7.3 数据清洗流程](#73-数据清洗流程)
-   - [7.4 SSE实时推送](#74-sse实时推送)
-   - [7.5 WebSocket通信](#75-websocket通信)
-   - [7.6 Redis缓存与消息队列](#76-redis缓存与消息队列)
-8. [性能优化策略](#8-性能优化策略)
-9. [部署方案](#9-部署方案)
-10. [使用指南](#10-使用指南)
+3. [系统安装及使用说明](#3-系统安装及使用说明)
+4. [技术栈详解](#4-技术栈详解)
+5. [核心模块实现](#5-核心模块实现)
+6. [数据模型设计](#6-数据模型设计)
+7. [API接口文档](#7-api接口文档)
+8. [关键技术实现](#8-关键技术实现)
+   - [8.1 API请求认证机制](#81-api请求认证机制)
+   - [8.2 代理池实现](#82-代理池实现)
+   - [8.3 数据清洗流程](#83-数据清洗流程)
+   - [8.4 SSE实时推送](#84-sse实时推送)
+   - [8.5 WebSocket通信](#85-websocket通信)
+   - [8.6 Redis缓存与消息队列](#86-redis缓存与消息队列)
+9. [性能优化策略](#9-性能优化策略)
+10. [部署方案](#10-部署方案)
+11. [使用指南](#11-使用指南)
 
 ---
 
@@ -468,9 +469,382 @@ views.video_dashboard()
 | **多模态融合** | 自适应注意力机制（`adaptive_attention_fusion`） | 根据视频类型动态分配音频/文本/弹幕权重，结果存入 `MultimodalSentiment` 表 |
 | **认证方案** | Django Session + B站扫码登录（`SessdataManager`） | Session 管理用户状态，SESSDATA 管理 B站 API 凭证，分工明确 |
 
+## 3. 系统安装及使用说明
+
+本文档分为两部分：**3.1 用户使用指南**面向最终用户，介绍如何安装和使用系统；**3.2 开发者部署指南**面向技术人员，说明如何从零搭建和运维本系统。
+
 ---
 
-## 3. 技术栈详解
+### 3.1 用户使用指南
+
+本节介绍 BiliMood 的安装、使用流程及常见问题的自助处理方法。
+
+#### 3.1.1 系统访问方式
+
+BiliMood 提供两种访问途径，用户可根据实际情况二选一：
+
+**方式一：直接访问网页（推荐）**
+
+在浏览器中打开：`http://118.25.39.91:888`
+
+> 首次使用需注册账号（邮箱验证码），注册完成后可永久登录使用。
+
+**方式二：安装桌面客户端**
+
+1. 下载 `BiliMood-Setup.exe`（Windows）或 `BiliMood.dmg`（macOS）安装包
+2. 双击运行，按提示完成安装
+3. 安装完成后桌面会出现 BiliMood 图标，双击启动
+
+桌面客户端内置浏览器引擎，功能与网页版完全一致，并支持：
+- Windows 置顶悬浮显示
+- 系统托盘常驻后台
+- 本地视频历史缓存
+
+#### 3.1.2 运行环境要求
+
+| 类别 | 要求 |
+|------|------|
+| **操作系统** | Windows 10+ / macOS 10.15+ / Linux |
+| **浏览器**（网页版） | Chrome 90+ / Edge 90+ / Firefox 88+ |
+| **网络** | 可访问 `118.25.39.91`（建议网络延迟 < 200ms） |
+
+#### 3.1.3 使用流程
+
+**第一步：注册账号**
+
+1. 打开 BiliMood（网页或客户端）
+2. 点击 **Login** → **Register**
+3. 填写用户名、邮箱、密码，点击 **Send Code** 获取邮箱验证码
+4. 输入验证码（6位数字），点击 **Register** 完成注册
+
+**第二步：绑定 B站账号（可选，推荐）**
+
+1. 点击底部导航栏 **B站登录**
+2. 用 B站 App 扫描弹出的二维码
+3. 绑定成功后可查看自己关注 UP 主的视频评论分析
+
+> 绑定 B站账号后可解锁更多功能：弹幕情感分析、音视频情感分析。未绑定时仍可使用评论情感分析功能。
+
+**第三步：输入视频开始分析**
+
+- **方式 A — 粘贴链接**：点击中心圆圈 **网址** 按钮，粘贴 B站视频链接或直接输入 BV 号
+- **方式 B — Chrome 扩展**：安装 Chrome 扩展后，访问任意 B站视频页面，扩展图标会自动检测并推送视频数据
+- **方式 C — 历史记录**：点击中心 **历史** 按钮，从已分析过的视频列表中选择
+
+**第四步：查看分析结果**
+
+- 点击中心区域的 **User Analysis / Emotional Analysis / Video Analysis / Overall Reports** 卡片查看各维度详情
+- 雷达图实时展示综合评分
+- 情感分析页面可查看正面 / 中性 / 负面评论分布及典型评论样例
+
+#### 3.1.4 Chrome 扩展安装（可选）
+
+Chrome 扩展可自动检测 B站视频页面并推送分析，无需手动复制链接。
+
+1. 打开 `chrome://extensions/`
+2. 开启右上角**开发者模式**
+3. 点击**加载已解压的扩展程序**，选择项目根目录下的 `chrome_extension` 文件夹
+4. 扩展图标出现在工具栏后，点击图标即可使用
+
+> **扩展功能**：自动检测当前 B站视频页面的 BV 号，通过 WebSocket 发送给 BiliMood，触发后端爬取与分析流程。
+
+#### 3.1.5 常见问题
+
+| 序号 | 问题描述 | 解决方案 |
+|------|----------|----------|
+| 1 | 打开 `118.25.39.91` 无响应或加载很慢 | 检查网络是否可访问该地址；可能是服务器维护，稍后重试 |
+| 2 | 注册时收不到邮箱验证码 | 检查垃圾邮件文件夹；确认邮箱地址填写正确；等待60秒后可重新发送 |
+| 3 | 登录提示"账号或密码错误" | 确认大小写无误；尝试使用邮箱地址登录而非用户名 |
+| 4 | 点击分析后长时间无反应 | 视频评论量较大时分析需要数分钟，请耐心等待；检查网络连接 |
+| 5 | 情感分析结果全为中性 | 短评论（5字以下）默认判为中性；可在设置中调整阈值 |
+| 6 | Chrome 扩展图标不出现 | 在 `chrome://extensions/` 确认扩展已启用；刷新 B站页面重试 |
+| 7 | 桌面客户端无法置顶 | 在系统设置中为 BiliMood 开启"允许置顶"权限 |
+| 8 | 历史记录为空 | 首次使用需先完成一次视频分析，分析结果会自动保存 |
+| 9 | 视频数据长时间停留在"爬取中" | 服务器爬虫服务可能暂时不可用，可稍后刷新重试 |
+| 10 | 想分析他人视频但没有 B站账号 | 无需登录 B站即可分析公开视频评论，直接粘贴链接即可 |
+
+---
+
+### 3.2 开发者部署指南
+
+本节介绍在自有服务器上从零部署 BiliMood 系统的完整流程。适合二次开发、技术调研或私有化部署场景。
+
+#### 3.2.1 环境要求
+
+| 类别 | 组件 | 版本要求 | 说明 |
+|------|------|----------|------|
+| **操作系统** | Linux / Windows / macOS | — | 推荐 Linux（生产环境） |
+| **Python** | Python | 3.10+ | 后端核心运行环境 |
+| **Node.js** | Node.js | 16+ | Electron 桌面端构建 |
+| **C++ 编译器** | GCC / Clang | 9+ | C++ 爬虫服务编译 |
+| **Chrome / Edge** | Chromium 内核浏览器 | 最新稳定版 | 运行 Chrome 扩展 |
+| **数据库** | MySQL | 8.0+ | 存储用户、视频、分析结果等核心数据 |
+| **缓存/队列** | Redis | 7.0+ | Celery 消息队列与缓存层 |
+
+#### 3.2.2 依赖软件安装
+
+##### 3.2.2.1 Linux 环境（以 CentOS Stream / OpenCloudOS 为例）
+
+```bash
+# 安装系统基础工具
+dnf install -y git wget curl cmake
+
+# 安装 Redis
+dnf install -y redis
+systemctl enable redis
+systemctl start redis
+
+# 安装 MySQL 8（如尚未安装）
+dnf install -y mysql-server mysql-devel
+systemctl enable mysqld
+systemctl start mysqld
+
+# 安装 Node.js 18（LTS）
+curl -fsSL https://rpm.nodesource.com/setup_18.x | bash -
+dnf install -y nodejs
+
+# 安装 C++ 编译工具链
+dnf groupinstall -y "Development Tools"
+```
+
+##### 3.2.2.2 Windows 环境
+
+- **MySQL**：下载 [MySQL Installer](https://dev.mysql.com/downloads/installer/) 安装 MySQL 8.0+，记住 `root` 密码。
+- **Redis**：下载 [Redis for Windows](https://github.com/tporadowski/redis/releases) 或使用 WSL2。
+- **Node.js**：下载 [Node.js 18 LTS](https://nodejs.org/) 安装包。
+- **Python**：下载 [Python 3.10+](https://www.python.org/downloads/windows/) 安装包，安装时勾选 **Add Python to PATH**。
+- **C++ 编译**：安装 [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/) 并选择「C++ 桌面开发」组件。
+
+#### 3.2.3 项目部署步骤
+
+##### 3.2.3.1 拉取源码
+
+```bash
+cd /root
+git clone <仓库地址> bilibili_analysis
+cd bilibili_analysis
+```
+
+##### 3.2.3.2 创建 MySQL 数据库
+
+```bash
+mysql -u root -p
+```
+
+```sql
+-- 创建数据库（字符集 utf8mb4 完整支持中文及 Emoji）
+CREATE DATABASE bilibili_analysis CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- 创建专用用户（生产环境推荐）
+CREATE USER 'bilibili_user'@'localhost' IDENTIFIED BY 'your_password';
+GRANT ALL PRIVILEGES ON bilibili_analysis.* TO 'bilibili_user'@'localhost';
+FLUSH PRIVILEGES;
+
+USE bilibili_analysis;
+-- 数据库创建完毕，后续迁移由 Django 自动完成
+```
+
+##### 3.2.3.3 Python 虚拟环境与依赖
+
+```bash
+# 创建虚拟环境
+python -m venv venv
+source venv/bin/activate          # Linux/macOS
+# venv\Scripts\activate           # Windows PowerShell
+
+# 安装核心依赖
+pip install -r requirements.txt
+pip install gunicorn gevent        # 生产 WSGI 服务器与协程支持
+```
+
+> **requirements.txt 核心依赖**：Django 5.x、Django REST Framework、celery、redis、mysqlclient、onnxruntime、snownlp、jieba、requests 等。首次安装如遇编译错误（缺少 `.h` 头文件），请先通过系统包管理器安装对应开发包（如 `dnf install python3-devel mysql-devel`）。
+
+##### 3.2.3.4 配置环境变量
+
+在项目根目录创建 `.env` 文件（或直接写入 `bilibili_analysis/settings_production.py`），内容如下：
+
+```bash
+# 数据库配置
+export DB_NAME='bilibili_analysis'
+export DB_USER='root'                    # 或使用专用用户
+export DB_PASSWORD='142857'              # 替换为实际密码
+export DB_HOST='127.0.0.1'
+export DB_PORT='3306'
+
+# Django 生产配置
+export DJANGO_SETTINGS_MODULE='bilibili_analysis.settings_production'
+export DEBUG='False'
+export SECRET_KEY='your-secret-key-here'  # 生产环境务必更换密钥
+export ALLOWED_HOSTS='118.25.39.91,127.0.0.1,localhost'
+
+# Celery 配置
+export CELERY_BROKER_URL='redis://localhost:6379/0'
+export CELERY_RESULT_BACKEND='redis://localhost:6379/1'
+
+# 邮箱配置（找回密码功能，可选）
+export EMAIL_HOST='smtp.qq.com'
+export EMAIL_PORT='587'
+export EMAIL_HOST_USER='your_email@qq.com'
+export EMAIL_HOST_PASSWORD='your_auth_code'
+```
+
+##### 3.2.3.5 数据库迁移
+
+```bash
+source venv/bin/activate
+export DJANGO_SETTINGS_MODULE='bilibili_analysis.settings_production'
+python manage.py makemigrations
+python manage.py migrate
+python manage.py collectstatic --noinput      # 收集静态文件
+```
+
+##### 3.2.3.6 编译 C++ 爬虫服务
+
+```bash
+cd crawler_service
+mkdir -p build && cd build
+cmake ..
+make
+```
+
+编译完成后，二进制文件位于 `crawler_service/build/crawler_service`，由 Supervisor 管理自动启动。
+
+##### 3.2.3.7 安装与启动 Electron 悬浮窗口
+
+```bash
+cd electron
+npm install
+# 开发模式运行
+npm start
+# 或打包为可执行文件（Windows .exe）
+npm run build
+```
+
+> **Electron 启动后**：悬浮窗口默认透明、置顶、可拖拽，首次使用需先登录 BiliMood 账号并绑定 B站 SESSDATA。
+
+##### 3.2.3.8 安装 Chrome 浏览器扩展
+
+1. 打开 `chrome://extensions/`；
+2. 开启右上角**「开发者模式」**；
+3. 点击**「加载已解压的扩展程序」**，选择项目根目录下的 `chrome_extension` 文件夹；
+4. 扩展图标出现后，点击图标进入欢迎页，按提示完成初始化。
+
+> **扩展功能**：在 B站视频页面自动检测视频 BV 号，通过 WebSocket（端口 3000）发送给 Electron 悬浮窗口，触发后端爬取与分析流程。
+
+### 3.2 启动与停止
+
+##### 3.2.4.1 生产环境一键部署（推荐）
+
+服务器 root 用户执行以下命令，所有服务（Redis、MySQL、Nginx、Supervisor、Gunicorn、Celery、C++ 爬虫）自动配置并启动：
+
+```bash
+cd /root/bilibili_analysis
+bash deploy_production.sh
+```
+
+##### 3.2.4.2 手动分步启动
+
+按以下顺序依次启动（生产环境建议使用 Supervisor 管理进程，下述为手动调试方式）：
+
+```bash
+# ① 启动 Redis
+redis-server &
+
+# ② 数据库迁移（仅首次或模型变更后）
+source venv/bin/activate
+export DJANGO_SETTINGS_MODULE='bilibili_analysis.settings_production'
+python manage.py migrate
+
+# ③ 启动 Gunicorn（WSGI 服务器，监听 127.0.0.1:8000）
+gunicorn --config gunicorn_config.py bilibili_analysis.wsgi:application &
+
+# ④ 启动 Celery Worker（异步任务队列）
+celery -A bilibili_analysis worker -c 3 -l info &
+
+# ⑤ 启动 Nginx（如已配置反向代理）
+nginx
+
+# ⑥ 启动 C++ 爬虫服务（端口 8081）
+/root/bilibili_analysis/crawler_service/build/crawler_service &
+
+# ⑦ 启动 Electron 悬浮窗口
+cd electron && npm start
+```
+
+##### 3.2.4.3 停止服务
+
+```bash
+# 方式一：Supervisor 统一管理（生产推荐）
+supervisorctl stop all
+
+# 方式二：手动逐个停止
+pkill -f "gunicorn.*bilibili_analysis"
+pkill -f "celery.*bilibili_analysis"
+pkill -f "crawler_service"
+systemctl stop redis
+```
+
+##### 3.2.4.4 服务状态检查
+
+```bash
+# Supervisor 查看所有进程状态
+supervisorctl status
+
+# Django 服务健康检查
+curl http://127.0.0.1:8000/api/health/
+
+# Redis 连接检查
+redis-cli ping
+# 返回 PONG 表示正常
+
+# Celery 任务队列检查
+celery -A bilibili_analysis inspect active
+```
+
+### 3.2.5 常见问题与解决方案
+
+| 序号 | 问题描述 | 可能原因 | 解决方案 |
+|------|----------|----------|----------|
+| 1 | `ModuleNotFoundError: No module named 'xxx'` | Python 虚拟环境未激活或依赖未装全 | 确认已 `source venv/bin/activate`，然后 `pip install -r requirements.txt` |
+| 2 | `mysqlclient` 编译失败 | 缺少 MySQL 开发头文件 | Linux：`dnf install mysql-devel`，Windows：安装 MySQL Connector/C |
+| 3 | `ONNX` 模型加载失败 | 模型文件路径错误或文件损坏 | 检查 `models/text_sentiment/` 目录下 `.onnx` 文件是否存在 |
+| 4 | Chrome 扩展检测不到视频 | 页面结构变更（B站改版）或扩展未正确加载 | 在扩展管理页确认已启用，重新加载扩展或刷新 B站页面 |
+| 5 | Electron 窗口无法置顶 | 浏览器/系统禁用了置顶权限 | 在系统设置 → 应用 → BiliMood → 允许置顶 |
+| 6 | 情感分析结果全为中性 | 短评论（≤5字）被默认判为中性；模型阈值偏高 | 调整 `min_comment_length` 参数，或在分析页查看原始分值分布 |
+| 7 | SSE 流连接断开 | Gunicorn 使用 gevent worker 导致 `ERR_INCOMPLETE_CHUNKED_ENCODING` | 确认 `gunicorn_config.py` 中 `worker_class = "sync"`（已默认配置） |
+| 8 | Celery 任务长期 PENDING | Redis 未启动或网络不通 | `systemctl start redis` → `redis-cli ping` → `supervisorctl restart bilibili_celery` |
+| 9 | 微信/QQ 邮箱验证码发送失败 | 未配置 SMTP 或授权码错误 | 在 `.env` 中正确配置 `EMAIL_HOST_USER` 与 `EMAIL_HOST_PASSWORD`（QQ 邮箱需生成专用授权码） |
+| 10 | 部署后无法访问（118.25.39.91） | Nginx 未启动 / 防火墙未开放端口 | `systemctl enable nginx && systemctl start nginx`；`firewall-cmd --add-port=80/tcp --permanent` |
+
+### 3.2.6 卸载
+
+如需完全卸载系统，执行以下步骤：
+
+```bash
+# ① 停止所有服务
+supervisorctl stop all
+systemctl stop redis mysqld nginx
+
+# ② 删除项目目录
+rm -rf /root/bilibili_analysis
+
+# ③ 删除 Python 虚拟环境（如果放在项目外）
+rm -rf /root/venv
+
+# ④ 删除 MySQL 数据库（谨慎操作，会丢失所有数据）
+mysql -u root -p -e "DROP DATABASE IF EXISTS bilibili_analysis;"
+
+# ⑤ 删除 Nginx / Supervisor 配置
+rm -f /etc/nginx/sites-enabled/bilibili_analysis
+rm -f /etc/nginx/sites-available/bilibili_analysis
+rm -f /etc/supervisor/conf.d/bilibili_analysis.conf
+rm -rf /var/log/supervisor/bilibili_*
+rm -rf /var/log/django/bilibili_analysis.log
+```
+
+---
+
+## 4. 技术栈详解
 
 ### 3.1 后端技术栈
 
@@ -890,7 +1264,7 @@ services.py 中任一爬取函数被调用
 
 ---
 
-## 4. 核心模块实现
+## 5. 核心模块实现
 
 ### 4.1 Chrome扩展模块
 
@@ -1475,7 +1849,7 @@ class MultimodalFusion:
 
 ---
 
-## 5. 数据模型设计
+## 6. 数据模型设计
 
 本节使用 **逻辑数据模型 E-R 图** 和 **数据字典** 描述系统存储的长期数据及数据库结构。系统采用 MySQL 作为关系型数据库，使用 Django ORM 管理数据对象与迁移。
 
@@ -1902,7 +2276,7 @@ class EmailVerificationCode(models.Model):
 
 ---
 
-## 6. API接口文档
+## 7. API接口文档
 
 ### 6.1 情感分析接口
 
@@ -2040,7 +2414,7 @@ GET /api/video/comments/{bvid}/
 
 ---
 
-## 7. 关键技术实现
+## 8. 关键技术实现
 
 ### 7.1 API请求认证机制
 
